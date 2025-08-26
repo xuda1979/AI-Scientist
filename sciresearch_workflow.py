@@ -79,7 +79,7 @@ def save_paper_and_code(paper_content: str, output_dir: str) -> Path:
     """Save the paper and any Python code blocks to the output directory."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    paper_path = output_path / "paper.md"
+    paper_path = output_path / "paper.tex"
     paper_path.write_text(paper_content, encoding="utf-8")
     # extract python code blocks
     code_blocks = re.findall(r"```python(.*?)```", paper_content, re.DOTALL)
@@ -123,14 +123,21 @@ def main():
         raise EnvironmentError("OPENAI_API_KEY environment variable is not set.")
     openai.api_key = api_key
 
-    # Step 1: Generate research idea
-    idea = generate_idea(args.topic, args.model)
-    print(f"Generated Idea:\n{idea}\n")
+    output_dir = Path(args.output_dir)
+    paper_path = output_dir / "paper.tex"
 
-    # Step 2: Write research paper
-    paper_content = write_paper(args.topic, idea, args.model)
-    paper_path = save_paper_and_code(paper_content, args.output_dir)
-    print(f"Initial paper saved to {paper_path}")
+    if paper_path.exists():
+        paper_content = paper_path.read_text(encoding="utf-8")
+        print(f"Loaded existing paper from {paper_path}")
+    else:
+        # Step 1: Generate research idea
+        idea = generate_idea(args.topic, args.model)
+        print(f"Generated Idea:\n{idea}\n")
+
+        # Step 2: Write research paper
+        paper_content = write_paper(args.topic, idea, args.model)
+        paper_path = save_paper_and_code(paper_content, args.output_dir)
+        print(f"Initial paper saved to {paper_path}")
 
     # Step 3: Review the paper
     feedback = review_paper(paper_content, args.model)
