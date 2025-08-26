@@ -16,20 +16,22 @@ def call_openai(model, prompt):
     return response.choices[0].message.content.strip()
 
 
-def generate_idea(topic: str, model: str) -> str:
-    """Generate a high-value research idea for the given topic."""
+def generate_idea(topic: str, field: str, question: str, model: str) -> str:
+    """Generate a high-value research idea for the given topic, field and question."""
     prompt = (
-        f"Provide a high-value, innovative and practical research idea for the topic: {topic}. "
-        "Respond with a concise description."
+        f"Provide a high-value, innovative and practical research idea in the field of {field} "
+        f"for the topic '{topic}' that addresses the question: {question}. Respond with a concise description."
     )
     return call_openai(model, prompt)
 
 
-def write_paper(topic: str, idea: str, model: str) -> str:
-    """Draft a full research paper given a topic and research idea."""
+def write_paper(topic: str, field: str, question: str, idea: str, model: str) -> str:
+    """Draft a full research paper given a topic, field, research question and idea."""
     prompt = (
-        "You are an expert researcher. Write a full research paper based on the following topic and idea.\n"
+        "You are an expert researcher. Write a full research paper based on the following information.\n"
+        f"Field: {field}\n"
         f"Topic: {topic}\n"
+        f"Research Question: {question}\n"
         f"Idea: {idea}\n\n"
         "The paper should include the following sections: Abstract, Introduction, Methodology, Experiments, "
         "Results, Conclusion.\n"
@@ -107,16 +109,23 @@ def apply_diff_and_save(original_path: Path, new_content: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run a simple sci research workflow using OpenAI models."
+        description="Run a simple sci research workflow using OpenAI models.",
     )
     parser.add_argument("--topic", required=True, help="Research topic.")
     parser.add_argument(
-        "--output-dir", default="output", help="Directory to store the generated paper and code."
+        "--output-dir", default="output", help="Directory to store the generated paper and code.",
     )
     parser.add_argument(
-        "--model", default="gpt-5", help="OpenAI model to use (default: gpt-5)."
+        "--model", default="gpt-5", help="OpenAI model to use (default: gpt-5).",
     )
+    parser.add_argument("--field", help="Research field.")
+    parser.add_argument("--question", help="Specific research question to address.")
     args = parser.parse_args()
+
+    if not args.field:
+        args.field = input("Enter research field: ").strip()
+    if not args.question:
+        args.question = input("Enter research question: ").strip()
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -124,11 +133,11 @@ def main():
     openai.api_key = api_key
 
     # Step 1: Generate research idea
-    idea = generate_idea(args.topic, args.model)
+    idea = generate_idea(args.topic, args.field, args.question, args.model)
     print(f"Generated Idea:\n{idea}\n")
 
     # Step 2: Write research paper
-    paper_content = write_paper(args.topic, idea, args.model)
+    paper_content = write_paper(args.topic, args.field, args.question, idea, args.model)
     paper_path = save_paper_and_code(paper_content, args.output_dir)
     print(f"Initial paper saved to {paper_path}")
 
