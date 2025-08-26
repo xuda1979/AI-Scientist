@@ -33,9 +33,9 @@ def write_paper(topic: str, idea: str, model: str) -> str:
         f"Idea: {idea}\n\n"
         "The paper should include the following sections: Abstract, Introduction, Methodology, Experiments, "
         "Results, Conclusion.\n"
-        "If code is necessary for the experiments, include it in the paper enclosed within triple backticks "
-        "(```python ...``` ).\n"
-        "Format the paper in Markdown."
+        "Provide the complete paper as a LaTeX document using \\documentclass{article}.\n"
+        "If code is necessary for the experiments, include it using the LaTeX lstlisting environment: "
+        "\\begin{lstlisting}[language=Python] ... \\end{lstlisting}."
     )
     return call_openai(model, prompt)
 
@@ -67,8 +67,8 @@ def revise_paper(paper_content: str, feedback: str, model: str) -> str:
     """Revise the paper based on review feedback."""
     prompt = (
         "Based on the reviewer feedback provided, revise the research paper to address all issues and improve its "
-        "quality. Provide the complete revised paper in Markdown format. Do not include any explanations, only the "
-        "revised paper.\n\n"
+        "quality. Provide the complete revised paper as a LaTeX document using \\documentclass{article}. Use the "
+        "lstlisting environment for any Python code blocks. Do not include any explanations, only the revised paper.\n\n"
         f"Original Paper:\n{paper_content}\n\n"
         f"Review Feedback:\n{feedback}"
     )
@@ -79,10 +79,14 @@ def save_paper_and_code(paper_content: str, output_dir: str) -> Path:
     """Save the paper and any Python code blocks to the output directory."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    paper_path = output_path / "paper.md"
+    paper_path = output_path / "paper.tex"
     paper_path.write_text(paper_content, encoding="utf-8")
-    # extract python code blocks
-    code_blocks = re.findall(r"```python(.*?)```", paper_content, re.DOTALL)
+    # extract python code blocks from LaTeX lstlisting environments
+    code_blocks = re.findall(
+        r"\\begin\{lstlisting\}\[language=Python\](.*?)\\end\{lstlisting\}",
+        paper_content,
+        re.DOTALL,
+    )
     for idx, code in enumerate(code_blocks, 1):
         code_file = output_path / f"code_{idx}.py"
         code_file.write_text(code.strip(), encoding="utf-8")
