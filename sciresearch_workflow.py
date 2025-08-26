@@ -5,6 +5,7 @@ import openai
 from pathlib import Path
 import difflib
 import re
+from datetime import datetime
 
 
 def call_openai(model, prompt):
@@ -76,17 +77,31 @@ def revise_paper(paper_content: str, feedback: str, model: str) -> str:
 
 
 def save_paper_and_code(paper_content: str, output_dir: str) -> Path:
-    """Save the paper and any Python code blocks to the output directory."""
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    paper_path = output_path / "paper.md"
+    """Save the paper and any Python code blocks to a unique subdirectory.
+
+    A timestamped subfolder is created inside ``output_dir`` so multiple
+    papers can coexist. If ``output_dir`` already points to an existing paper
+    directory (containing ``paper.tex``), files are updated in place. The path
+    to the directory where files are written is returned for subsequent steps.
+    """
+    base_path = Path(output_dir)
+
+    if (base_path / "paper.tex").exists():
+        paper_dir = base_path
+    else:
+        base_path.mkdir(parents=True, exist_ok=True)
+        paper_dir = base_path / datetime.now().strftime("%Y%m%d_%H%M%S")
+        paper_dir.mkdir(parents=True, exist_ok=True)
+
+    paper_path = paper_dir / "paper.tex"
     paper_path.write_text(paper_content, encoding="utf-8")
+
     # extract python code blocks
     code_blocks = re.findall(r"```python(.*?)```", paper_content, re.DOTALL)
     for idx, code in enumerate(code_blocks, 1):
-        code_file = output_path / f"code_{idx}.py"
+        code_file = paper_dir / f"code_{idx}.py"
         code_file.write_text(code.strip(), encoding="utf-8")
-    return paper_path
+    return paper_dir
 
 
 def apply_diff_and_save(original_path: Path, new_content: str) -> str:
@@ -129,7 +144,8 @@ def main():
 
     # Step 2: Write research paper
     paper_content = write_paper(args.topic, idea, args.model)
-    paper_path = save_paper_and_code(paper_content, args.output_dir)
+    paper_dir = save_paper_and_code(paper_content, args.output_dir)
+    paper_path = paper_dir / "paper.tex"
     print(f"Initial paper saved to {paper_path}")
 
     # Step 3: Review the paper
@@ -146,7 +162,7 @@ def main():
     # Step 5: Revise based on feedback
     revised_content = revise_paper(paper_content, feedback, args.model)
     diff_text = apply_diff_and_save(paper_path, revised_content)
-    save_paper_and_code(revised_content, args.output_dir)  # update any code files
+    save_paper_and_code(revised_content, paper_dir)  # update any code files
     print("Paper revised and saved. Diff between versions:\n")
     print(diff_text)
 
