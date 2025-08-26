@@ -5,6 +5,7 @@ import openai
 from pathlib import Path
 import difflib
 import re
+from datetime import datetime
 
 
 def call_openai(model, prompt):
@@ -32,12 +33,14 @@ def write_paper(topic: str, idea: str, model: str) -> str:
         "You are an expert researcher. Write a full research paper based on the following topic and idea.\n"
         f"Topic: {topic}\n"
         f"Idea: {idea}\n\n"
+ 
         "The paper should include the following sections: Abstract, Introduction, Related Work, Methodology, "
         "Experiments, Results, Discussion, Conclusion, References.\n"
         "Use LaTeX formatting for a full-length paper, employing appropriate section commands. \n"
         "If code is necessary for the experiments, include it using the LaTeX lstlisting environment with "
         "language=Python.\n"
         "Ensure rigorous methodology and clear exposition throughout."
+ 
     )
     return call_openai(model, prompt)
 
@@ -69,8 +72,10 @@ def revise_paper(paper_content: str, feedback: str, model: str) -> str:
     """Revise the paper based on review feedback."""
     prompt = (
         "Based on the reviewer feedback provided, revise the research paper to address all issues and improve its "
-        "quality. Ensure rigorous methodology and clear exposition. Provide the complete revised paper in LaTeX "
-        "format. Do not include any explanations, only the revised paper.\n\n"
+ 
+        "quality. Provide the complete revised paper as a LaTeX document using \\documentclass{article}. Use the "
+        "lstlisting environment for any Python code blocks. Do not include any explanations, only the revised paper.\n\n"
+ 
         f"Original Paper:\n{paper_content}\n\n"
         f"Review Feedback:\n{feedback}"
     )
@@ -78,19 +83,35 @@ def revise_paper(paper_content: str, feedback: str, model: str) -> str:
 
 
 def save_paper_and_code(paper_content: str, output_dir: str) -> Path:
-    """Save the paper and any Python code blocks to the output directory."""
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    paper_path = output_path / "paper.tex"
+ 
+ 
+    """Save the paper and any Python code blocks to a unique subdirectory.
+
+    A timestamped subfolder is created inside ``output_dir`` so multiple
+    papers can coexist. If ``output_dir`` already points to an existing paper
+    directory (containing ``paper.tex``), files are updated in place. The path
+    to the directory where files are written is returned for subsequent steps.
+    """
+    base_path = Path(output_dir)
+
+    if (base_path / "paper.tex").exists():
+        paper_dir = base_path
+    else:
+        base_path.mkdir(parents=True, exist_ok=True)
+        paper_dir = base_path / datetime.now().strftime("%Y%m%d_%H%M%S")
+        paper_dir.mkdir(parents=True, exist_ok=True)
+
+    paper_path = paper_dir / "paper.tex"
     paper_path.write_text(paper_content, encoding="utf-8")
-    # extract python code blocks from LaTeX lstlisting or Markdown fences
-    code_blocks = re.findall(r"\\begin{lstlisting}.*?\n(.*?)\\end{lstlisting}", paper_content, re.DOTALL)
-    if not code_blocks:
-        code_blocks = re.findall(r"```python(.*?)```", paper_content, re.DOTALL)
+
+    # extract python code blocks
+    code_blocks = re.findall(r"```python(.*?)```", paper_content, re.DOTALL)
+ 
+ 
     for idx, code in enumerate(code_blocks, 1):
-        code_file = output_path / f"code_{idx}.py"
+        code_file = paper_dir / f"code_{idx}.py"
         code_file.write_text(code.strip(), encoding="utf-8")
-    return paper_path
+    return paper_dir
 
 
 def apply_diff_and_save(original_path: Path, new_content: str) -> str:
@@ -139,9 +160,11 @@ def main():
 
     # Step 2: Write research paper
     paper_content = write_paper(args.topic, idea, args.model)
-    paper_path = save_paper_and_code(paper_content, args.output_dir)
+    paper_dir = save_paper_and_code(paper_content, args.output_dir)
+    paper_path = paper_dir / "paper.tex"
     print(f"Initial paper saved to {paper_path}")
 
+ 
     for iteration in range(1, args.max_iters + 1):
         print(f"\n--- Review Cycle {iteration} ---")
         feedback = review_paper(paper_content, args.model)
@@ -161,6 +184,7 @@ def main():
         paper_content = revised_content
     else:
         print("Maximum review iterations reached without editor approval.")
+ 
 
 
 if __name__ == "__main__":
