@@ -4,7 +4,7 @@ This repository contains a simple automation pipeline that uses OpenAI's GPT-5 t
 
 ## Features
 
-- Prompt the user for a research topic.
+- Prompt the user for a research topic, field, and specific research question (via command-line arguments or interactive prompts).
 - Generate a high-value, innovative and practical research idea using GPT-5.
  
 - Draft a full-length research paper in LaTeX with sections (Abstract, Introduction, Related Work, Methodology, Experiments, Results, Discussion, Conclusion, References) and associated code, saved to an output directory.
@@ -27,9 +27,10 @@ pip install openai
 
 export OPENAI_API_KEY=YOUR_API_KEY
 
-python sciresearch_workflow.py --topic "quantum computing algorithms" --output-dir ./output --max-iters 3
+python sciresearch_workflow.py --topic "quantum computing algorithms" --field "Computer Science" --question "How can error rates be reduced?" --output-dir ./output
 ```
- 
- 
-The script will generate a research idea, write a paper into the specified output directory (`output/paper.tex`), review and revise it if necessary. Code blocks written using the LaTeX `lstlisting` environment will be extracted into `code_#.py` files.
+
+The script will generate a research idea, write a paper into the specified output directory (`output/paper.md`), review and revise it if necessary.
+
+If `--field` or `--question` is omitted, the script will prompt for these values interactively.
  
