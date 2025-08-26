@@ -1,14 +1,17 @@
 # Simple SciResearch Workflow
 
-This repository contains a simple automation pipeline that uses OpenAI's GPT-5 to generate innovative research ideas, draft full research papers (with code if necessary), peer review them, and iterate until the paper meets top-journal standards.
+This repository contains a simple automation pipeline that uses OpenAI's GPT-5 to generate innovative research ideas, draft full research papers in LaTeX (with code if necessary), peer review them, and iterate until the paper meets top-journal standards.
 
 ## Features
 
 - Prompt the user for a research topic, field, and specific research question (via command-line arguments or interactive prompts).
 - Generate a high-value, innovative and practical research idea using GPT-5.
-- Draft a full research paper with sections (Abstract, Introduction, Methodology, Experiments, Results, Conclusion) and associated code, saved to an output directory.
-- Peer review the generated paper using GPT-5 acting as a top journal reviewer and provide constructive feedback.
+ 
+- Draft a full-length research paper in LaTeX with sections (Abstract, Introduction, Related Work, Methodology, Experiments, Results, Discussion, Conclusion, References) and associated code, saved to an output directory.
+- Peer review the generated paper using GPT-5 acting as a top journal reviewer and provide constructive feedback on rigor and clarity.
+ 
 - Automatically decide whether the paper is ready for submission. If not, revise the paper based on the review feedback and produce a unified diff showing the changes.
+- Repeat the review→evaluation→revision cycle until the editor responds "YES" or a maximum iteration count is reached.
 - Apply the diff to update the paper and any associated code.
 
 ## Requirements
@@ -30,3 +33,4 @@ python sciresearch_workflow.py --topic "quantum computing algorithms" --field "C
 The script will generate a research idea, write a paper into the specified output directory (`output/paper.md`), review and revise it if necessary.
 
 If `--field` or `--question` is omitted, the script will prompt for these values interactively.
+ 
