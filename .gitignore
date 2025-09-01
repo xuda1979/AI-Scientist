@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.log
+*.out
+*.toc
+*.run.xml
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Outputs
+output/**/archive/
+output/**/*.pdf
+output/**/*.tmp
+output/**/*.bak
