@@ -9,5 +9,5 @@ Running Monte Carlo simulation (50000 trials) with BDD assumption...
 --- Results (seed=42) ---
 Estimated logical block error probability P_L ~= 1.020e-03
 Estimated entanglement fidelity F_e ~= 0.9990
-Runtime ~= 2.71 s
+Runtime ~= 3.48 s
 Wrote C:\Users\Lenovo\software\simple-sciresearch-workflow\output\ag-qec\data\ag_qec_results.csv

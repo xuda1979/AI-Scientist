@@ -1,0 +1,14 @@
+{
+  "quality_threshold": 0.85,
+  "max_iterations": 15,
+  "simulation_timeout": 600,
+  "latex_timeout_base": 180,
+  "api_retry_attempts": 5,
+  "figure_validation": true,
+  "reference_validation": true,
+  "max_quality_history_size": 25,
+  "doi_rate_limit_delay": 0.05,
+  "max_doi_cache_size": 2000,
+  "default_model": "gpt-5",
+  "fallback_models": ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]
+}

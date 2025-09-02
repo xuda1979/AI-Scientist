@@ -1,0 +1,33 @@
+Reproducibility summary (this file is generated from the LaTeX source to ensure traceability)
+
+Train / runtime
+- train_time_sec = 0.0484616756439209
+
+E1: Early-exit Pareto (compute, accuracy, entropy_thr, margin_thr)
+- (0.3333333333333333, 0.9583333333333334, n/a, n/a)
+
+E2: Multi-agent dynamic allocation
+Pareto points (compute, accuracy, tick_budget, entropy_thr, margin_thr)
+- (0.3333333333333333, 0.9583333333333334, 1, 0.5, 0.5)
+- (0.4422222222222222, 0.9616666666666667, 2, 0.9000000000000001, 0.5)
+- (0.4644444444444444, 0.9633333333333334, 2, 0.7000000000000001, 0.5)
+Baselines:
+- acc_early = 0.9583333333333334
+- acc_deepA = 0.9633333333333334
+- acc_full = 0.96
+
+E3: Adaptive sequential sampling
+Rows (z, adaptive_acc, fixed_acc, adaptive_avg_samples, fixed_avg_samples, speedup)
+- (0.9, 0.735, 0.85, 10.36, 32.0, 3.088803088803089)
+- (1.0, 0.7875, 0.82, 12.22, 32.0, 2.6186579378068737)
+- (1.1, 0.8075, 0.8225, 12.76, 32.0, 2.5078369905956115)
+- (1.2, 0.79, 0.84, 15.27, 32.0, 2.0956123117223315)
+
+E4: MCTS adaptive stopping
+Rows (z, adaptive_acc, fixed_acc, adaptive_avg_sims, fixed_avg_sims, speedup)
+- (0.9, 0.4166666666666667, 0.3, 9.7, 24.0, 2.4742268041237114)
+- (1.0, 0.35, 0.3, 10.766666666666667, 24.0, 2.2291021671826625)
+- (1.1, 0.45, 0.3, 11.766666666666667, 24.0, 2.039660056657224)
+Fixed-budget Pareto (compute, accuracy, fixed_sim_budget)
+- (0.3333333333333333, 0.35, 8)
+- (1.0, 0.36666666666666664, 24)

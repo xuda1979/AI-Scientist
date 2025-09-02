@@ -1,0 +1,115 @@
+{
+  "train_time_sec": 0.0484616756439209,
+  "E1": {
+    "pareto": [
+      [
+        0.3333333333333333,
+        0.9583333333333334,
+        null,
+        null
+      ]
+    ]
+  },
+  "E2": {
+    "pareto": [
+      [
+        0.3333333333333333,
+        0.9583333333333334,
+        1,
+        0.5,
+        0.5
+      ],
+      [
+        0.4422222222222222,
+        0.9616666666666667,
+        2,
+        0.9000000000000001,
+        0.5
+      ],
+      [
+        0.4644444444444444,
+        0.9633333333333334,
+        2,
+        0.7000000000000001,
+        0.5
+      ]
+    ],
+    "acc_early": 0.9583333333333334,
+    "acc_deepA": 0.9633333333333334,
+    "acc_full": 0.96
+  },
+  "E3": [
+    {
+      "z": 0.9,
+      "adaptive_acc": 0.735,
+      "fixed_acc": 0.85,
+      "adaptive_avg_samples": 10.36,
+      "fixed_avg_samples": 32.0,
+      "speedup": 3.088803088803089
+    },
+    {
+      "z": 1.0,
+      "adaptive_acc": 0.7875,
+      "fixed_acc": 0.82,
+      "adaptive_avg_samples": 12.22,
+      "fixed_avg_samples": 32.0,
+      "speedup": 2.6186579378068737
+    },
+    {
+      "z": 1.1,
+      "adaptive_acc": 0.8075,
+      "fixed_acc": 0.8225,
+      "adaptive_avg_samples": 12.76,
+      "fixed_avg_samples": 32.0,
+      "speedup": 2.5078369905956115
+    },
+    {
+      "z": 1.2,
+      "adaptive_acc": 0.79,
+      "fixed_acc": 0.84,
+      "adaptive_avg_samples": 15.27,
+      "fixed_avg_samples": 32.0,
+      "speedup": 2.0956123117223315
+    }
+  ],
+  "E4": {
+    "mcts_rows": [
+      {
+        "z": 0.9,
+        "adaptive_acc": 0.4166666666666667,
+        "fixed_acc": 0.3,
+        "adaptive_avg_sims": 9.7,
+        "fixed_avg_sims": 24.0,
+        "speedup": 2.4742268041237114
+      },
+      {
+        "z": 1.0,
+        "adaptive_acc": 0.35,
+        "fixed_acc": 0.3,
+        "adaptive_avg_sims": 10.766666666666667,
+        "fixed_avg_sims": 24.0,
+        "speedup": 2.2291021671826625
+      },
+      {
+        "z": 1.1,
+        "adaptive_acc": 0.45,
+        "fixed_acc": 0.3,
+        "adaptive_avg_sims": 11.766666666666667,
+        "fixed_avg_sims": 24.0,
+        "speedup": 2.039660056657224
+      }
+    ],
+    "pareto": [
+      [
+        0.3333333333333333,
+        0.35,
+        8
+      ],
+      [
+        1.0,
+        0.36666666666666664,
+        24
+      ]
+    ]
+  }
+}
