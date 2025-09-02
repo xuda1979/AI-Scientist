@@ -22,6 +22,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
+# Google AI SDK
+try:
+    import google.generativeai as genai
+    GOOGLE_AI_AVAILABLE = True
+except ImportError:
+    GOOGLE_AI_AVAILABLE = False
+    print("⚠️ Google AI SDK not installed. Run: pip install google-generativeai")
+
 # Local helpers
 from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex, run_simulation_with_smart_fixing, summarize_simulation_outputs
 
@@ -296,7 +304,7 @@ def _create_simulation_fixer(model: str, request_timeout: Optional[int] = None):
         
         try:
             fallback_models = ["gpt-4o", "gpt-4"] if "gpt-5" in model else ["gpt-3.5-turbo"]
-            response = _openai_chat(
+            response = _universal_chat(
                 [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}],
                 model=model,
                 request_timeout=request_timeout,
@@ -342,6 +350,112 @@ def _create_simulation_fixer(model: str, request_timeout: Optional[int] = None):
             return {"action": "accept", "reason": f"Unexpected error: {str(e)}"}
     
     return _fix_simulation
+
+def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
+    """
+    Universal chat function that automatically detects whether to use OpenAI or Google AI
+    based on the model name and routes the request accordingly.
+    """
+    # Detect provider based on model name
+    if model.startswith(('gemini', 'models/gemini')):
+        # Google AI model
+        return _google_chat(messages, model, request_timeout, prompt_type, fallback_models)
+    else:
+        # OpenAI model
+        return _openai_chat(messages, model, request_timeout, prompt_type, fallback_models)
+
+def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
+    """
+    Google AI chat wrapper with similar interface to OpenAI chat.
+    Based on working reference implementation.
+    Sets HTTPS_PROXY specifically for Gemini API calls.
+    """
+    if not GOOGLE_AI_AVAILABLE:
+        raise APIError("Google AI SDK not available. Please install with: pip install google-generativeai")
+    
+    # Set proxy specifically for Google AI API (not needed for OpenAI)
+    original_proxy = os.environ.get("HTTPS_PROXY")
+    os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7078"
+    print(f"🌐 Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
+    
+    try:
+        # Configure API key - use hardcoded key as in reference
+        api_key = "AIzaSyCXhoRyRmp_6Rpbp9eZjjwEvE11KrKIJII"
+        genai.configure(api_key=api_key)
+        
+        logger.info(f"Making Google AI API call to {model} for {prompt_type}")
+        print(f"🤖 Making Google AI API call to {model} for {prompt_type}...")
+        
+        # Set timeout
+        if request_timeout is None:
+            request_timeout = 1800  # 30 minutes default
+        
+        # Convert OpenAI messages to a single prompt
+        # Combine all messages into one prompt for Gemini
+        combined_prompt = ""
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            
+            if role == "system":
+                combined_prompt += f"System: {content}\n\n"
+            elif role == "user":
+                combined_prompt += f"User: {content}\n\n"
+            elif role == "assistant":
+                combined_prompt += f"Assistant: {content}\n\n"
+        
+        # Remove trailing newlines
+        combined_prompt = combined_prompt.strip()
+        
+        # Create model instance using the reference approach
+        genai_model = genai.GenerativeModel(model)
+        
+        print(f"📡 Sending Google AI request with timeout={request_timeout}s...")
+        
+        # Generate content directly as in the reference
+        response = genai_model.generate_content(combined_prompt)
+        
+        print("✅ Google AI API call successful!")
+        return response.text
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"❌ Google AI API Error: {error_msg}")
+        
+        # Provide helpful proxy setup guidance
+        if "503" in error_msg or "connect" in error_msg.lower() or "timeout" in error_msg.lower():
+            print("💡 Connection issue detected. Proxy is set for Gemini API.")
+            print("   Check your network connection to Google AI API")
+        
+        # Try fallback models if available
+        if fallback_models:
+            print(f"⚠️ Primary model {model} failed, trying fallback models...")
+            for fallback_model in fallback_models:
+                try:
+                    print(f"🔄 Attempting fallback model: {fallback_model}")
+                    if fallback_model.startswith(('gemini', 'models/gemini')):
+                        return _google_chat(messages, fallback_model, request_timeout, prompt_type, None)
+                    else:
+                        # For OpenAI fallback, restore original proxy
+                        if original_proxy is not None:
+                            os.environ["HTTPS_PROXY"] = original_proxy
+                        elif "HTTPS_PROXY" in os.environ:
+                            del os.environ["HTTPS_PROXY"]
+                        print("🔄 Removed proxy for OpenAI fallback")
+                        return _openai_chat(messages, fallback_model, request_timeout, prompt_type, None)
+                except Exception as fallback_error:
+                    print(f"⚠️ Fallback model {fallback_model} also failed: {fallback_error}")
+                    continue
+        
+        raise APIError(f"Google AI model {model} failed: {error_msg}")
+    
+    finally:
+        # Restore original proxy setting after Google AI call
+        if original_proxy is not None:
+            os.environ["HTTPS_PROXY"] = original_proxy
+        elif "HTTPS_PROXY" in os.environ:
+            del os.environ["HTTPS_PROXY"]
+        print("🔄 Restored original proxy settings")
 
 def _nowstamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -962,7 +1076,7 @@ def run_workflow(
     # If no real paper content yet (fresh), draft one.
     if is_minimal_template:
         print("Creating new paper from scratch...")
-        draft = _openai_chat(_initial_draft_prompt(topic, field, question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
+        draft = _universal_chat(_initial_draft_prompt(topic, field, question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
         paper_path.write_text(draft, encoding="utf-8")
     else:
         print(f"Using existing paper content ({len(paper_content)} characters)")
@@ -971,7 +1085,7 @@ def run_workflow(
     extract_simulation_from_tex(paper_path, sim_path)
 
     # Review-Revise loop with quality tracking
-    for i in range(1, max_iterations + 1):
+    for i in range(1, config.max_iterations + 1):
         print(f"Starting iteration {i} of {max_iterations}")
         
         # ALWAYS run simulation before each review to get current results
@@ -997,7 +1111,7 @@ def run_workflow(
         # COMPILE LATEX WITH DYNAMIC TIMEOUT
         print(f"Compiling LaTeX file with pdflatex...")
         current_tex = paper_path.read_text(encoding="utf-8", errors="ignore")
-        dynamic_timeout = _calculate_dynamic_timeout(current_tex)
+        dynamic_timeout = _calculate_dynamic_timeout(current_tex, config)
         latex_success, latex_errors = _compile_latex_and_get_errors(paper_path, timeout=dynamic_timeout)
         
         if not latex_success:
@@ -1009,12 +1123,12 @@ def run_workflow(
         # COMPREHENSIVE QUALITY VALIDATION
         quality_issues = _validate_research_quality(current_tex, sim_summary)
         
-        # Additional validations based on parameters
-        if check_references:
-            ref_issues = _validate_references_with_external_apis(current_tex)
+        # Additional validations based on config
+        if config.reference_validation:
+            ref_issues = _validate_references_with_external_apis(current_tex, config)
             quality_issues.extend(ref_issues)
         
-        if validate_figures:
+        if config.figure_validation:
             fig_issues = _validate_figure_generation(current_tex, sim_path, project_dir)
             quality_issues.extend(fig_issues)
         
@@ -1048,10 +1162,10 @@ def run_workflow(
             print(f"⚠️ Quality stagnation detected ({stagnation_count} iterations without improvement)")
         
         # Enhanced review with quality metrics
-        review = _openai_chat(_review_prompt(current_tex, sim_summary, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="review", fallback_models=config.fallback_models)
+        review = _universal_chat(_review_prompt(current_tex, sim_summary, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="review", fallback_models=config.fallback_models)
         
         # Enhanced editorial decision with iteration count
-        decision = _openai_chat(_editor_prompt(review, i, user_prompt), model=model, request_timeout=request_timeout, prompt_type="editor", fallback_models=config.fallback_models)
+        decision = _universal_chat(_editor_prompt(review, i, user_prompt), model=model, request_timeout=request_timeout, prompt_type="editor", fallback_models=config.fallback_models)
         
         # ENHANCED DECISION LOGIC WITH QUALITY THRESHOLD
         decision_upper = decision.strip().upper()
@@ -1082,8 +1196,7 @@ def run_workflow(
             
         print(f"Revising paper to address: {', '.join(revision_reasons)}")
             
-        fallback_models = config.fallback_models if hasattr(config, 'fallback_models') else None
-        revised = _openai_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
+        revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
         paper_path.write_text(revised, encoding="utf-8")
         
         print(f"Iteration {i}: Paper revised")
@@ -1307,14 +1420,15 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         if not args.question:
             args.question = question
         print(f"Detected existing paper - Topic: {args.topic}, Field: {args.field}")
-    else:
-        # Interactive prompts if missing and no existing paper
+    elif not args.modify_existing:
+        # Interactive prompts if missing and no existing paper (but NOT when modifying existing)
         if not args.topic:
             args.topic = input("Topic: ").strip()
         if not args.field:
             args.field = input("Field: ").strip()
         if not args.question:
             args.question = input("Research question: ").strip()
+    # If modify_existing is True but no existing metadata found, we'll use whatever args were provided
     
     return args
 
@@ -1542,7 +1656,7 @@ def _check_visual_self_containment(paper_content: str) -> List[str]:
     
     return issues
 
-def _validate_references_with_external_apis(paper_content: str) -> List[str]:
+def _validate_references_with_external_apis(paper_content: str, config: Optional[WorkflowConfig] = None) -> List[str]:
     """Validate references using external APIs like CrossRef DOI validation."""
     issues = []
     
@@ -1554,7 +1668,7 @@ def _validate_references_with_external_apis(paper_content: str) -> List[str]:
     invalid_dois = []
     
     for doi in dois:
-        if _validate_doi_with_crossref(doi.strip()):
+        if _validate_doi_with_crossref(doi.strip(), config):
             valid_dois += 1
         else:
             invalid_dois.append(doi)
@@ -1596,18 +1710,20 @@ _doi_validation_cache = {}
 _last_doi_check_time = 0
 
 @functools.lru_cache(maxsize=1000)
+@functools.lru_cache(maxsize=1000)
 def _validate_doi_with_crossref_cached(doi: str) -> bool:
     """Cached DOI validation to avoid redundant API calls."""
     return _validate_doi_with_crossref_uncached(doi)
 
-def _validate_doi_with_crossref(doi: str) -> bool:
+def _validate_doi_with_crossref(doi: str, config: Optional[WorkflowConfig] = None) -> bool:
     """Validate a DOI using CrossRef API with rate limiting and caching."""
     global _last_doi_check_time
     
-    # Rate limiting - maximum 1 request per 100ms
+    # Rate limiting - use config delay or default
+    rate_limit_delay = config.doi_rate_limit_delay if config else 0.1
     current_time = time.time()
-    if current_time - _last_doi_check_time < 0.1:
-        time.sleep(0.1)
+    if current_time - _last_doi_check_time < rate_limit_delay:
+        time.sleep(rate_limit_delay)
     _last_doi_check_time = time.time()
     
     return _validate_doi_with_crossref_cached(doi)
@@ -1667,9 +1783,9 @@ def _extract_simulation_code_with_validation(paper_path: Path, sim_path: Path) -
     except Exception as e:
         return False, f"Error extracting simulation code: {str(e)}"
 
-def _calculate_dynamic_timeout(paper_content: str) -> int:
+def _calculate_dynamic_timeout(paper_content: str, config: Optional[WorkflowConfig] = None) -> int:
     """Calculate dynamic timeout based on document complexity."""
-    base_timeout = 120  # 2 minutes base
+    base_timeout = config.latex_timeout_base if config else 120  # Use config or default
     
     # Count complexity indicators
     tikz_count = len(re.findall(r'\\begin\{tikzpicture\}', paper_content))

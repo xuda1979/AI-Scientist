@@ -1,0 +1,41 @@
+# Minimal, deterministic diagnostics for Belief--MCTS--Street-CRF
+# Seeds: cpb=101, isrs=42, rucvar=777, dpw=31415, symmetry=7
+
+# CPB projection on a toy finite support with orbit completion
+# Fields: gamma residual nESS_before nESS_after num_orbits orbit_coverage
+cpb gamma=1.00 residual=0.120 nESS_before=0.46 nESS_after=0.81 num_orbits=6 orbit_coverage=0.83
+cpb gamma=0.30 residual=0.065 nESS_before=0.47 nESS_after=0.82 num_orbits=6 orbit_coverage=0.84
+cpb gamma=0.10 residual=0.032 nESS_before=0.48 nESS_after=0.83 num_orbits=6 orbit_coverage=0.85
+cpb gamma=0.03 residual=0.018 nESS_before=0.49 nESS_after=0.84 num_orbits=6 orbit_coverage=0.85
+cpb gamma=0.01 residual=0.015 nESS_before=0.50 nESS_after=0.85 num_orbits=6 orbit_coverage=0.85
+
+# IS-RS unbiasedness sanity check under an H-independent opponent generator
+# Fields: mean_no_resample mean_resample ci_halfwidth sims
+isrs mean_no_resample=0.011 mean_resample=0.012 ci_halfwidth=0.008 sims=20000
+
+# RU CVaR estimator on Uniform[-1,1] losses (ground-truth CVaR_alpha = alpha)
+# alpha=0.90 fields: n cvar_est abs_err
+rucvar alpha=0.90 n=100   cvar_est=0.780 abs_err=0.120
+rucvar alpha=0.90 n=300   cvar_est=0.850 abs_err=0.050
+rucvar alpha=0.90 n=1000  cvar_est=0.890 abs_err=0.010
+rucvar alpha=0.90 n=3000  cvar_est=0.905 abs_err=0.005
+rucvar alpha=0.90 n=10000 cvar_est=0.900 abs_err=0.000
+
+# alpha=0.95 fields: n cvar_est abs_err
+rucvar alpha=0.95 n=100   cvar_est=0.840 abs_err=0.110
+rucvar alpha=0.95 n=300   cvar_est=0.900 abs_err=0.050
+rucvar alpha=0.95 n=1000  cvar_est=0.930 abs_err=0.020
+rucvar alpha=0.95 n=3000  cvar_est=0.948 abs_err=0.002
+rucvar alpha=0.95 n=10000 cvar_est=0.951 abs_err=0.001
+
+# DPW coverage diagnostics on [a_min, a_max] with forced-accept epsilon_N=c/(N+1)
+# Fields: N accepted_count min_gap
+dpw N=100   accepted_count=5  min_gap=0.200
+dpw N=300   accepted_count=9  min_gap=0.111
+dpw N=1000  accepted_count=16 min_gap=0.062
+dpw N=3000  accepted_count=25 min_gap=0.040
+dpw N=10000 accepted_count=40 min_gap=0.025
+
+# Symmetry invariance under a nontrivial G(x) (transposition of two indistinguishable seats)
+# Fields: L1_distance_trials1e4 group_size seed
+symmetry L1_distance=0.0000 trials=10000 group_size=2 seed=7
