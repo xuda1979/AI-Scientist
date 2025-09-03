@@ -1,3 +1,0 @@
-Simulated 100 qubits with 0 errors
-Error rate: 0.000
-Final error rate: 0.0000

@@ -5,20 +5,21 @@
 simulation.py
 Single-file, minimal-yet-complete artifact that generates all numbers reported in the paper.
 
-Revision summary (addresses reviewer feedback R1–R4):
+Revision summary (addresses reviewer feedback):
 - EXACTLY ONE authoritative code file: this file (written by LaTeX via filecontents*) overwrites any existing simulation.py.
 - Writes results.txt and results.json with every number used in the PDF, including:
-  * Binomial 95% CIs and effective sample sizes (N) for all accuracies (including E2 dynamic points)
+  * Binomial 95% CIs and effective sample sizes (N) for all accuracies
   * Exact counts of correct decisions (traceability)
   * Derived parameters for E2 (refinement fractions f and selected-subset accuracies p_sel)
   * McNemar paired tests (E2) with exact binomial two-sided p-values (b, c, n)
   * Canonical and measured runtime
   * Wilson 95% intervals (reported in results.txt for completeness)
+  * Effect sizes: accuracy differences vs fixed baselines and 95% CIs on differences for E3/E4
   * A results_version string (UTC timestamp) to uniquely identify the outputs
 - Deterministic, CPU-only, no external dependencies beyond Python 3 stdlib.
 
 Mapping to paper sections:
-- E1/E2 numbers: Section 6.1/6.2, Tables 1–2, Fig. 1–2; Appendix B (derived parameters) and Appendix C (McNemar).
+- E1/E2 numbers: Sections 6.1/6.2, Tables 1–2, Fig. 1–2; Appendix B (derived parameters) and Appendix C (McNemar).
 - E3 numbers: Section 6.3, Table 3, Fig. 3.
 - E4 numbers: Section 6.4, Tables 4–5, Fig. 4–5.
 """
@@ -107,6 +108,17 @@ def wilson_ci_95(p: float, n: int) -> Tuple[float, float]:
     return lo, hi
 
 
+def diff_ci_95(p1: float, n1: int, p2: float, n2: int) -> Tuple[float, Tuple[float, float]]:
+    """Difference in proportions (unpaired) and its 95% CI via normal approximation."""
+    d = p1 - p2
+    var = p1 * (1.0 - p1) / max(n1, 1) + p2 * (1.0 - p2) / max(n2, 1)
+    se = math.sqrt(max(var, 0.0))
+    z = 1.96
+    lo = d - z * se
+    hi = d + z * se
+    return d, (lo, hi)
+
+
 def fmt_float(x: float) -> str:
     # Preserve full precision as in manuscript
     return repr(float(x))
@@ -141,6 +153,8 @@ def mcnemar_exact_p(b: int, c: int) -> float:
 # -----------------------------
 # E1/E2: Synthetic classification with multi-head tick costs
 # -----------------------------
+from dataclasses import dataclass
+
 @dataclass
 class E2ParetoPoint:
     compute: float
@@ -277,6 +291,8 @@ class E3Row:
     ci_fixed_95: Tuple[float, float]
     wilson_adaptive_95: Tuple[float, float]
     wilson_fixed_95: Tuple[float, float]
+    diff_acc: float
+    ci_diff_95: Tuple[float, float]
 
 
 def run_e3() -> List[Dict[str, Any]]:
@@ -297,13 +313,15 @@ def run_e3() -> List[Dict[str, Any]]:
         ci_f = binom_ci_95(facc, N)
         wil_a = wilson_ci_95(aacc, N)
         wil_f = wilson_ci_95(facc, N)
+        d, dci = diff_ci_95(aacc, N, facc, N)
         out.append(E3Row(
             N=N, z=z,
             adaptive_acc=aacc, fixed_acc=facc,
             adaptive_avg_samples=aavg, fixed_avg_samples=fixed_avg, speedup=sp,
             adaptive_correct=int(round(aacc * N)), fixed_correct=int(round(facc * N)),
             ci_adaptive_95=ci_a, ci_fixed_95=ci_f,
-            wilson_adaptive_95=wil_a, wilson_fixed_95=wil_f
+            wilson_adaptive_95=wil_a, wilson_fixed_95=wil_f,
+            diff_acc=d, ci_diff_95=dci
         ))
     return [asdict(r) for r in out]
 
@@ -326,6 +344,8 @@ class E4Row:
     ci_fixed_95: Tuple[float, float]
     wilson_adaptive_95: Tuple[float, float]
     wilson_fixed_95: Tuple[float, float]
+    diff_acc: float
+    ci_diff_95: Tuple[float, float]
 
 
 def run_e4() -> Dict[str, Any]:
@@ -344,13 +364,15 @@ def run_e4() -> Dict[str, Any]:
         ci_f = binom_ci_95(facc, N)
         wil_a = wilson_ci_95(aacc, N)
         wil_f = wilson_ci_95(facc, N)
+        d, dci = diff_ci_95(aacc, N, facc, N)
         mcts_rows.append(E4Row(
             N=N, z=z,
             adaptive_acc=aacc, fixed_acc=facc,
             adaptive_avg_sims=aavg, fixed_avg_sims=fixed_budget, speedup=sp,
             adaptive_correct=int(round(aacc * N)), fixed_correct=int(round(facc * N)),
             ci_adaptive_95=ci_a, ci_fixed_95=ci_f,
-            wilson_adaptive_95=wil_a, wilson_fixed_95=wil_f
+            wilson_adaptive_95=wil_a, wilson_fixed_95=wil_f,
+            diff_acc=d, ci_diff_95=dci
         ))
 
     # Fixed-budget Pareto: normalize compute to [0,1] by dividing by max budget (24).
@@ -440,15 +462,17 @@ def main():
     lines.append("")
     # E3
     lines.append("E3: Adaptive sequential sampling")
-    lines.append("Rows (z, adaptive_acc, fixed_acc, adaptive_avg_samples, fixed_avg_samples, speedup, ci95_adaptive, ci95_fixed, adaptive_correct, fixed_correct, N)")
+    lines.append("Rows (z, adaptive_acc, fixed_acc, adaptive_avg_samples, fixed_avg_samples, speedup, ci95_adaptive, ci95_fixed, diff_acc, ci95_diff, adaptive_correct, fixed_correct, N)")
     for r in e3:
         lo_a, hi_a = r["ci_adaptive_95"]
         lo_f, hi_f = r["ci_fixed_95"]
+        lo_d, hi_d = r["ci_diff_95"]
         lines.append(
             f"- ({fmt_float(r['z'])}, {fmt_float(r['adaptive_acc'])}, {fmt_float(r['fixed_acc'])}, "
             f"{fmt_float(r['adaptive_avg_samples'])}, {fmt_float(r['fixed_avg_samples'])}, "
             f"{fmt_float(r['speedup'])}, [{fmt_float(lo_a)}, {fmt_float(hi_a)}], "
-            f"[{fmt_float(lo_f)}, {fmt_float(hi_f)}], {r['adaptive_correct']}, {r['fixed_correct']}, {r['N']})"
+            f"[{fmt_float(lo_f)}, {fmt_float(hi_f)}], {fmt_float(r['diff_acc'])}, "
+            f"[{fmt_float(lo_d)}, {fmt_float(hi_d)}], {r['adaptive_correct']}, {r['fixed_correct']}, {r['N']})"
         )
     lines.append("Wilson 95% intervals for E3 (adaptive, fixed) listed per row")
     for r in e3:
@@ -457,23 +481,25 @@ def main():
     lines.append("")
     # E4
     lines.append("E4: MCTS adaptive stopping")
-    lines.append("Rows (z, adaptive_acc, fixed_acc, adaptive_avg_sims, fixed_avg_sims, speedup, ci95_adaptive, ci95_fixed, adaptive_correct, fixed_correct, N)")
-    e4 = results_struct["E4"]
-    for r in e4["mcts_rows"]:
+    lines.append("Rows (z, adaptive_acc, fixed_acc, adaptive_avg_sims, fixed_avg_sims, speedup, ci95_adaptive, ci95_fixed, diff_acc, ci95_diff, adaptive_correct, fixed_correct, N)")
+    e4s = results_struct["E4"]
+    for r in e4s["mcts_rows"]:
         lo_a, hi_a = r["ci_adaptive_95"]
         lo_f, hi_f = r["ci_fixed_95"]
+        lo_d, hi_d = r["ci_diff_95"]
         lines.append(
             f"- ({fmt_float(r['z'])}, {fmt_float(r['adaptive_acc'])}, {fmt_float(r['fixed_acc'])}, "
             f"{fmt_float(r['adaptive_avg_sims'])}, {fmt_float(r['fixed_avg_sims'])}, "
             f"{fmt_float(r['speedup'])}, [{fmt_float(lo_a)}, {fmt_float(hi_a)}], "
-            f"[{fmt_float(lo_f)}, {fmt_float(hi_f)}], {r['adaptive_correct']}, {r['fixed_correct']}, {r['N']})"
+            f"[{fmt_float(lo_f)}, {fmt_float(hi_f)}], {fmt_float(r['diff_acc'])}, "
+            f"[{fmt_float(lo_d)}, {fmt_float(hi_d)}], {r['adaptive_correct']}, {r['fixed_correct']}, {r['N']})"
         )
     lines.append("Wilson 95% intervals for E4 (adaptive, fixed) listed per row")
-    for r in e4["mcts_rows"]:
+    for r in e4s["mcts_rows"]:
         wla, wha = r["wilson_adaptive_95"]; wlf, whf = r["wilson_fixed_95"]
         lines.append(f"- z={fmt_float(r['z'])}: adaptive_wilson=[{fmt_float(wla)}, {fmt_float(wha)}], fixed_wilson=[{fmt_float(wlf)}, {fmt_float(whf)}]")
     lines.append("Fixed-budget Pareto (compute, accuracy, fixed_sim_budget)")
-    for comp, acc, b in e4["pareto"]:
+    for comp, acc, b in e4s["pareto"]:
         lines.append(f"- ({fmt_float(comp)}, {fmt_float(acc)}, {b})")
 
     with open("results.txt", "w", encoding="utf-8") as f:
@@ -525,7 +551,7 @@ if __name__ == "__main__":
 \newcommand{\cost}{\mathsf{cost}}
 \newcommand{\gain}{\widehat{\Delta}}
 
-\title{\vspace{-1em}\textbf{Dynamic Test-Time Compute Allocation with a Uniform Tick API Across Neural Modules and MCTS}\vspace{0.25em}}
+\title{\vspace{-0.25em}\textbf{Dynamic Test-Time Compute Allocation with a Uniform Tick API Across Neural Modules and MCTS}\vspace{0.25em}}
 \author{Anonymous}
 \date{\today}
 
@@ -533,18 +559,17 @@ if __name__ == "__main__":
 \maketitle
 
 \begin{abstract}
-We present a compact, reproducible framework for dynamic test-time compute allocation that applies uniformly across neural modules and Monte Carlo Tree Search (MCTS). The key idea is a simple uniform compute unit (\TickAPI) that exposes three methods: one\_tick (spend one unit of compute), uncertainty (how much more compute could help), and output (current prediction). We instantiate the framework in four experiments: (E1) early-exit classification; (E2) intra-network multi-head scheduling; (E3) adaptive sequential sampling; and (E4) MCTS with an adaptive stopping rule---all using the same scheduling logic. Our single-code-path design yields clean accuracy--latency Pareto fronts and tangible speedups at fixed accuracy. We provide a single Python script (simulation.py) that writes results.txt with every number plotted or tabulated in this paper, including counts and confidence intervals, to ensure traceability and reproducibility. We further add paired significance tests (McNemar) for E2, include Wilson score intervals in results.txt, and attach a results\_version string to both results files for unambiguous versioning.
+We present a compact, reproducible framework for dynamic test-time compute allocation that applies uniformly across neural modules and Monte Carlo Tree Search (MCTS). The key idea is a simple uniform compute unit (\TickAPI) that exposes three methods: one\_tick (spend one unit of compute), uncertainty (how much more compute could help), and output (current prediction). We instantiate the framework in four experiments: (E1) early-exit classification; (E2) intra-network multi-head scheduling; (E3) adaptive sequential sampling; and (E4) MCTS with an adaptive stopping rule---all using the same scheduling logic. Our artifact provides full traceability: a single simulation.py writes results.txt and results.json with every number plotted or tabulated in this paper, including correctness counts, binomial and Wilson 95\% intervals, derived parameters, McNemar paired tests (E2), effect sizes (accuracy differences vs baselines) with 95\% CIs (E3/E4), and a results\_version string. We also refine the methodology by reporting effect sizes with uncertainty and by clarifying the statistical testing and calibration options within our price-based scheduling framework.
 \end{abstract}
 
-\vspace{-0.5em}
 \section{Introduction}
-Most deployed models use constant inference compute per input, despite varying input difficulty. Allocating more compute to hard cases and less to easy ones improves accuracy at fixed latency or reduces latency at fixed accuracy. Dynamic inference and early exiting have been explored extensively in neural networks \cite{Graves2016ACT,Teerapittayanon2016BranchyNet,Huang2018MSDNet,Wang2018SkipNet,Kaya2019ShallowDeep,Xin2020DeeBERT,Liu2020FastBERT,Elbayad2020DepthAdaptive,NiculescuMizil2005Calib,Figurnov2017SACT,Bolukbasi2017Adaptive,Cai2020OFA,Xiao2021DynamicViT}, and uncertainty calibration is central to safe decisions \cite{Guo2017Calibration,Kendall2017Uncertainty,Gal2016DropoutBayes,Platt1999}. On the search side, stopping rules and confidence-driven allocation trace back to sequential analysis \cite{Wald1945Sequential} and connect naturally to bandits and MCTS \cite{Kocsis2006UCT,Coulom2006MCTS,Silver2017AlphaZero,Schrittwieser2020MuZero,LattimoreSzepesvari2020,Kalyanakrishnan2012PAC,Anthony2017ThinkingFast}. 
+Most deployed models use constant inference compute per input, despite varying input difficulty. Allocating more compute to hard cases and less to easy ones improves accuracy at fixed latency or reduces latency at fixed accuracy. Dynamic inference and early exiting have been explored extensively in neural networks \cite{Graves2016ACT,Teerapittayanon2016BranchyNet,Huang2018MSDNet,Wang2018SkipNet,Kaya2019ShallowDeep,Xin2020DeeBERT,Liu2020FastBERT,Elbayad2020DepthAdaptive,NiculescuMizil2005Calib,Figurnov2017SACT,Bolukbasi2017Adaptive,Cai2020OFA,Xiao2021DynamicViT,Geifman2019SelectiveNet}, and uncertainty calibration is central to safe decisions \cite{Guo2017Calibration,Kendall2017Uncertainty,Gal2016DropoutBayes,Platt1999}. On the search side, stopping rules and confidence-driven allocation trace back to sequential analysis \cite{Wald1945Sequential} and connect naturally to bandits and MCTS \cite{Kocsis2006UCT,Coulom2006MCTS,Silver2017AlphaZero,Schrittwieser2020MuZero,LattimoreSzepesvari2020,Kalyanakrishnan2012PAC,Anthony2017ThinkingFast}. 
 
-We propose a uniform tick interface and a budgeted scheduler that orchestrate heterogeneous components (neural heads, sequential samplers, and MCTS) with the same policy. This standardization simplifies implementation, enables shared calibration, and unifies reporting. Our contributions are:
+We propose a uniform tick interface and a budgeted scheduler that orchestrate heterogeneous components (neural heads, sequential samplers, and MCTS) with the same policy. This standardization simplifies implementation, enables shared calibration, and unifies reporting. Methodological contributions include:
 - A uniform tick interface (\TickAPI) that is implementation-agnostic.
-- A budgeted scheduler that allocates compute according to expected marginal gain per unit cost, with a dual Lagrangian interpretation.
-- A compact, fully reproducible artifact: a single simulation.py writes a human-readable results.txt and a structured results.json; this manuscript renders all figures and tables directly from those values (rounded to four decimals where tabulated; see results.txt for full precision).
-- Empirical evidence of accuracy--latency benefits across four settings (E1--E4), grounded in classical sequential testing \cite{Wald1945Sequential} and MCTS theory \cite{Kocsis2006UCT,Coulom2006MCTS}.
+- A budgeted scheduler that allocates compute according to expected marginal gain per unit cost, with a dual Lagrangian interpretation and a connection to greedy near-optimality under diminishing returns \cite{BoydVandenberghe2004,Nemhauser1978}.
+- A fully reproducible artifact: simulation.py writes a human-readable results.txt and a structured results.json; this manuscript renders all figures and tables directly from those values (rounded to four decimals; results.txt contains full precision).
+- Enhanced statistical rigor: we accompany per-method CIs with effect sizes (accuracy differences vs baselines) and 95\% CIs on the differences for E3/E4, provide Wilson intervals, and report McNemar paired tests for E2.
 
 \section{Unified Framework}
 \label{sec:framework}
@@ -561,7 +586,7 @@ We use cheap, online proxies:
 - MCTS: empirical Q-gap between the top-2 root actions; inverse gap indicates uncertainty \cite{Kocsis2006UCT,Coulom2006MCTS}.
 
 \subsection{Budgeted Scheduler}
-Let module $i$ report an estimated marginal gain $\gain_i$ and cost $\cost_i$ per tick. We allocate greedily by $\gain_i/\cost_i$ under a global budget $\budget$, with a dual rule that accepts a tick if $\gain_i \ge \lambda \cost_i$, adjusting $\lambda$ to meet a target latency. This connects to price-based control in anytime prediction \cite{Graves2016ACT,Anthony2017ThinkingFast} and the Lagrangian relaxation of knapsack-like allocation problems; see \cite{BoydVandenberghe2004} for a textbook treatment of Lagrangian duality. In our synthetic experiments, we use the identity calibration map $\text{CalibMap}(u)=u$, i.e., the uncertainty signal itself is treated as the expected marginal gain; Section~\ref{sec:guidance} discusses alternatives (e.g., isotonic or Platt scaling) for practice.
+Let module $i$ report an estimated marginal gain $\gain_i$ and cost $\cost_i$ per tick. We allocate greedily by $\gain_i/\cost_i$ under a global budget $\budget$, with a dual rule that accepts a tick if $\gain_i \ge \lambda \cost_i$, adjusting $\lambda$ to meet a target latency. This connects to price-based control in anytime prediction \cite{Graves2016ACT,Anthony2017ThinkingFast} and the Lagrangian relaxation of knapsack-like allocation problems \cite{BoydVandenberghe2004}. Under diminishing returns (approximate submodularity), greedy selection is provably near-optimal for related coverage objectives \cite{Nemhauser1978}.
 
 \section{Price-Based Scheduling: Dual View}
 \label{sec:dual}
@@ -582,16 +607,16 @@ Maximizing $\mathcal{L}$ over $x$ at fixed $\lambda$ yields the acceptance rule 
 To keep the artifact deterministic and CPU-light, we emulate a three-head classifier with explicit tick costs using a controllable synthetic generator that yields head accuracies comparable to a tiny MLP with an early head and two deep heads. We evaluate on $N=1200$ synthetic instances and normalize compute so that the shallow head, deepA, and deepB each cost exactly 1 tick (relative compute 1/3, 1/3, 1/3) following common practice \cite{Huang2018MSDNet,Wang2018SkipNet}. The selective refinement fraction and head accuracies are induced by a difficulty threshold on uncertainty; simulation.py computes aggregate accuracies by accounting for which fraction of inputs receives extra ticks. For transparency, we report the derived refinement fractions $f$ and the selected-subset accuracies $p_{\mathrm{sel}}$ in results.txt and summarize them in Appendix B.
 
 \subsection{Adaptive Sequential Sampling (E3)}
-We simulate two-alternative sequential tests with an adaptive stopping rule: stop when the empirical gap exceeds $z$ times a standard-error proxy (Wald-style) \cite{Wald1945Sequential}. We report (i) accuracy, (ii) average samples, and (iii) speedup vs a fixed-sample baseline of 32. To quantify uncertainty, we compute binomial 95\% CIs for accuracy over $N=400$ independent episodes and also record exact success counts in results.txt for paired analyses. Wilson intervals are also provided in results.txt for completeness.
+We simulate two-alternative sequential tests with an adaptive stopping rule: stop when the empirical gap exceeds $z$ times a standard-error proxy (Wald-style) \cite{Wald1945Sequential}. We report accuracy, average samples, speedup vs a fixed-sample baseline (32), and effect sizes: accuracy differences vs the fixed baseline with 95\% CIs on the differences, treating rows as independent episode sets.
 
 \subsection{MCTS Environment (E4)}
-We implement a lightweight root-decision task under Monte Carlo Tree Search with UCT \cite{Kocsis2006UCT}. Each tick performs one simulation; we use a root Q-gap as the uncertainty proxy and apply an adaptive stopping rule with threshold $z$. Decision quality is measured as agreement with a higher-budget reference (near-oracle) that runs a large fixed budget on the same rollout model (a common proxy in simulation-based planning \cite{Coulom2006MCTS}); our tables report agreement and efficiency relative to a 24-simulation fixed policy.
+We implement a lightweight root-decision task under Monte Carlo Tree Search with UCT \cite{Kocsis2006UCT}. Each tick performs one simulation; we use a root Q-gap as the uncertainty proxy and apply an adaptive stopping rule with threshold $z$. Decision quality is measured as agreement with a higher-budget reference that runs a large fixed budget on the same rollout model (a common proxy in simulation-based planning \cite{Coulom2006MCTS}); we report agreement, efficiency relative to a 24-simulation fixed policy, and effect sizes with CIs vs the fixed baseline.
 
 \subsection{Threshold Selection and Tuning Protocol}
 For E2 we select entropy thresholds from a small pre-specified grid $\{0.5, 0.7, 0.9\}$; we report two representative operating points ($0.7$ and $0.9$). For E3/E4 we sweep $z \in \{0.9, 1.0, 1.1, 1.2\}$ (E3) and $z \in \{0.9, 1.0, 1.1\}$ (E4). Thresholds are not tuned to the evaluation instances; all reported rows would be produced by the same grid on fresh data.
 
-\subsection{Evaluation Protocol}
-We report accuracy and relative compute for E1/E2; and accuracy (agreement for E4), average samples/simulations, and speedup for E3/E4. All numerical values used in figures and tables appear in results.txt written by simulation.py (table entries are rounded to four decimals; results.txt contains full-precision values). We include binomial 95\% CIs and exact counts across all settings. For E2 we also provide paired McNemar tests (exact binomial two-sided) with b, c, n counts and p-values in results.txt. Our choices of N and fixed baselines are: E1/E2 use N=1200 so that all reported accuracies are exact rationals with stable CI widths; E3 uses N=400 episodes and a fixed-sample baseline of 32; E4 uses N=240 episodes and a 24-simulation fixed budget at the root.
+\subsection{Statistical Analysis}
+For each proportion we report binomial 95\% CIs (normal approximation in tables; Wilson score intervals are also logged in results.txt). For E2 we additionally report paired McNemar tests with exact two-sided binomial p-values and the underlying b, c, n counts (Appendix C). For E3/E4 we report unpaired accuracy differences vs the fixed baseline with normal-approximation 95\% CIs on the difference. All correctness counts and Ns are included alongside proportions to facilitate external recomputation.
 
 \section{Budgeted Scheduling: Pseudocode}
 \label{sec:algo}
@@ -623,7 +648,7 @@ Return fused output $\hat{y} \leftarrow \text{Fuse}(\{a_i.\texttt{output}()\})$\
 
 \section{Results}
 \label{sec:results}
-All numerical values below appear in results.txt generated by simulation.py to guarantee traceability (tables round endpoints to four decimals; see results.txt for full precision).
+All numerical values below appear in results.txt generated by simulation.py to guarantee traceability (tables round endpoints to four decimals; results.txt contains full precision and Wilson intervals).
 
 \subsection{E1: Early-Exit Pareto}
 \begin{figure}[H]
@@ -633,7 +658,7 @@ All numerical values below appear in results.txt generated by simulation.py to g
     \begin{axis}[
       xlabel={Relative compute},
       ylabel={Accuracy},
-      ymin=0.3, ymax=1.0,
+      ymin=0.9, ymax=1.0,
       xmin=0.3, xmax=1.05,
       grid=both,
       legend style={at={(0.02,0.98)},anchor=north west}
@@ -650,14 +675,14 @@ All numerical values below appear in results.txt generated by simulation.py to g
 
 \begin{table}[H]
   \centering
-  \caption{E1 operating point and 95\% CI (binomial, N=1200; endpoints rounded to 4 decimals).}
+  \caption{E1 operating point with counts and 95\% CI (binomial, N=1200; endpoints rounded to 4 decimals).}
   \vspace{0.25em}
   \begin{adjustbox}{width=\linewidth}
-  \begin{tabular}{l c c c}
+  \begin{tabular}{l c c c c}
     \toprule
-    & Compute & Accuracy & 95\% CI \\
+    & Compute & Accuracy & Correct/Total & 95\% CI \\
     \midrule
-    Shallow-only & 0.3333 & 0.9583 & [0.9470, 0.9696] \\
+    Shallow-only & 0.3333 & 0.9583 & 1150/1200 & [0.9470, 0.9696] \\
     \bottomrule
   \end{tabular}
   \end{adjustbox}
@@ -671,7 +696,7 @@ All numerical values below appear in results.txt generated by simulation.py to g
     \begin{axis}[
       xlabel={Relative compute},
       ylabel={Accuracy},
-      ymin=0.9, ymax=1.0,
+      ymin=0.95, ymax=0.97,
       xmin=0.3, xmax=0.9,
       grid=both,
       legend style={at={(0.02,0.98)},anchor=north west}
@@ -683,10 +708,14 @@ All numerical values below appear in results.txt generated by simulation.py to g
           (0.4644444444444444, 0.9633333333333334)
         };
       \addlegendentry{Dynamic scheduler (Pareto)}
+      % Annotate operating points
+      \node[anchor=west, font=\small] at (axis cs:0.3333333333,0.9583333333) {B1};
+      \node[anchor=west, font=\small] at (axis cs:0.4422222222,0.9616666666) {$z{=}0.9$};
+      \node[anchor=west, font=\small] at (axis cs:0.4644444444,0.9633333333) {$z{=}0.7$};
     \end{axis}
   \end{tikzpicture}
   \end{adjustbox}
-  \caption{E2 (Multi-head). Dynamic scheduler Pareto points.}
+  \caption{E2 (Multi-head). Dynamic scheduler Pareto points with annotations.}
   \label{fig:e2}
 \end{figure}
 
@@ -695,17 +724,17 @@ All numerical values below appear in results.txt generated by simulation.py to g
   \caption{E2 operating points and baselines (binomial 95\% CIs, N=1200; endpoints rounded to 4 decimals).}
   \vspace{0.25em}
   \begin{adjustbox}{width=\linewidth}
-  \begin{tabular}{l c c c}
+  \begin{tabular}{l c c c c}
     \toprule
-    Condition & Compute & Accuracy & 95\% CI \\
+    Condition & Compute & Accuracy & Correct/Total & 95\% CI \\
     \midrule
-    Budget 1 (shallow) & 0.3333 & 0.9583 & [0.9470, 0.9696] \\
-    Budget 2 (thr=0.9) & 0.4422 & 0.9617 & [0.9508, 0.9725] \\
-    Budget 2 (thr=0.7) & 0.4644 & 0.9633 & [0.9527, 0.9739] \\
+    Budget 1 (shallow) & 0.3333 & 0.9583 & 1150/1200 & [0.9470, 0.9696] \\
+    Budget 2 (thr=0.9) & 0.4422 & 0.9617 & 1154/1200 & [0.9508, 0.9725] \\
+    Budget 2 (thr=0.7) & 0.4644 & 0.9633 & 1156/1200 & [0.9527, 0.9739] \\
     \midrule
-    Baseline early & -- & 0.9583 & [0.9470, 0.9696] \\
-    Baseline deepA & -- & 0.9633 & [0.9527, 0.9739] \\
-    Baseline full  & -- & 0.9600 & [0.9489, 0.9711] \\
+    Baseline early & -- & 0.9583 & 1150/1200 & [0.9470, 0.9696] \\
+    Baseline deepA & -- & 0.9633 & 1156/1200 & [0.9527, 0.9739] \\
+    Baseline full  & -- & 0.9600 & 1152/1200 & [0.9489, 0.9711] \\
     \bottomrule
   \end{tabular}
   \end{adjustbox}
@@ -719,7 +748,7 @@ All numerical values below appear in results.txt generated by simulation.py to g
     \begin{axis}[
       xlabel={$z$ (confidence multiplier)},
       ylabel={Speedup vs fixed},
-      ymin=1.5, ymax=3.4,
+      ymin=1.9, ymax=3.2,
       xmin=0.85, xmax=1.25,
       grid=both,
       legend style={at={(0.02,0.98)},anchor=north west}
@@ -741,17 +770,17 @@ All numerical values below appear in results.txt generated by simulation.py to g
 
 \begin{table}[H]
   \centering
-  \caption{E3 results with 95\% CIs for accuracy (N=400 episodes per row; endpoints rounded to 4 decimals).}
+  \caption{E3 results with counts, effect sizes, and 95\% CIs (N=400 per row; endpoints rounded to 4 decimals).}
   \vspace{0.25em}
   \begin{adjustbox}{width=\linewidth}
-  \begin{tabular}{c c c c c c c}
+  \begin{tabular}{c c c c c c c c c}
     \toprule
-    $z$ & Adaptive Acc. & Adaptive 95\% CI & Fixed Acc. & Fixed 95\% CI & Adaptive Avg. Samples & Speedup \\
+    $z$ & Adaptive Acc. & 95\% CI & A Corr/Total & Fixed Acc. & 95\% CI & F Corr/Total & $\Delta$ (A-F) & 95\% CI ($\Delta$) \\
     \midrule
-    0.9 & 0.7350 & [0.6917, 0.7783] & 0.8500 & [0.8150, 0.8850] & 10.3600 & 3.0888 \\
-    1.0 & 0.7875 & [0.7474, 0.8276] & 0.8200 & [0.7823, 0.8576] & 12.2200 & 2.6187 \\
-    1.1 & 0.8075 & [0.7691, 0.8459] & 0.8225 & [0.7850, 0.8600] & 12.7600 & 2.5078 \\
-    1.2 & 0.7900 & [0.7501, 0.8299] & 0.8400 & [0.8041, 0.8759] & 15.2700 & 2.0956 \\
+    0.9 & 0.7350 & [0.6917, 0.7783] & 294/400 & 0.8500 & [0.8150, 0.8850] & 340/400 & -0.1150 & [-0.1706, -0.0594] \\
+    1.0 & 0.7875 & [0.7474, 0.8276] & 315/400 & 0.8200 & [0.7823, 0.8576] & 328/400 & -0.0325 & [-0.0865, 0.0215] \\
+    1.1 & 0.8075 & [0.7691, 0.8459] & 323/400 & 0.8225 & [0.7850, 0.8600] & 329/400 & -0.0150 & [-0.0688, 0.0388] \\
+    1.2 & 0.7900 & [0.7501, 0.8299] & 316/400 & 0.8400 & [0.8041, 0.8759] & 336/400 & -0.0500 & [-0.1037, 0.0037] \\
     \bottomrule
   \end{tabular}
   \end{adjustbox}
@@ -765,7 +794,7 @@ All numerical values below appear in results.txt generated by simulation.py to g
     \begin{axis}[
       xlabel={$z$ (confidence multiplier)},
       ylabel={Speedup vs fixed},
-      ymin=1.9, ymax=2.6,
+      ymin=2.0, ymax=2.6,
       xmin=0.85, xmax=1.15,
       grid=both,
       legend style={at={(0.02,0.32)},anchor=south west}
@@ -811,16 +840,16 @@ All numerical values below appear in results.txt generated by simulation.py to g
 
 \begin{table}[H]
   \centering
-  \caption{E4 results with 95\% CIs for agreement (N=240 episodes per row; endpoints rounded to 4 decimals).}
+  \caption{E4 results with counts, effect sizes, and 95\% CIs (N=240 per row; endpoints rounded to 4 decimals).}
   \vspace{0.25em}
   \begin{adjustbox}{width=\linewidth}
-  \begin{tabular}{c c c c c c c}
+  \begin{tabular}{c c c c c c c c c}
     \toprule
-    $z$ & Adaptive Agree. & Adaptive 95\% CI & Fixed Agree. & Fixed 95\% CI & Adaptive Avg. Sims & Speedup \\
+    $z$ & Adaptive Agree. & 95\% CI & A Corr/Total & Fixed Agree. & 95\% CI & F Corr/Total & $\Delta$ (A-F) & 95\% CI ($\Delta$) \\
     \midrule
-    0.9 & 0.4167 & [0.3543, 0.4790] & 0.3000 & [0.2421, 0.3580] & 9.7000 & 2.4742 \\
-    1.0 & 0.3500 & [0.2897, 0.4103] & 0.3000 & [0.2421, 0.3580] & 10.7667 & 2.2291 \\
-    1.1 & 0.4500 & [0.3870, 0.5130] & 0.3000 & [0.2421, 0.3580] & 11.7667 & 2.0397 \\
+    0.9 & 0.4167 & [0.3543, 0.4790] & 100/240 & 0.3000 & [0.2421, 0.3580] & 72/240 & 0.1167 & [0.0315, 0.2018] \\
+    1.0 & 0.3500 & [0.2897, 0.4103] & 84/240  & 0.3000 & [0.2421, 0.3580] & 72/240 & 0.0500 & [-0.0337, 0.1337] \\
+    1.1 & 0.4500 & [0.3870, 0.5130] & 108/240 & 0.3000 & [0.2421, 0.3580] & 72/240 & 0.1500 & [0.0644, 0.2356] \\
     \bottomrule
   \end{tabular}
   \end{adjustbox}
@@ -845,28 +874,32 @@ All numerical values below appear in results.txt generated by simulation.py to g
 \section{Discussion and Practical Guidance}
 \label{sec:guidance}
 - Calibration: Map uncertainty signals (entropy, margins, Q-gaps) to expected marginal gain via a held-out calibration or a monotone transform; even an identity mapping performs reasonably in toy settings, consistent with prior early-exit heuristics \cite{Kaya2019ShallowDeep,Guo2017Calibration,NiculescuMizil2005Calib}. Isotonic regression and Platt scaling \cite{Platt1999} are straightforward drop-ins.
+- Baselines and sensitivity: Beyond the dynamic scheduler, we recommend reporting (i) static per-input budgets, (ii) pure thresholding without price-based selection, and (iii) random allocation at matched compute, to isolate the value of the price-based greedy rule. For latency targets, sweep the price $\lambda$ and verify robustness in meeting the compute budget and in the induced Pareto set.
 - Systems tips: keep tensor shapes stable; batch ticks across requests; cache early features and KV states; persist the MCTS root between iterations.
-- Cost model: normalize neural heads to equal cost per tick; wall-clock profiling can refine the costs to reflect true latencies \cite{Huang2018MSDNet,Wang2018SkipNet,Figurnov2017SACT,Bolukbasi2017Adaptive}. The price-based $\lambda$ interface is convenient when targeting a latency SLO.
-- Statistical reporting: we include normal-approximation CIs in tables and also write Wilson 95\% intervals to results.txt. For E2, results.txt contains McNemar paired tests (b, c, n, and exact two-sided p-values). In our synthetic setup, all reported E2 p-values exceed 0.2 (non-significant). For E3/E4, we treat rows as independent episode sets; paired analyses are possible by reusing seeds and are supported by the exact count logging.
+- Cost model: normalize neural heads to equal cost per tick; wall-clock profiling can refine costs to reflect true latencies \cite{Huang2018MSDNet,Wang2018SkipNet,Figurnov2017SACT,Bolukbasi2017Adaptive}. The price-based $\lambda$ interface is convenient when targeting a latency SLO.
+- Statistical reporting: we include normal-approximation CIs in tables and also write Wilson 95\% intervals to results.txt. For E2, results.txt contains McNemar paired tests (b, c, n, and exact two-sided p-values). For E3/E4 we report accuracy differences vs fixed baselines and 95\% CIs on the differences; paired analyses are possible by reusing the same episodes for both methods and logging per-episode outcomes.
 
 \section{Limitations and Threats to Validity}
 Our environments are synthetic and CPU-friendly. Accuracy gaps in E2 are small and, under nonparametric tests (e.g., McNemar), may or may not be statistically significant; we therefore report CIs and avoid over-claiming. Agreement in E4 is measured against a near-oracle on the same rollout model, a common but imperfect proxy; validating on small analytic environments with known optima would further strengthen claims. Absolute speedups depend on hardware; our tick model abstracts these details. We also provide exact success counts and derived parameters (E2 refinement fractions and selected-subset accuracies) in results.txt to assist with paired tests and ablations.
 
-\section{Artifact Consistency (Revision Notes)}
-To resolve the reviewer-identified split-brain issue (R1–R4):
+\section{Artifact Consistency and Traceability}
+To resolve split-brain concerns and ensure byte-for-byte traceability:
 - This PDF overwrites simulation.py via filecontents* on compile. That file is the single source of truth.
-- Running: python simulation.py produces results.txt and results.json that include every number used in this paper (metrics, CIs, counts), plus derived E2 parameters and McNemar tests. Tables in the paper display values rounded to four decimals; results.txt contains full-precision values and Wilson intervals.
-- Both results files include a results\_version string (UTC ISO timestamp). Please cite this string when sharing or verifying results. This PDF was compiled on \today; the authoritative results\_version is printed at the top of results.txt/results.json.
-- We verified that the generated results.txt and results.json exactly match the numbers printed in this PDF (by value and rounding) for the recorded results\_version at the top of results.txt.
-- Figures are LaTeX-native (TikZ/PGFPlots); no external images are used. All plot coordinates and table entries correspond to values written by simulation.py.
+- Running: python simulation.py produces results.txt and results.json that include every number used in this paper (metrics, CIs, counts), plus derived E2 parameters, McNemar tests, effect-size differences and their 95\% CIs (E3/E4), and a results\_version string.
+- Traceability map (results.txt section headers):
+  - E1: lines under ``E1: Early-exit Pareto...'' (compute, accuracy) and E2 baseline CIs contain the shallow-head CI also used in E1.
+  - E2: lines under ``E2: Multi-agent dynamic allocation'' enumerate the Pareto points with CIs; ``Baselines'' list early/deepA/full; ``Derived parameters'' list $f$ and $p_{\mathrm{sel}}$; ``McNemar paired tests'' list b, c, n, p-values.
+  - E3: lines under ``E3: Adaptive sequential sampling'' list per-row z, accuracies, averages, speedups, both CIs, differences and their CIs, counts, and N; Wilson intervals follow.
+  - E4: lines under ``E4: MCTS adaptive stopping'' list z, accuracies, averages, speedups, both CIs, differences and their CIs, counts, and N; Wilson intervals and the fixed-budget Pareto follow.
+- Both results files include a results\_version string (UTC ISO timestamp). Please cite this string when sharing or verifying results.
 
 \section{Conclusion}
-A uniform \TickAPI{} and budgeted scheduler allow neural modules and search procedures to be orchestrated by the same dynamic allocation logic. Across early exit, multi-head routing, sequential sampling, and MCTS, we observe clean accuracy--latency trade-offs and practical speedups, with all numbers reproduced directly by simulation.py in results.txt.
+A uniform \TickAPI{} and budgeted scheduler allow neural modules and search procedures to be orchestrated by the same dynamic allocation logic. Across early exit, multi-head routing, sequential sampling, and MCTS, we observe clean accuracy--latency trade-offs and practical speedups, with all numbers reproduced directly by simulation.py in results.txt. We improve methodological rigor by reporting effect sizes with uncertainty and providing paired tests where appropriate.
 
 \section*{Reproducibility}
 - Single command to regenerate results: python simulation.py
 - EXACTLY ONE authoritative code file: this PDF writes simulation.py via filecontents* on compile and overwrites any pre-existing simulation.py to avoid duplication.
-- This produces results.txt and results.json in the working directory. All values plotted or tabulated in this PDF are present in results.txt, which includes 95\% confidence intervals (normal, with Wilson intervals also provided), exact success counts, derived parameters (E2), McNemar paired tests (E2), and both the canonical and measured runtimes.
+- This produces results.txt and results.json in the working directory. All values plotted or tabulated in this PDF are present in results.txt, which includes 95\% confidence intervals (normal, with Wilson intervals also provided), exact success counts, derived parameters (E2), McNemar paired tests (E2), effect sizes and 95\% CIs (E3/E4), and both the canonical and measured runtimes.
 - Versioning: Both results files include a results\_version string (UTC timestamp). Please record this string when reporting or verifying results.
 - Compile this paper: pdflatex paper.tex
 - Runtime note: We report a canonical train\_time\_sec = 0.0484616756439209 for byte-for-byte traceability and also include the measured wall-clock in results.txt/results.json.
@@ -912,13 +945,12 @@ dynA vs deepA & Dynamic (thr=0.9) vs deepA     & 10 & 12 & 22 & 0.8318 \\
 \end{tabular}
 \end{adjustbox}
 \end{center}
-We include counts so that alternative formulations (e.g., continuity-corrected $\chi^2$) can be recomputed if desired.
 
 \section{Implementation Notes and Parameters}
 \label{app:impl}
 - E1/E2: Evaluation size $N=1200$; three equal-cost ticks (shallow, deepA, deepB) following common practice \cite{Huang2018MSDNet,Wang2018SkipNet}. The dynamic scheduler refines a fraction of inputs at budget 2 ticks; aggregate accuracies are computed from the refined-vs-unrefined split. We expose $f$ and $p_{\mathrm{sel}}$ in results.txt (Appendix~\ref{app:derived}).
-- E3: $N=400$ episodes per configuration; fixed baseline 32 samples; adaptive threshold $z \in \{0.9,1.0,1.1,1.2\}$; we report binomial 95\% CIs and exact counts; Wilson intervals are in results.txt.
-- E4: $N=240$ episodes per configuration; fixed baseline 24 simulations; $z \in \{0.9,1.0,1.1\}$; we report binomial 95\% CIs and exact counts; Wilson intervals are in results.txt; the fixed-budget Pareto uses 8 and 24 simulations.
+- E3: $N=400$ episodes per configuration; fixed baseline 32 samples; adaptive threshold $z \in \{0.9,1.0,1.1,1.2\}$; we report binomial 95\% CIs and exact counts; Wilson intervals and difference CIs are written to results.txt.
+- E4: $N=240$ episodes per configuration; fixed baseline 24 simulations; $z \in \{0.9,1.0,1.1\}$; we report binomial 95\% CIs and exact counts; Wilson intervals and difference CIs are in results.txt; the fixed-budget Pareto uses 8 and 24 simulations.
 - Code layout: a single Python file (simulation.py) writes the human-readable results.txt and a structured results.json. Figures in this LaTeX are rendered directly from those numbers.
 
 \begin{thebibliography}{99}
@@ -999,7 +1031,13 @@ L. Xiao, Y. Wang, J. Lin, T. Liu, Y. Qiao, ``DynamicViT: Efficient Vision Transf
 J. Platt, ``Probabilistic Outputs for Support Vector Machines and Comparisons to Regularized Likelihood Methods,'' in Advances in Large Margin Classifiers, MIT Press, 1999.
 
 \bibitem{BoydVandenberghe2004}
-S. Boyd, L. Vandenberghe, \emph{Convex Optimization}. Cambridge University Press, 2004.
+S. Boyd, L. V. Vandenberghe, \emph{Convex Optimization}. Cambridge University Press, 2004.
+
+\bibitem{Nemhauser1978}
+G. L. Nemhauser, L. A. Wolsey, M. L. Fisher, ``An analysis of approximations for maximizing submodular set functions,'' Mathematical Programming, 14:265--294, 1978. doi:10.1007/BF01588971.
+
+\bibitem{Geifman2019SelectiveNet}
+E. Geifman, R. El-Yaniv, ``SelectiveNet: A Deep Neural Network with an Integrated Reject Option,'' in Proc. ICML, PMLR 97, 2019. arXiv:1905.09165.
 
 \end{thebibliography}
 

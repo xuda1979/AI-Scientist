@@ -1,6 +1,24 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 .venv/
 venv/
 
@@ -16,14 +34,47 @@ venv/
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+*.lof
+*.lot
+*.idx
+*.ind
+*.ilg
+*.nav
+*.snm
+*.vrb
+texput.log
 
-# Editor
+# Editor and IDE
 .DS_Store
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
+*.lnk
 
-# Outputs
+# Project specific temporary files
+test_*.py
+simulation_output.txt
+error_correction_results.png
+*.tmp
+*.temp
+*.bak
+
+# Outputs (keep structure but ignore build artifacts)
 output/**/archive/
 output/**/*.pdf
 output/**/*.tmp
 output/**/*.bak
+
+# Logs (but keep logs directory structure)
+logs/*.log
+logs/*.txt
+!logs/.gitkeep
+
+# Environment and security
+.env
+.env.local
+*api_key*
+*secret*
