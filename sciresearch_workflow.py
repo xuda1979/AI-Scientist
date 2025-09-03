@@ -469,6 +469,219 @@ def _prepare_project_dir(output_dir: Path, modify_existing: bool) -> Path:
     project_dir.mkdir(parents=True, exist_ok=True)
     return project_dir
 
+def _generate_research_ideas(
+    topic: str, 
+    field: str, 
+    question: str, 
+    model: str,
+    num_ideas: int = 15,
+    request_timeout: Optional[int] = 3600,
+    fallback_models: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Generate and rank multiple research ideas for the given topic/field/question.
+    
+    Args:
+        topic: Research topic
+        field: Research field
+        question: Research question
+        model: AI model to use
+        num_ideas: Number of ideas to generate (10-20)
+        request_timeout: Timeout for API calls
+        fallback_models: Fallback models if primary fails
+        
+    Returns:
+        Dictionary containing ranked ideas with analysis
+    """
+    print(f"🧠 Generating {num_ideas} research ideas for '{topic}' in {field}...")
+    
+    ideation_prompt = f"""
+You are a brilliant research strategist tasked with generating innovative research ideas.
+
+TOPIC: {topic}
+FIELD: {field}
+RESEARCH QUESTION: {question}
+
+Your task is to generate {num_ideas} distinct, high-quality research ideas that address this topic/question in the field of {field}. For each idea, provide:
+
+1. **Title**: A concise, descriptive title
+2. **Core Concept**: 2-3 sentences describing the main research direction
+3. **Originality Score**: 1-10 (10 = highly novel, never done before)
+4. **Impact Score**: 1-10 (10 = revolutionary potential, broad applications)
+5. **Feasibility Score**: 1-10 (10 = very feasible with current technology/methods)
+6. **Pros**: 2-3 key advantages of this approach
+7. **Cons**: 2-3 potential challenges or limitations
+
+Please ensure ideas span different approaches: theoretical, experimental, algorithmic, systems-based, survey/analysis, etc.
+
+Format your response as:
+
+## Research Idea #1
+**Title**: [Title]
+**Core Concept**: [Description]
+**Originality**: [1-10] - [Brief justification]
+**Impact**: [1-10] - [Brief justification]  
+**Feasibility**: [1-10] - [Brief justification]
+**Pros**: 
+- [Pro 1]
+- [Pro 2]
+**Cons**:
+- [Con 1] 
+- [Con 2]
+
+## Research Idea #2
+[Continue same format...]
+
+After listing all {num_ideas} ideas, provide:
+
+## RANKING ANALYSIS
+Rank the top 5 ideas by overall potential (considering originality × impact × feasibility), and explain your ranking criteria.
+
+## RECOMMENDATION
+Select the single best idea and explain why it's optimal for development into a research paper.
+"""
+
+    try:
+        print("  📝 Sending ideation request to AI...")
+        messages = [{"role": "user", "content": ideation_prompt}]
+        
+        response = _universal_chat(
+            messages=messages,
+            model=model,
+            request_timeout=request_timeout,
+            prompt_type="ideation",
+            fallback_models=fallback_models or []
+        )
+        
+        print("  ✅ Ideas generated successfully!")
+        
+        # Parse the response to extract structured data
+        ideas = _parse_ideation_response(response)
+        
+        print(f"  📊 Parsed {len(ideas)} ideas from response")
+        
+        # Display summary
+        print("\n🎯 Research Ideas Summary:")
+        print("━" * 60)
+        
+        for i, idea in enumerate(ideas[:5], 1):  # Show top 5
+            originality = idea.get('originality', 0)
+            impact = idea.get('impact', 0) 
+            feasibility = idea.get('feasibility', 0)
+            overall_score = (originality + impact + feasibility) / 3
+            
+            print(f"{i}. {idea.get('title', f'Idea {i}')}")
+            print(f"   Scores: O={originality}, I={impact}, F={feasibility}, Overall={overall_score:.1f}")
+            print(f"   {idea.get('core_concept', '')[:80]}...")
+            print()
+        
+        return {
+            "ideas": ideas,
+            "raw_response": response,
+            "selected_idea": ideas[0] if ideas else None,
+            "topic": topic,
+            "field": field,
+            "question": question
+        }
+        
+    except Exception as e:
+        print(f"  ❌ Ideation failed: {e}")
+        print("  🔄 Proceeding with original topic/question...")
+        
+        # Fallback: return original topic as single idea
+        return {
+            "ideas": [{
+                "title": topic,
+                "core_concept": question,
+                "originality": 7,
+                "impact": 7,
+                "feasibility": 8,
+                "pros": ["Clear research direction", "Well-defined scope"],
+                "cons": ["No alternative exploration", "Limited creativity"]
+            }],
+            "raw_response": f"Fallback response for {topic}",
+            "selected_idea": {
+                "title": topic,
+                "core_concept": question,
+                "originality": 7,
+                "impact": 7,
+                "feasibility": 8
+            },
+            "topic": topic,
+            "field": field,
+            "question": question
+        }
+
+def _parse_ideation_response(response: str) -> List[Dict[str, Any]]:
+    """
+    Parse the ideation response to extract structured idea data.
+    
+    Returns:
+        List of dictionaries, each containing idea details
+    """
+    ideas = []
+    
+    try:
+        import re
+        
+        # Split response into individual ideas
+        idea_sections = re.split(r'## Research Idea #\d+', response)
+        
+        for section in idea_sections[1:]:  # Skip first empty split
+            idea = {}
+            
+            # Extract title
+            title_match = re.search(r'\*\*Title\*\*:\s*(.+)', section)
+            if title_match:
+                idea['title'] = title_match.group(1).strip()
+            
+            # Extract core concept
+            concept_match = re.search(r'\*\*Core Concept\*\*:\s*(.+?)(?=\*\*|$)', section, re.DOTALL)
+            if concept_match:
+                idea['core_concept'] = concept_match.group(1).strip()
+            
+            # Extract scores
+            for score_type in ['Originality', 'Impact', 'Feasibility']:
+                pattern = fr'\*\*{score_type}\*\*:\s*(\d+)'
+                match = re.search(pattern, section)
+                if match:
+                    idea[score_type.lower()] = int(match.group(1))
+            
+            # Extract pros and cons
+            pros_match = re.search(r'\*\*Pros\*\*:\s*(.+?)(?=\*\*Cons|$)', section, re.DOTALL)
+            if pros_match:
+                pros_text = pros_match.group(1)
+                idea['pros'] = [line.strip('- ').strip() for line in pros_text.split('\n') if line.strip().startswith('-')]
+            
+            cons_match = re.search(r'\*\*Cons\*\*:\s*(.+?)(?=\*\*|$)', section, re.DOTALL)
+            if cons_match:
+                cons_text = cons_match.group(1)
+                idea['cons'] = [line.strip('- ').strip() for line in cons_text.split('\n') if line.strip().startswith('-')]
+            
+            if idea.get('title'):  # Only add if we got at least a title
+                ideas.append(idea)
+        
+        # Sort by overall score (originality + impact + feasibility)
+        def calculate_score(idea):
+            return (idea.get('originality', 0) + idea.get('impact', 0) + idea.get('feasibility', 0)) / 3
+        
+        ideas.sort(key=calculate_score, reverse=True)
+        
+    except Exception as e:
+        print(f"  ⚠️  Parsing error: {e}")
+        # Return a single fallback idea
+        ideas = [{
+            "title": "Research Analysis",
+            "core_concept": "Comprehensive analysis of the research topic",
+            "originality": 6,
+            "impact": 6,
+            "feasibility": 8,
+            "pros": ["Systematic approach", "Clear methodology"],
+            "cons": ["Limited novelty", "Standard approach"]
+        }]
+    
+    return ideas
+
 def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
         "You are a meticulous scientist writing a LaTeX paper suitable for a top journal. "
@@ -1012,7 +1225,9 @@ def run_workflow(
     check_references: bool = True,    # New parameter
     validate_figures: bool = True,    # New parameter
     user_prompt: Optional[str] = None,  # New parameter for custom user prompt
-    config: Optional[WorkflowConfig] = None  # Configuration parameter
+    config: Optional[WorkflowConfig] = None,  # Configuration parameter
+    enable_ideation: bool = True,     # Enable ideation phase for new papers
+    num_ideas: int = 15              # Number of ideas to generate
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
     
@@ -1073,13 +1288,74 @@ def run_workflow(
     paper_content = paper_path.read_text(encoding="utf-8").strip()
     is_minimal_template = (paper_content == "\\documentclass{article}\\begin{document}\\end{document}" or len(paper_content) < 200)
     
-    # If no real paper content yet (fresh), draft one.
+    # If no real paper content yet (fresh), run ideation and then draft one.
     if is_minimal_template:
-        print("Creating new paper from scratch...")
-        draft = _universal_chat(_initial_draft_prompt(topic, field, question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
+        if enable_ideation:
+            print("🧠 Starting Ideation Phase for new paper...")
+            
+            # Generate and analyze multiple research ideas
+            ideation_result = _generate_research_ideas(
+                topic=topic,
+                field=field,
+                question=question,
+                model=model,
+                num_ideas=num_ideas,
+                request_timeout=request_timeout,
+                fallback_models=config.fallback_models
+            )
+            
+            # Use the best idea to refine the topic and question
+            selected_idea = ideation_result.get("selected_idea")
+            if selected_idea:
+                refined_topic = selected_idea.get("title", topic)
+                refined_question = selected_idea.get("core_concept", question)
+                
+                print(f"\n⭐ Selected Research Idea:")
+                print(f"   Title: {refined_topic}")
+                print(f"   Concept: {refined_question}")
+                print(f"   Scores: O={selected_idea.get('originality', 'N/A')}, "
+                      f"I={selected_idea.get('impact', 'N/A')}, "
+                      f"F={selected_idea.get('feasibility', 'N/A')}")
+                
+                # Save ideation results to project directory
+                ideation_file = project_dir / "ideation_analysis.txt"
+                with open(ideation_file, 'w', encoding='utf-8') as f:
+                    f.write("RESEARCH IDEATION ANALYSIS\n")
+                    f.write("=" * 50 + "\n\n")
+                    f.write(f"Original Topic: {topic}\n")
+                    f.write(f"Original Question: {question}\n")
+                    f.write(f"Field: {field}\n\n")
+                    f.write(f"Selected Idea: {refined_topic}\n")
+                    f.write(f"Refined Concept: {refined_question}\n\n")
+                    f.write("FULL IDEATION RESPONSE:\n")
+                    f.write("-" * 30 + "\n")
+                    f.write(ideation_result.get("raw_response", ""))
+                
+                print(f"💾 Ideation analysis saved to: {ideation_file}")
+                
+                # Use refined topic and question for paper generation
+                final_topic = refined_topic
+                final_question = refined_question
+            else:
+                print("⚠️  No ideas selected, using original topic/question")
+                final_topic = topic
+                final_question = question
+        else:
+            print("ℹ️  Ideation phase skipped (--skip-ideation flag used)")
+            final_topic = topic
+            final_question = question
+        
+        print(f"\n📝 Creating paper draft for: {final_topic}")
+        draft = _universal_chat(_initial_draft_prompt(final_topic, field, final_question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
         paper_path.write_text(draft, encoding="utf-8")
+        
+        if enable_ideation:
+            print("✅ Initial draft created with ideation-selected concept")
+        else:
+            print("✅ Initial draft created with original concept")
     else:
         print(f"Using existing paper content ({len(paper_content)} characters)")
+        print("ℹ️  Skipping ideation phase for existing paper")
 
     # Extract/refresh simulation.py from LaTeX initially
     extract_simulation_from_tex(paper_path, sim_path)
@@ -1380,6 +1656,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--skip-reference-check", action="store_true", help="Disable external reference validation (faster)")
     p.add_argument("--skip-figure-validation", action="store_true", help="Disable figure generation validation (faster)")
     
+    # Ideation parameters
+    p.add_argument("--enable-ideation", action="store_true", default=True, help="Enable research ideation phase for new papers")
+    p.add_argument("--skip-ideation", action="store_true", help="Skip research ideation phase (use original topic directly)")
+    p.add_argument("--num-ideas", type=int, default=15, help="Number of research ideas to generate (10-20)")
+    
     # Custom prompt parameter
     p.add_argument("--user-prompt", type=str, default=None, help="Custom prompt that takes priority over standard requirements")
     
@@ -1390,6 +1671,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.check_references = False
     if args.skip_figure_validation:
         args.validate_figures = False
+    if args.skip_ideation:
+        args.enable_ideation = False
     
     # Check if there's an existing paper first
     output_path = Path(args.output_dir)
@@ -1958,6 +2241,7 @@ if __name__ == "__main__":
         print(f"📊 Quality threshold: {ns.quality_threshold}")
         print(f"🔍 Reference validation: {'enabled' if ns.check_references else 'disabled'}")
         print(f"🖼️ Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
+        print(f"🧠 Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
         
         result_dir = run_workflow(
             topic=ns.topic,
@@ -1975,7 +2259,9 @@ if __name__ == "__main__":
             check_references=ns.check_references,
             validate_figures=ns.validate_figures,
             user_prompt=ns.user_prompt,
-            config=config
+            config=config,
+            enable_ideation=ns.enable_ideation,
+            num_ideas=ns.num_ideas
         )
         print(f"✅ Workflow completed! Results in: {result_dir}")
     except Exception as e:
