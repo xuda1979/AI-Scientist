@@ -682,6 +682,207 @@ def _parse_ideation_response(response: str) -> List[Dict[str, Any]]:
     
     return ideas
 
+def test_time_compute_scaling(
+    model: str,
+    iterations: List[int] = [1, 2, 5, 10],
+    timeout_base: int = 1800,
+    test_prompt: str = None
+) -> Dict[str, Any]:
+    """
+    Test how computation time scales with the number of iterations for different AI models.
+    
+    This method measures the relationship between iteration count and computation time,
+    helping to optimize workflow parameters and predict resource requirements.
+    
+    Args:
+        model: AI model to test (e.g., 'gpt-5', 'gemini-1.5-pro', 'gpt-4o')
+        iterations: List of iteration counts to test
+        timeout_base: Base timeout in seconds for API calls
+        test_prompt: Custom prompt for testing (uses default if None)
+    
+    Returns:
+        Dictionary containing timing results, scaling analysis, and recommendations
+    """
+    import time
+    import statistics
+    
+    print(f"🧪 Starting test-time compute scaling analysis for {model}")
+    print(f"📊 Testing iterations: {iterations}")
+    
+    # Default test prompt if none provided
+    if test_prompt is None:
+        test_prompt = (
+            "Analyze the computational complexity of machine learning algorithms. "
+            "Provide a brief mathematical analysis of time complexity for common algorithms "
+            "like linear regression, neural networks, and decision trees. "
+            "Include Big O notation and practical implications for large datasets."
+        )
+    
+    results = {
+        "model": model,
+        "test_config": {
+            "iterations_tested": iterations,
+            "base_timeout": timeout_base,
+            "test_prompt_length": len(test_prompt)
+        },
+        "timing_results": {},
+        "scaling_analysis": {},
+        "recommendations": {}
+    }
+    
+    # Test each iteration count
+    for iter_count in iterations:
+        print(f"\n🔄 Testing {iter_count} iteration(s)...")
+        
+        # Prepare test messages
+        test_messages = [
+            {"role": "system", "content": "You are a computer science expert analyzing algorithmic complexity."},
+            {"role": "user", "content": test_prompt}
+        ]
+        
+        # Multiple runs for statistical accuracy
+        run_times = []
+        token_counts = []
+        
+        for run in range(3):  # 3 runs per iteration count
+            print(f"  📝 Run {run + 1}/3 for {iter_count} iteration(s)...")
+            
+            start_time = time.time()
+            total_tokens = 0
+            
+            try:
+                # Simulate multiple iterations
+                for i in range(iter_count):
+                    iter_start = time.time()
+                    
+                    # Make API call
+                    response = _universal_chat(
+                        messages=test_messages,
+                        model=model,
+                        request_timeout=timeout_base,
+                        prompt_type="test_scaling"
+                    )
+                    
+                    iter_time = time.time() - iter_start
+                    total_tokens += len(response.split())  # Rough token estimate
+                    
+                    print(f"    ⏱️  Iteration {i+1}/{iter_count}: {iter_time:.2f}s")
+                
+                total_time = time.time() - start_time
+                run_times.append(total_time)
+                token_counts.append(total_tokens)
+                
+                print(f"  ✅ Run {run + 1} completed: {total_time:.2f}s, ~{total_tokens} tokens")
+                
+            except Exception as e:
+                print(f"  ❌ Run {run + 1} failed: {e}")
+                run_times.append(None)
+                token_counts.append(None)
+        
+        # Calculate statistics for this iteration count
+        valid_times = [t for t in run_times if t is not None]
+        valid_tokens = [t for t in token_counts if t is not None]
+        
+        if valid_times:
+            results["timing_results"][iter_count] = {
+                "mean_time": statistics.mean(valid_times),
+                "median_time": statistics.median(valid_times),
+                "std_dev": statistics.stdev(valid_times) if len(valid_times) > 1 else 0,
+                "min_time": min(valid_times),
+                "max_time": max(valid_times),
+                "mean_tokens": statistics.mean(valid_tokens) if valid_tokens else 0,
+                "successful_runs": len(valid_times),
+                "total_runs": len(run_times)
+            }
+        else:
+            results["timing_results"][iter_count] = {
+                "error": "All runs failed",
+                "successful_runs": 0,
+                "total_runs": len(run_times)
+            }
+    
+    # Analyze scaling behavior
+    print(f"\n📈 Analyzing scaling behavior...")
+    
+    successful_results = {k: v for k, v in results["timing_results"].items() 
+                         if isinstance(v, dict) and "mean_time" in v}
+    
+    if len(successful_results) >= 2:
+        iters = list(successful_results.keys())
+        times = [successful_results[i]["mean_time"] for i in iters]
+        
+        # Calculate scaling coefficient (time ratio vs iteration ratio)
+        scaling_ratios = []
+        for i in range(1, len(iters)):
+            time_ratio = times[i] / times[i-1]
+            iter_ratio = iters[i] / iters[i-1]
+            scaling_ratios.append(time_ratio / iter_ratio)
+        
+        avg_scaling = statistics.mean(scaling_ratios) if scaling_ratios else 1.0
+        
+        # Determine scaling behavior
+        if avg_scaling < 1.1:
+            scaling_type = "sub-linear"
+            efficiency = "excellent"
+        elif avg_scaling < 1.5:
+            scaling_type = "nearly-linear"
+            efficiency = "good"
+        elif avg_scaling < 2.0:
+            scaling_type = "super-linear"
+            efficiency = "moderate"
+        else:
+            scaling_type = "exponential"
+            efficiency = "poor"
+        
+        results["scaling_analysis"] = {
+            "scaling_coefficient": avg_scaling,
+            "scaling_type": scaling_type,
+            "efficiency_rating": efficiency,
+            "time_per_iteration": times[-1] / iters[-1] if iters else 0,
+            "predictive_formula": f"time ≈ {times[0]:.2f} + {(times[-1] - times[0]) / (iters[-1] - iters[0]):.2f} * iterations"
+        }
+        
+        # Generate recommendations
+        max_iterations = iters[-1]
+        predicted_time_10 = times[0] + ((times[-1] - times[0]) / (iters[-1] - iters[0])) * 10
+        predicted_time_20 = times[0] + ((times[-1] - times[0]) / (iters[-1] - iters[0])) * 20
+        
+        results["recommendations"] = {
+            "optimal_max_iterations": min(10, max_iterations) if efficiency in ["excellent", "good"] else min(5, max_iterations),
+            "predicted_time_10_iterations": predicted_time_10,
+            "predicted_time_20_iterations": predicted_time_20,
+            "timeout_recommendation": max(timeout_base, int(predicted_time_10 * 1.5)),
+            "efficiency_notes": f"Model shows {scaling_type} scaling with {efficiency} efficiency"
+        }
+    else:
+        results["scaling_analysis"] = {"error": "Insufficient data for scaling analysis"}
+        results["recommendations"] = {"error": "Cannot generate recommendations due to insufficient data"}
+    
+    # Print summary
+    print(f"\n📋 Test-Time Compute Scaling Summary for {model}")
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    
+    for iter_count, result in results["timing_results"].items():
+        if "mean_time" in result:
+            print(f"{iter_count:2d} iterations: {result['mean_time']:6.2f}s ± {result['std_dev']:5.2f}s")
+        else:
+            print(f"{iter_count:2d} iterations: FAILED")
+    
+    if "scaling_coefficient" in results["scaling_analysis"]:
+        analysis = results["scaling_analysis"]
+        print(f"\nScaling: {analysis['scaling_type']} ({analysis['scaling_coefficient']:.2f}x)")
+        print(f"Efficiency: {analysis['efficiency_rating']}")
+        print(f"Time per iteration: {analysis['time_per_iteration']:.2f}s")
+    
+    if "optimal_max_iterations" in results["recommendations"]:
+        rec = results["recommendations"]
+        print(f"\nRecommended max iterations: {rec['optimal_max_iterations']}")
+        print(f"Recommended timeout: {rec['timeout_recommendation']}s")
+    
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    
+    return results
+
 def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
         "You are a meticulous scientist writing a LaTeX paper suitable for a top journal. "
@@ -1664,6 +1865,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # Custom prompt parameter
     p.add_argument("--user-prompt", type=str, default=None, help="Custom prompt that takes priority over standard requirements")
     
+    # Test-time compute scaling parameters
+    p.add_argument("--test-scaling", action="store_true", help="Run test-time compute scaling analysis instead of normal workflow")
+    p.add_argument("--scaling-iterations", type=str, default="1,2,5,10", help="Comma-separated list of iteration counts to test (e.g., '1,2,5,10')")
+    p.add_argument("--scaling-timeout", type=int, default=1800, help="Base timeout for scaling tests (seconds)")
+    p.add_argument("--scaling-prompt", type=str, default=None, help="Custom prompt for scaling tests")
+    
     args = p.parse_args(argv)
     
     # Handle skip flags
@@ -2242,6 +2449,23 @@ if __name__ == "__main__":
         print(f"🔍 Reference validation: {'enabled' if ns.check_references else 'disabled'}")
         print(f"🖼️ Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
         print(f"🧠 Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
+        
+        # Handle test scaling mode
+        if ns.test_scaling:
+            print("\n🔬 Starting Test-Time Compute Scaling Analysis...")
+            # Convert comma-separated string to list of integers
+            iterations_list = [int(x.strip()) for x in ns.scaling_iterations.split(',')]
+            result = test_time_compute_scaling(
+                model=ns.model,
+                test_prompt=ns.scaling_prompt,
+                iterations=iterations_list,
+                timeout_base=ns.scaling_timeout
+            )
+            if result:
+                print("\n✅ Test-Time Compute Scaling Analysis Complete!")
+            else:
+                print("\n❌ Test-Time Compute Scaling Analysis Failed!")
+            sys.exit(0)
         
         result_dir = run_workflow(
             topic=ns.topic,
