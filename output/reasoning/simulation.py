@@ -1,6 +1,6 @@
 # Auto-generated from LaTeX code blocks; consolidate all simulation here.
 # === Begin extracted block 1 ===
-# Shadow byte-level backoff with resynchronization and caps.
+# [style=py, caption={Shadow byte-level backoff with resynchronization and caps.}]
 def shadow_backoff(model, tok, prod, beams, max_byte_steps=8, min_resync_k=2):
     # Each beam carries (prod_state, token_ids, score, byte_budget)
     shadow = [(s, seq, score, max_byte_steps) for (s, seq, score) in beams]
@@ -24,7 +24,7 @@ def shadow_backoff(model, tok, prod, beams, max_byte_steps=8, min_resync_k=2):
 # === End block 1 ===
 
 # === Begin extracted block 2 ===
-# Tokenizer self-test and verdict cache with cross-lingual adversarial contexts.
+# [style=py, caption={Tokenizer self-test and verdict cache with cross-lingual adversarial contexts.}]
 def tokenizer_self_test(tok, manifest_db, protected_bytes, norms=("NFC","NFD","NFKC","NFKD")):
     key = (tok.name, tok.version, tok.flags())
     if key in manifest_db: 
@@ -43,7 +43,7 @@ def tokenizer_self_test(tok, manifest_db, protected_bytes, norms=("NFC","NFD","N
 # === End block 2 ===
 
 # === Begin extracted block 3 ===
-# Adaptive masked training with leakage target and mixture for calibration.
+# [style=py, caption={Adaptive masked training with leakage target and mixture for calibration.}]
 def adaptive_mask_training(model, data, prod_states, type_states, target_illegal=1e-4, margin=2.0, 
                            temp=1.0, lambdas=(0.0,0.25,0.5,0.75,1.0), schedule_steps=1000, seed=7):
     torch.manual_seed(seed)
@@ -73,7 +73,7 @@ def adaptive_mask_training(model, data, prod_states, type_states, target_illegal
 # === End block 3 ===
 
 # === Begin extracted block 4 ===
-# OIP-CAD decoding with invariant checks and SLA accounting.
+# [style=py, caption={OIP-CAD decoding with invariant checks and SLA accounting.}]
 def oip_cad_decode(model, tok, product, types, prompt, oip=None, beam=4, sla_ms=80, det=True):
     verdict = tokenizer_self_test(tok, MANIFEST_DB, protected_bytes=GUARDED)
     policy = verdict["policy"]
