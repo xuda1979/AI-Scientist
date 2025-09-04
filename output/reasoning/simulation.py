@@ -1,19 +1,24 @@
 # Auto-generated from LaTeX code blocks; consolidate all simulation here.
+
+import numpy as np
+import torch
+from torch.optim import AdamW
+
 # === Begin extracted block 1 ===
-# [style=py, caption={Shadow byte-level backoff with resynchronization and caps.}]
+# Shadow byte-level backoff with resynchronization and caps.
 def shadow_backoff(model, tok, prod, beams, max_byte_steps=8, min_resync_k=2):
     # Each beam carries (prod_state, token_ids, score, byte_budget)
     shadow = [(s, seq, score, max_byte_steps) for (s, seq, score) in beams]
     best = None
     while shadow:
         s, seq, score, bud = pop_best(shadow)
-        if bud == 0: 
+        if bud == 0:
             continue
         # Emit one byte guarded by protected-boundary spans
         for byte in legal_bytes_under_guard(tok):
             seq_b = seq + [tok.byte_to_token(byte)] if tok.has_byte_token(byte) else seq
             s2 = prod.transition_bytes(s, byte)
-            if not s2: 
+            if not s2:
                 continue
             k_legal = count_legal_tokens(prod, s2)
             if k_legal >= min_resync_k:
@@ -24,10 +29,10 @@ def shadow_backoff(model, tok, prod, beams, max_byte_steps=8, min_resync_k=2):
 # === End block 1 ===
 
 # === Begin extracted block 2 ===
-# [style=py, caption={Tokenizer self-test and verdict cache with cross-lingual adversarial contexts.}]
+# Tokenizer self-test and verdict cache with cross-lingual adversarial contexts.
 def tokenizer_self_test(tok, manifest_db, protected_bytes, norms=("NFC","NFD","NFKC","NFKD")):
     key = (tok.name, tok.version, tok.flags())
-    if key in manifest_db: 
+    if key in manifest_db:
         return manifest_db[key]
     verdict = run_detector_suite(tok, protected_bytes, norms=norms, horizons=(3,4,5))
     manifest_db[key] = verdict
@@ -43,8 +48,8 @@ def tokenizer_self_test(tok, manifest_db, protected_bytes, norms=("NFC","NFD","N
 # === End block 2 ===
 
 # === Begin extracted block 3 ===
-# [style=py, caption={Adaptive masked training with leakage target and mixture for calibration.}]
-def adaptive_mask_training(model, data, prod_states, type_states, target_illegal=1e-4, margin=2.0, 
+# Adaptive masked training with leakage target and mixture for calibration.
+def adaptive_mask_training(model, data, prod_states, type_states, target_illegal=1e-4, margin=2.0,
                            temp=1.0, lambdas=(0.0,0.25,0.5,0.75,1.0), schedule_steps=1000, seed=7):
     torch.manual_seed(seed)
     B = 30.0; alpha = 1.0; lam_idx = 2
@@ -73,7 +78,7 @@ def adaptive_mask_training(model, data, prod_states, type_states, target_illegal
 # === End block 3 ===
 
 # === Begin extracted block 4 ===
-# [style=py, caption={OIP-CAD decoding with invariant checks and SLA accounting.}]
+# OIP-CAD decoding with invariant checks and SLA accounting.
 def oip_cad_decode(model, tok, product, types, prompt, oip=None, beam=4, sla_ms=80, det=True):
     verdict = tokenizer_self_test(tok, MANIFEST_DB, protected_bytes=GUARDED)
     policy = verdict["policy"]
@@ -120,7 +125,7 @@ def oip_cad_decode(model, tok, product, types, prompt, oip=None, beam=4, sla_ms=
         t_r = now_ms()
         text2, cert = anytime_repair(text, product, types, budget_ms=rem)
         stats["repair"] += now_ms() - t_r
-        if text2 and validators_accept(text2): 
+        if text2 and validators_accept(text2):
             return {"text": text2, "cert": cert, "stats": stats}
         return Abstain({"code":"validator/timeout", "stats":stats})
     return {"text": text, "stats": stats}
