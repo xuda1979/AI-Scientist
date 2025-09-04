@@ -51,6 +51,11 @@ class WorkflowConfig:
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
     
+    # Test-time compute scaling parameters
+    use_test_time_scaling: bool = False
+    revision_candidates: int = 3
+    initial_draft_candidates: int = 1
+    
     def __post_init__(self):
         if self.fallback_models is None:
             if "gpt-5" in self.default_model:
@@ -684,204 +689,765 @@ def _parse_ideation_response(response: str) -> List[Dict[str, Any]]:
 
 def test_time_compute_scaling(
     model: str,
-    iterations: List[int] = [1, 2, 5, 10],
+    candidate_counts: List[int] = [3, 5, 7, 10],
     timeout_base: int = 1800,
     test_prompt: str = None
 ) -> Dict[str, Any]:
     """
-    Test how computation time scales with the number of iterations for different AI models.
+    Implement proper test-time compute scaling with candidate generation and selection.
     
-    This method measures the relationship between iteration count and computation time,
-    helping to optimize workflow parameters and predict resource requirements.
+    This method generates multiple candidate responses for each iteration and selects
+    the best one using quality metrics, demonstrating how additional compute at test time
+    can improve performance quality.
     
     Args:
         model: AI model to test (e.g., 'gpt-5', 'gemini-1.5-pro', 'gpt-4o')
-        iterations: List of iteration counts to test
+        candidate_counts: List of candidate counts to test for scaling analysis
         timeout_base: Base timeout in seconds for API calls
         test_prompt: Custom prompt for testing (uses default if None)
     
     Returns:
-        Dictionary containing timing results, scaling analysis, and recommendations
+        Dictionary containing quality results, scaling analysis, and best candidates
     """
     import time
     import statistics
+    import re
     
-    print(f"🧪 Starting test-time compute scaling analysis for {model}")
-    print(f"📊 Testing iterations: {iterations}")
+    print(f"🧪 Starting test-time compute scaling with candidate generation for {model}")
+    print(f"📊 Testing candidate counts: {candidate_counts}")
     
     # Default test prompt if none provided
     if test_prompt is None:
         test_prompt = (
-            "Analyze the computational complexity of machine learning algorithms. "
-            "Provide a brief mathematical analysis of time complexity for common algorithms "
-            "like linear regression, neural networks, and decision trees. "
-            "Include Big O notation and practical implications for large datasets."
+            "Design an efficient algorithm for solving the traveling salesman problem "
+            "for graphs with 20-50 nodes. Provide a detailed explanation of your approach, "
+            "analyze its time complexity, and discuss potential optimizations. "
+            "Include pseudocode and explain why your solution is superior to basic approaches."
         )
     
     results = {
         "model": model,
         "test_config": {
-            "iterations_tested": iterations,
+            "candidate_counts_tested": candidate_counts,
             "base_timeout": timeout_base,
             "test_prompt_length": len(test_prompt)
         },
-        "timing_results": {},
+        "candidate_results": {},
+        "quality_analysis": {},
         "scaling_analysis": {},
-        "recommendations": {}
+        "best_candidates": {}
     }
     
-    # Test each iteration count
-    for iter_count in iterations:
-        print(f"\n🔄 Testing {iter_count} iteration(s)...")
+    def _evaluate_response_quality(response: str) -> Dict[str, float]:
+        """Evaluate response quality using multiple metrics."""
+        metrics = {}
+        
+        # Length and detail score (longer responses often more detailed)
+        metrics['length_score'] = min(len(response) / 2000, 1.0)
+        
+        # Technical depth (presence of technical terms)
+        technical_terms = ['algorithm', 'complexity', 'optimization', 'efficiency', 
+                          'implementation', 'analysis', 'performance', 'solution', 
+                          'approach', 'method', 'technique', 'strategy']
+        tech_count = sum(1 for term in technical_terms if term.lower() in response.lower())
+        metrics['technical_depth'] = min(tech_count / 8, 1.0)
+        
+        # Structure score (presence of organized sections)
+        structure_indicators = ['step', 'first', 'second', 'third', 'finally', 
+                               'algorithm:', 'approach:', 'solution:', 'analysis:',
+                               '1.', '2.', '3.', 'pseudocode', 'complexity:']
+        structure_count = sum(1 for indicator in structure_indicators 
+                             if indicator.lower() in response.lower())
+        metrics['structure_score'] = min(structure_count / 6, 1.0)
+        
+        # Code/pseudocode presence
+        code_indicators = ['def ', 'for ', 'while ', 'if ', 'return ', 'function',
+                          'procedure', 'begin', 'end', '```', 'algorithm']
+        code_count = sum(1 for indicator in code_indicators 
+                        if indicator.lower() in response.lower())
+        metrics['code_presence'] = min(code_count / 4, 1.0)
+        
+        # Mathematical notation (for algorithmic problems)
+        math_indicators = ['O(', 'θ(', 'Ω(', 'log', 'n²', 'n^2', 'exponential', 
+                          'polynomial', 'linear', 'quadratic', 'complexity']
+        math_count = sum(1 for indicator in math_indicators 
+                        if indicator.lower() in response.lower())
+        metrics['math_notation'] = min(math_count / 3, 1.0)
+        
+        # Overall quality score (weighted average)
+        metrics['overall_quality'] = (
+            metrics['length_score'] * 0.2 +
+            metrics['technical_depth'] * 0.25 +
+            metrics['structure_score'] * 0.25 +
+            metrics['code_presence'] * 0.15 +
+            metrics['math_notation'] * 0.15
+        )
+        
+        return metrics
+    
+    def _select_best_candidate(candidates: List[str]) -> Tuple[str, Dict[str, float], int]:
+        """Select the best candidate based on quality metrics."""
+        best_candidate = ""
+        best_score = -1
+        best_index = -1
+        best_metrics = {}
+        
+        for i, candidate in enumerate(candidates):
+            metrics = _evaluate_response_quality(candidate)
+            if metrics['overall_quality'] > best_score:
+                best_score = metrics['overall_quality']
+                best_candidate = candidate
+                best_index = i
+                best_metrics = metrics
+        
+        return best_candidate, best_metrics, best_index
+    
+    # Test each candidate count
+    for candidate_count in candidate_counts:
+        print(f"\n🔄 Testing {candidate_count} candidates...")
         
         # Prepare test messages
         test_messages = [
-            {"role": "system", "content": "You are a computer science expert analyzing algorithmic complexity."},
+            {"role": "system", "content": "You are an expert computer scientist and algorithm designer. Provide detailed, technically accurate solutions with clear explanations."},
             {"role": "user", "content": test_prompt}
         ]
         
-        # Multiple runs for statistical accuracy
-        run_times = []
-        token_counts = []
+        # Generate multiple candidates
+        candidates = []
+        generation_times = []
         
-        for run in range(3):  # 3 runs per iteration count
-            print(f"  📝 Run {run + 1}/3 for {iter_count} iteration(s)...")
+        print(f"  🎯 Generating {candidate_count} candidate responses...")
+        
+        for i in range(candidate_count):
+            print(f"    📝 Generating candidate {i + 1}/{candidate_count}...")
             
             start_time = time.time()
-            total_tokens = 0
             
             try:
-                # Simulate multiple iterations
-                for i in range(iter_count):
-                    iter_start = time.time()
-                    
-                    # Make API call
-                    response = _universal_chat(
-                        messages=test_messages,
-                        model=model,
-                        request_timeout=timeout_base,
-                        prompt_type="test_scaling"
-                    )
-                    
-                    iter_time = time.time() - iter_start
-                    total_tokens += len(response.split())  # Rough token estimate
-                    
-                    print(f"    ⏱️  Iteration {i+1}/{iter_count}: {iter_time:.2f}s")
+                # Add slight variation to encourage diverse responses
+                varied_messages = test_messages.copy()
+                if i > 0:
+                    variation_prompts = [
+                        " Focus on a different algorithmic approach.",
+                        " Emphasize implementation details and optimizations.",
+                        " Provide alternative solutions and compare them.",
+                        " Include more mathematical analysis and proofs.",
+                        " Focus on practical considerations and real-world applications."
+                    ]
+                    variation = variation_prompts[i % len(variation_prompts)]
+                    varied_messages[-1]["content"] += variation
                 
-                total_time = time.time() - start_time
-                run_times.append(total_time)
-                token_counts.append(total_tokens)
+                # Make API call
+                response = _universal_chat(
+                    messages=varied_messages,
+                    model=model,
+                    request_timeout=timeout_base,
+                    prompt_type="test_scaling"
+                )
                 
-                print(f"  ✅ Run {run + 1} completed: {total_time:.2f}s, ~{total_tokens} tokens")
+                generation_time = time.time() - start_time
+                candidates.append(response)
+                generation_times.append(generation_time)
+                
+                print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(response)} chars")
                 
             except Exception as e:
-                print(f"  ❌ Run {run + 1} failed: {e}")
-                run_times.append(None)
-                token_counts.append(None)
+                print(f"      ❌ Candidate {i + 1} failed: {e}")
+                candidates.append("")
+                generation_times.append(None)
         
-        # Calculate statistics for this iteration count
-        valid_times = [t for t in run_times if t is not None]
-        valid_tokens = [t for t in token_counts if t is not None]
+        # Evaluate all candidates and select the best
+        valid_candidates = [c for c in candidates if c.strip()]
         
-        if valid_times:
-            results["timing_results"][iter_count] = {
-                "mean_time": statistics.mean(valid_times),
-                "median_time": statistics.median(valid_times),
-                "std_dev": statistics.stdev(valid_times) if len(valid_times) > 1 else 0,
-                "min_time": min(valid_times),
-                "max_time": max(valid_times),
-                "mean_tokens": statistics.mean(valid_tokens) if valid_tokens else 0,
-                "successful_runs": len(valid_times),
-                "total_runs": len(run_times)
+        if valid_candidates:
+            print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
+            
+            best_candidate, best_metrics, best_index = _select_best_candidate(valid_candidates)
+            
+            # Evaluate all candidates for comparison
+            all_metrics = []
+            for candidate in valid_candidates:
+                metrics = _evaluate_response_quality(candidate)
+                all_metrics.append(metrics['overall_quality'])
+            
+            results["candidate_results"][candidate_count] = {
+                "total_candidates": candidate_count,
+                "successful_candidates": len(valid_candidates),
+                "best_candidate_index": best_index,
+                "best_quality_score": best_metrics['overall_quality'],
+                "average_quality_score": statistics.mean(all_metrics),
+                "quality_improvement": best_metrics['overall_quality'] - statistics.mean(all_metrics) if len(all_metrics) > 1 else 0,
+                "std_dev_quality": statistics.stdev(all_metrics) if len(all_metrics) > 1 else 0,
+                "generation_times": [t for t in generation_times if t is not None],
+                "total_compute_time": sum(t for t in generation_times if t is not None),
+                "best_metrics_breakdown": best_metrics
             }
+            
+            results["best_candidates"][candidate_count] = {
+                "content": best_candidate,
+                "quality_score": best_metrics['overall_quality'],
+                "metrics": best_metrics
+            }
+            
+            print(f"    🎯 Best candidate quality: {best_metrics['overall_quality']:.3f}")
+            print(f"    📊 Average quality: {statistics.mean(all_metrics):.3f}")
+            print(f"    ⬆️  Quality improvement: {best_metrics['overall_quality'] - statistics.mean(all_metrics):.3f}")
+            
         else:
-            results["timing_results"][iter_count] = {
-                "error": "All runs failed",
-                "successful_runs": 0,
-                "total_runs": len(run_times)
+            results["candidate_results"][candidate_count] = {
+                "error": "All candidates failed",
+                "total_candidates": candidate_count,
+                "successful_candidates": 0
             }
     
-    # Analyze scaling behavior
-    print(f"\n📈 Analyzing scaling behavior...")
+    # Analyze quality scaling with compute
+    print(f"\n📈 Analyzing quality scaling with test-time compute...")
     
-    successful_results = {k: v for k, v in results["timing_results"].items() 
-                         if isinstance(v, dict) and "mean_time" in v}
+    successful_results = {k: v for k, v in results["candidate_results"].items() 
+                         if isinstance(v, dict) and "best_quality_score" in v}
     
     if len(successful_results) >= 2:
-        iters = list(successful_results.keys())
-        times = [successful_results[i]["mean_time"] for i in iters]
+        candidate_counts_sorted = sorted(successful_results.keys())
+        quality_scores = [successful_results[k]["best_quality_score"] for k in candidate_counts_sorted]
+        compute_times = [successful_results[k]["total_compute_time"] for k in candidate_counts_sorted]
         
-        # Calculate scaling coefficient (time ratio vs iteration ratio)
-        scaling_ratios = []
-        for i in range(1, len(iters)):
-            time_ratio = times[i] / times[i-1]
-            iter_ratio = iters[i] / iters[i-1]
-            scaling_ratios.append(time_ratio / iter_ratio)
+        # Calculate quality improvement per additional candidate
+        quality_improvements = []
+        compute_ratios = []
         
-        avg_scaling = statistics.mean(scaling_ratios) if scaling_ratios else 1.0
+        for i in range(1, len(candidate_counts_sorted)):
+            quality_improvement = quality_scores[i] - quality_scores[i-1]
+            candidate_ratio = candidate_counts_sorted[i] / candidate_counts_sorted[i-1]
+            compute_ratio = compute_times[i] / compute_times[i-1] if compute_times[i-1] > 0 else 1
+            
+            quality_improvements.append(quality_improvement)
+            compute_ratios.append(compute_ratio)
         
-        # Determine scaling behavior
-        if avg_scaling < 1.1:
-            scaling_type = "sub-linear"
-            efficiency = "excellent"
-        elif avg_scaling < 1.5:
-            scaling_type = "nearly-linear"
-            efficiency = "good"
-        elif avg_scaling < 2.0:
-            scaling_type = "super-linear"
-            efficiency = "moderate"
+        avg_quality_per_candidate = statistics.mean(quality_improvements) if quality_improvements else 0
+        avg_compute_scaling = statistics.mean(compute_ratios) if compute_ratios else 1
+        
+        # Determine scaling efficiency
+        efficiency_ratio = avg_quality_per_candidate * 10 / avg_compute_scaling  # Scale for readability
+        
+        if efficiency_ratio > 0.5:
+            scaling_efficiency = "excellent"
+        elif efficiency_ratio > 0.2:
+            scaling_efficiency = "good"
+        elif efficiency_ratio > 0.1:
+            scaling_efficiency = "moderate"
         else:
-            scaling_type = "exponential"
-            efficiency = "poor"
+            scaling_efficiency = "poor"
         
         results["scaling_analysis"] = {
-            "scaling_coefficient": avg_scaling,
-            "scaling_type": scaling_type,
-            "efficiency_rating": efficiency,
-            "time_per_iteration": times[-1] / iters[-1] if iters else 0,
-            "predictive_formula": f"time ≈ {times[0]:.2f} + {(times[-1] - times[0]) / (iters[-1] - iters[0]):.2f} * iterations"
+            "quality_improvement_per_candidate": avg_quality_per_candidate,
+            "compute_scaling_factor": avg_compute_scaling,
+            "efficiency_ratio": efficiency_ratio,
+            "scaling_efficiency": scaling_efficiency,
+            "max_quality_achieved": max(quality_scores),
+            "quality_variance": statistics.stdev(quality_scores) if len(quality_scores) > 1 else 0,
+            "optimal_candidate_count": candidate_counts_sorted[quality_scores.index(max(quality_scores))]
         }
         
-        # Generate recommendations
-        max_iterations = iters[-1]
-        predicted_time_10 = times[0] + ((times[-1] - times[0]) / (iters[-1] - iters[0])) * 10
-        predicted_time_20 = times[0] + ((times[-1] - times[0]) / (iters[-1] - iters[0])) * 20
-        
+        # Generate recommendations for test-time compute scaling
         results["recommendations"] = {
-            "optimal_max_iterations": min(10, max_iterations) if efficiency in ["excellent", "good"] else min(5, max_iterations),
-            "predicted_time_10_iterations": predicted_time_10,
-            "predicted_time_20_iterations": predicted_time_20,
-            "timeout_recommendation": max(timeout_base, int(predicted_time_10 * 1.5)),
-            "efficiency_notes": f"Model shows {scaling_type} scaling with {efficiency} efficiency"
+            "recommended_candidate_count": max(3, min(7, results["scaling_analysis"]["optimal_candidate_count"])),
+            "quality_ceiling": max(quality_scores),
+            "compute_budget_per_query": statistics.mean(compute_times),
+            "scaling_notes": f"Test-time compute scaling shows {scaling_efficiency} efficiency with quality improvements of {avg_quality_per_candidate:.3f} per additional candidate"
         }
+    
     else:
         results["scaling_analysis"] = {"error": "Insufficient data for scaling analysis"}
         results["recommendations"] = {"error": "Cannot generate recommendations due to insufficient data"}
     
-    # Print summary
+    # Print comprehensive summary
     print(f"\n📋 Test-Time Compute Scaling Summary for {model}")
     print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     
-    for iter_count, result in results["timing_results"].items():
-        if "mean_time" in result:
-            print(f"{iter_count:2d} iterations: {result['mean_time']:6.2f}s ± {result['std_dev']:5.2f}s")
+    for candidate_count, result in results["candidate_results"].items():
+        if "best_quality_score" in result:
+            print(f"{candidate_count:2d} candidates: Quality {result['best_quality_score']:.3f} "
+                  f"(+{result['quality_improvement']:.3f} improvement) "
+                  f"Time: {result['total_compute_time']:.1f}s")
         else:
-            print(f"{iter_count:2d} iterations: FAILED")
+            print(f"{candidate_count:2d} candidates: FAILED")
     
-    if "scaling_coefficient" in results["scaling_analysis"]:
+    if "quality_improvement_per_candidate" in results["scaling_analysis"]:
         analysis = results["scaling_analysis"]
-        print(f"\nScaling: {analysis['scaling_type']} ({analysis['scaling_coefficient']:.2f}x)")
-        print(f"Efficiency: {analysis['efficiency_rating']}")
-        print(f"Time per iteration: {analysis['time_per_iteration']:.2f}s")
+        print(f"\nQuality scaling: +{analysis['quality_improvement_per_candidate']:.3f} per candidate")
+        print(f"Efficiency: {analysis['scaling_efficiency']} ({analysis['efficiency_ratio']:.2f})")
+        print(f"Peak quality: {analysis['max_quality_achieved']:.3f}")
+        print(f"Optimal count: {analysis['optimal_candidate_count']} candidates")
     
-    if "optimal_max_iterations" in results["recommendations"]:
+    if "recommended_candidate_count" in results["recommendations"]:
         rec = results["recommendations"]
-        print(f"\nRecommended max iterations: {rec['optimal_max_iterations']}")
-        print(f"Recommended timeout: {rec['timeout_recommendation']}s")
+        print(f"\nRecommended candidates: {rec['recommended_candidate_count']}")
+        print(f"Expected compute time: {rec['compute_budget_per_query']:.1f}s per query")
     
     print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     
     return results
+
+def _generate_best_revision_candidate(
+    current_tex: str, 
+    sim_summary: str, 
+    review_text: str, 
+    latex_errors: str, 
+    project_dir: Path, 
+    user_prompt: Optional[str], 
+    model: str, 
+    request_timeout: int, 
+    config: Any, 
+    candidate_count: int = 3
+) -> str:
+    """
+    Generate multiple revision candidates and select the best one using test-time compute scaling.
+    
+    Args:
+        current_tex: Current LaTeX paper content
+        sim_summary: Simulation summary
+        review_text: Review feedback
+        latex_errors: LaTeX compilation errors (if any)
+        project_dir: Project directory path
+        user_prompt: Optional user instructions
+        model: AI model to use
+        request_timeout: Request timeout
+        config: Configuration object
+        candidate_count: Number of revision candidates to generate
+    
+    Returns:
+        Best revision candidate based on quality metrics
+    """
+    import time
+    
+    print(f"  🎯 Generating {candidate_count} revision candidates...")
+    
+    candidates = []
+    generation_times = []
+    
+    # Generate multiple revision candidates with slight variations
+    for i in range(candidate_count):
+        print(f"    📝 Generating revision candidate {i + 1}/{candidate_count}...")
+        
+        start_time = time.time()
+        
+        try:
+            # Create varied revision prompts to encourage diversity
+            base_prompt = _revise_prompt(current_tex, sim_summary, review_text, latex_errors, project_dir, user_prompt)
+            
+            # Add variation instructions to encourage different approaches
+            if i > 0:
+                variation_instructions = [
+                    "\nFocus particularly on improving the technical depth and rigor of the analysis.",
+                    "\nEmphasize clarity of presentation and logical flow between sections.",
+                    "\nPrioritize addressing methodological concerns and experimental validation.",
+                    "\nConcentrate on strengthening the theoretical foundations and mathematical formulations.",
+                    "\nFocus on improving the practical implications and real-world applications."
+                ]
+                
+                variation = variation_instructions[(i - 1) % len(variation_instructions)]
+                
+                # Add variation to the system prompt
+                varied_prompt = base_prompt.copy()
+                varied_prompt[0]["content"] += variation
+            else:
+                varied_prompt = base_prompt
+            
+            # Generate revision candidate
+            candidate = _universal_chat(
+                varied_prompt, 
+                model=model, 
+                request_timeout=request_timeout, 
+                prompt_type="revise", 
+                fallback_models=config.fallback_models
+            )
+            
+            generation_time = time.time() - start_time
+            candidates.append(candidate)
+            generation_times.append(generation_time)
+            
+            print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
+            
+        except Exception as e:
+            print(f"      ❌ Candidate {i + 1} failed: {e}")
+            candidates.append("")
+            generation_times.append(None)
+    
+    # Filter out empty candidates
+    valid_candidates = [(i, c) for i, c in enumerate(candidates) if c.strip()]
+    
+    if not valid_candidates:
+        print("    ⚠️  All revision candidates failed, using empty response")
+        return ""
+    
+    print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
+    
+    # Evaluate each candidate using quality metrics
+    candidate_scores = []
+    
+    for idx, (orig_idx, candidate) in enumerate(valid_candidates):
+        try:
+            # Calculate quality metrics for this candidate
+            metrics = _evaluate_revision_quality(candidate, review_text, latex_errors)
+            score = metrics['overall_quality']
+            candidate_scores.append((orig_idx, candidate, score, metrics))
+            
+            print(f"    📊 Candidate {orig_idx + 1}: Quality score {score:.3f}")
+            
+        except Exception as e:
+            print(f"    ❌ Failed to evaluate candidate {orig_idx + 1}: {e}")
+            candidate_scores.append((orig_idx, candidate, 0.0, {}))
+    
+    # Select the best candidate
+    if candidate_scores:
+        best_idx, best_candidate, best_score, best_metrics = max(candidate_scores, key=lambda x: x[2])
+        avg_score = sum(score for _, _, score, _ in candidate_scores) / len(candidate_scores)
+        improvement = best_score - avg_score
+        
+        print(f"  🎯 Selected candidate {best_idx + 1} with quality score {best_score:.3f}")
+        print(f"  📈 Quality improvement over average: +{improvement:.3f}")
+        print(f"  ⏱️  Total compute time: {sum(t for t in generation_times if t):.1f}s")
+        
+        return best_candidate
+    else:
+        print("    ⚠️  No valid candidates scored, returning first valid candidate")
+        return valid_candidates[0][1] if valid_candidates else ""
+
+def _evaluate_revision_quality(revised_text: str, review_text: str, latex_errors: str) -> Dict[str, float]:
+    """
+    Evaluate the quality of a revision candidate.
+    
+    Args:
+        revised_text: The revised paper content
+        review_text: Original review feedback
+        latex_errors: LaTeX compilation errors
+    
+    Returns:
+        Dictionary of quality metrics
+    """
+    metrics = {}
+    
+    # Length and detail score (good revisions often add content)
+    metrics['length_score'] = min(len(revised_text) / 15000, 1.0)  # Reasonable paper length
+    
+    # LaTeX structure and formatting
+    latex_indicators = ['\\begin{', '\\end{', '\\section', '\\subsection', '\\cite{', 
+                       '\\ref{', '\\label{', '\\begin{equation}', '\\begin{figure}', '\\begin{table}']
+    latex_count = sum(1 for indicator in latex_indicators if indicator in revised_text)
+    metrics['latex_structure'] = min(latex_count / 15, 1.0)
+    
+    # Academic content quality
+    academic_terms = ['methodology', 'analysis', 'results', 'discussion', 'conclusion',
+                     'evaluation', 'experiment', 'validation', 'algorithm', 'approach',
+                     'performance', 'comparison', 'implementation', 'framework']
+    academic_count = sum(1 for term in academic_terms if term.lower() in revised_text.lower())
+    metrics['academic_depth'] = min(academic_count / 10, 1.0)
+    
+    # Reference and citation quality
+    citation_patterns = ['\\cite{', '\\citep{', '\\citet{', '\\citeauthor{']
+    citation_count = sum(revised_text.count(pattern) for pattern in citation_patterns)
+    metrics['citation_quality'] = min(citation_count / 20, 1.0)
+    
+    # Mathematical content (for technical papers)
+    math_indicators = ['\\begin{equation}', '\\begin{align}', '$', '\\(', 'O(', 'algorithm',
+                      'complexity', 'theorem', 'proof', 'lemma', 'definition']
+    math_count = sum(1 for indicator in math_indicators if indicator.lower() in revised_text.lower())
+    metrics['mathematical_content'] = min(math_count / 8, 1.0)
+    
+    # Simulation quality assessment
+    metrics['simulation_quality'] = _evaluate_simulation_content(revised_text)
+    
+    # Response to review concerns (keyword matching)
+    if review_text:
+        # Extract key concerns from review
+        concern_keywords = ['clarity', 'methodology', 'validation', 'experiment', 'analysis',
+                           'comparison', 'evaluation', 'limitation', 'discussion', 'related work']
+        
+        addressed_concerns = 0
+        for keyword in concern_keywords:
+            if keyword.lower() in review_text.lower() and keyword.lower() in revised_text.lower():
+                addressed_concerns += 1
+        
+        metrics['review_responsiveness'] = min(addressed_concerns / 5, 1.0)
+    else:
+        metrics['review_responsiveness'] = 0.5  # Neutral score if no review
+    
+    # LaTeX compilation likelihood (penalty for obvious errors)
+    error_indicators = ['\\begin{', '\\end}', 'undefined', 'missing', '\\\\\\', '}{']
+    error_count = sum(1 for indicator in error_indicators if indicator in revised_text)
+    metrics['compilation_score'] = max(0, 1.0 - error_count / 10)
+    
+    # Overall quality score (weighted combination)
+    metrics['overall_quality'] = (
+        metrics['length_score'] * 0.12 +
+        metrics['latex_structure'] * 0.18 +
+        metrics['academic_depth'] * 0.18 +
+        metrics['citation_quality'] * 0.12 +
+        metrics['mathematical_content'] * 0.10 +
+        metrics['simulation_quality'] * 0.15 +
+        metrics['review_responsiveness'] * 0.12 +
+        metrics['compilation_score'] * 0.03
+    )
+    
+    return metrics
+
+def _evaluate_simulation_content(text: str) -> float:
+    """
+    Evaluate the quality of simulation content in the paper.
+    
+    Args:
+        text: Paper content to evaluate
+        
+    Returns:
+        Simulation quality score (0.0 to 1.0)
+    """
+    score = 0.0
+    
+    # Check for filecontents simulation blocks
+    if '\\begin{filecontents' in text and 'simulation.py' in text:
+        score += 0.3
+        
+        # Extract simulation content from filecontents
+        sim_pattern = r'\\begin\{filecontents\*?\}\{simulation\.py\}(.*?)\\end\{filecontents\*?\}'
+        matches = re.findall(sim_pattern, text, re.DOTALL | re.IGNORECASE)
+        
+        if matches:
+            sim_content = matches[0]
+            
+            # Check for comprehensive simulation indicators
+            quality_indicators = [
+                ('class ', 0.15),  # Object-oriented structure
+                ('def ', 0.1),     # Function definitions
+                ('import ', 0.1),  # Module imports
+                ('numpy', 0.05),   # Scientific computing
+                ('matplotlib', 0.05),  # Visualization
+                ('experiment', 0.1),   # Experimental design
+                ('result', 0.05),  # Results generation
+                ('main()', 0.1),   # Main execution
+                ('if __name__', 0.1),  # Proper script structure
+                ('test', 0.05),    # Testing/validation
+                ('scaling', 0.1),  # Scaling analysis
+                ('candidate', 0.1), # Candidate generation (test-time scaling)
+                ('quality', 0.05), # Quality evaluation
+                ('algorithm', 0.05), # Algorithmic content
+                ('performance', 0.05)  # Performance analysis
+            ]
+            
+            for indicator, weight in quality_indicators:
+                if indicator.lower() in sim_content.lower():
+                    score += weight
+            
+            # Length bonus for substantial simulations
+            sim_lines = len([line for line in sim_content.split('\n') 
+                           if line.strip() and not line.strip().startswith('#')])
+            if sim_lines > 50:
+                score += 0.1
+            if sim_lines > 100:
+                score += 0.1
+            if sim_lines > 200:
+                score += 0.1
+    
+    # Check for simulation discussion in paper text
+    simulation_terms = ['simulation', 'experiment', 'implementation', 'algorithm',
+                       'numerical', 'computational', 'benchmark', 'evaluation']
+    term_count = sum(1 for term in simulation_terms if term.lower() in text.lower())
+    score += min(term_count / 20, 0.2)  # Up to 0.2 bonus for simulation discussion
+    
+    return min(score, 1.0)  # Cap at 1.0
+
+def _generate_best_initial_draft_candidate(
+    topic: str, 
+    field: str, 
+    question: str, 
+    user_prompt: Optional[str], 
+    model: str, 
+    request_timeout: int, 
+    config: Any, 
+    candidate_count: int = 3
+) -> str:
+    """
+    Generate multiple initial draft candidates and select the best one using test-time compute scaling.
+    
+    Args:
+        topic: Research topic
+        field: Research field
+        question: Research question
+        user_prompt: Optional user instructions
+        model: AI model to use
+        request_timeout: Request timeout
+        config: Configuration object
+        candidate_count: Number of draft candidates to generate
+    
+    Returns:
+        Best initial draft candidate based on quality metrics
+    """
+    import time
+    
+    print(f"  🎯 Generating {candidate_count} initial draft candidates...")
+    
+    candidates = []
+    generation_times = []
+    
+    # Generate multiple initial draft candidates with slight variations
+    for i in range(candidate_count):
+        print(f"    📝 Generating draft candidate {i + 1}/{candidate_count}...")
+        
+        start_time = time.time()
+        
+        try:
+            # Create varied initial draft prompts to encourage diversity
+            base_prompt = _initial_draft_prompt(topic, field, question, user_prompt)
+            
+            # Add variation instructions to encourage different approaches
+            if i > 0:
+                variation_instructions = [
+                    "\nEmphasize theoretical rigor and mathematical formulations in your approach.",
+                    "\nFocus on practical applications and experimental validation methods.",
+                    "\nPrioritize comprehensive literature review and related work analysis.",
+                    "\nConcentrate on novel algorithmic contributions and implementation details.",
+                    "\nHighlight the broader impact and interdisciplinary connections."
+                ]
+                
+                variation = variation_instructions[(i - 1) % len(variation_instructions)]
+                
+                # Add variation to the system prompt
+                varied_prompt = base_prompt.copy()
+                varied_prompt[0]["content"] += variation
+            else:
+                varied_prompt = base_prompt
+            
+            # Generate draft candidate
+            candidate = _universal_chat(
+                varied_prompt, 
+                model=model, 
+                request_timeout=request_timeout, 
+                prompt_type="initial_draft", 
+                fallback_models=config.fallback_models
+            )
+            
+            generation_time = time.time() - start_time
+            candidates.append(candidate)
+            generation_times.append(generation_time)
+            
+            print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
+            
+        except Exception as e:
+            print(f"      ❌ Candidate {i + 1} failed: {e}")
+            candidates.append("")
+            generation_times.append(None)
+    
+    # Filter out empty candidates
+    valid_candidates = [(i, c) for i, c in enumerate(candidates) if c.strip()]
+    
+    if not valid_candidates:
+        print("    ⚠️  All draft candidates failed, using empty response")
+        return ""
+    
+    print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
+    
+    # Evaluate each candidate using quality metrics
+    candidate_scores = []
+    
+    for idx, (orig_idx, candidate) in enumerate(valid_candidates):
+        try:
+            # Calculate quality metrics for this candidate
+            metrics = _evaluate_initial_draft_quality(candidate, topic, field, question)
+            score = metrics['overall_quality']
+            candidate_scores.append((orig_idx, candidate, score, metrics))
+            
+            print(f"    📊 Candidate {orig_idx + 1}: Quality score {score:.3f}")
+            
+        except Exception as e:
+            print(f"    ❌ Failed to evaluate candidate {orig_idx + 1}: {e}")
+            candidate_scores.append((orig_idx, candidate, 0.0, {}))
+    
+    # Select the best candidate
+    if candidate_scores:
+        best_idx, best_candidate, best_score, best_metrics = max(candidate_scores, key=lambda x: x[2])
+        avg_score = sum(score for _, _, score, _ in candidate_scores) / len(candidate_scores)
+        improvement = best_score - avg_score
+        
+        print(f"  🎯 Selected candidate {best_idx + 1} with quality score {best_score:.3f}")
+        print(f"  📈 Quality improvement over average: +{improvement:.3f}")
+        print(f"  ⏱️  Total compute time: {sum(t for t in generation_times if t):.1f}s")
+        
+        return best_candidate
+    else:
+        print("    ⚠️  No valid candidates scored, returning first valid candidate")
+        return valid_candidates[0][1] if valid_candidates else ""
+
+def _evaluate_initial_draft_quality(draft_text: str, topic: str, field: str, question: str) -> Dict[str, float]:
+    """
+    Evaluate the quality of an initial draft candidate.
+    
+    Args:
+        draft_text: The draft paper content
+        topic: Research topic
+        field: Research field  
+        question: Research question
+    
+    Returns:
+        Dictionary of quality metrics
+    """
+    metrics = {}
+    
+    # Length and completeness score
+    metrics['length_score'] = min(len(draft_text) / 12000, 1.0)  # Target ~12k chars for initial draft
+    
+    # LaTeX structure quality
+    latex_indicators = ['\\documentclass', '\\begin{document}', '\\end{document}', 
+                       '\\section{', '\\subsection{', '\\begin{abstract}', '\\end{abstract}',
+                       '\\begin{filecontents}', '\\bibliography{', '\\cite{']
+    latex_count = sum(1 for indicator in latex_indicators if indicator in draft_text)
+    metrics['latex_structure'] = min(latex_count / 8, 1.0)
+    
+    # Academic sections presence
+    required_sections = ['abstract', 'introduction', 'related work', 'methodology', 
+                        'results', 'discussion', 'conclusion', 'references']
+    section_count = sum(1 for section in required_sections if section.lower() in draft_text.lower())
+    metrics['section_completeness'] = min(section_count / 6, 1.0)
+    
+    # Topic relevance (keyword matching)
+    topic_keywords = topic.lower().split() if topic else []
+    field_keywords = field.lower().split() if field else []
+    question_keywords = question.lower().split() if question else []
+    
+    all_keywords = topic_keywords + field_keywords + question_keywords
+    keyword_matches = sum(1 for keyword in all_keywords if len(keyword) > 3 and keyword in draft_text.lower())
+    metrics['topic_relevance'] = min(keyword_matches / max(len(all_keywords), 1), 1.0)
+    
+    # Technical depth indicators
+    technical_terms = ['algorithm', 'methodology', 'analysis', 'evaluation', 'implementation',
+                      'experiment', 'validation', 'optimization', 'performance', 'framework']
+    tech_count = sum(1 for term in technical_terms if term.lower() in draft_text.lower())
+    metrics['technical_depth'] = min(tech_count / 8, 1.0)
+    
+    # Reference quality
+    citation_patterns = ['\\cite{', '\\citep{', '\\citet{', '\\citeauthor{']
+    citation_count = sum(draft_text.count(pattern) for pattern in citation_patterns)
+    metrics['citation_quality'] = min(citation_count / 15, 1.0)
+    
+    # Mathematical content (for technical papers)
+    math_indicators = ['\\begin{equation}', '\\begin{align}', '$', '\\(', 'theorem', 'proof', 'lemma']
+    math_count = sum(1 for indicator in math_indicators if indicator.lower() in draft_text.lower())
+    metrics['mathematical_content'] = min(math_count / 5, 1.0)
+    
+    # Simulation quality assessment
+    metrics['simulation_quality'] = _evaluate_simulation_content(draft_text)
+    
+    # Overall quality score (weighted combination)
+    metrics['overall_quality'] = (
+        metrics['length_score'] * 0.14 +
+        metrics['latex_structure'] * 0.18 +
+        metrics['section_completeness'] * 0.18 +
+        metrics['topic_relevance'] * 0.14 +
+        metrics['technical_depth'] * 0.10 +
+        metrics['citation_quality'] * 0.10 +
+        metrics['mathematical_content'] * 0.08 +
+        metrics['simulation_quality'] * 0.08
+    )
+    
+    return metrics
 
 def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
@@ -894,15 +1460,24 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "4. REAL REFERENCES ONLY: All references must be authentic, published works with correct details (authors, titles, journals, years, DOIs). NO FAKE or PLACEHOLDER references.\n"
         "5. SELF-CONTAINED CONTENT: ALL tables, figures, diagrams must be defined within the LaTeX file using TikZ, tabular, or other LaTeX constructs. NO external image files.\n"
         "6. DATA-DRIVEN RESULTS: All numerical values in tables/figures must come from actual simulation results, not made-up numbers.\n"
-        "7. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
+        "7. SIMULATION REQUIREMENTS: If the paper needs numerical results, you MUST include a comprehensive simulation.py file with:\n"
+        "   - Complete, runnable Python code implementing the paper's main contribution\n"
+        "   - Proper experiment design with multiple trials, statistical analysis, and reproducible results\n"
+        "   - For ML/AI papers: Include test-time compute scaling where appropriate (generate multiple candidates, select best)\n"
+        "   - For optimization papers: Include proper algorithm implementation with convergence analysis\n"
+        "   - For system papers: Include performance benchmarks and comparative evaluation\n"
+        "   - All experimental parameters clearly documented and configurable\n"
+        "   - Results saved to 'results.txt' for verification and reproducibility\n"
+        "8. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
+        "8. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
         "   - Theoretical papers: Abstract, Introduction, Related Work, Theory/Methods, Analysis, Discussion, Conclusion\n"
         "   - Experimental papers: Abstract, Introduction, Related Work, Methodology, Experiments, Results, Discussion, Conclusion\n"
         "   - Survey papers: Abstract, Introduction, Background, Classification/Taxonomy, Comparative Analysis, Future Directions, Conclusion\n"
         "   - Systems papers: Abstract, Introduction, Related Work, System Design, Implementation, Evaluation, Discussion, Conclusion\n"
         "   - Algorithm papers: Abstract, Introduction, Related Work, Problem Definition, Algorithm Description, Analysis, Experiments, Conclusion\n"
-        "8. RESULTS DOCUMENTATION: The numerical results from running simulation.py MUST be saved in 'results.txt' in the project folder for reproducibility and verification.\n"
-        "9. FIGURE GENERATION: If the paper includes figures generated by code, ALL figure generation code must be included in simulation.py and figures must be saved in the local project folder.\n"
-        "10. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file - no additional .py files, scripts, or code fragments.\n\n"
+        "9. RESULTS DOCUMENTATION: The numerical results from running simulation.py MUST be saved in 'results.txt' in the project folder for reproducibility and verification.\n"
+        "10. FIGURE GENERATION: If the paper includes figures generated by code, ALL figure generation code must be included in simulation.py and figures must be saved in the local project folder.\n"
+        "11. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file - no additional .py files, scripts, or code fragments.\n\n"
         
         "STRUCTURE ALIGNMENT REQUIREMENTS:\n"
         "- Identify the paper type based on the research question and field\n"
@@ -925,7 +1500,10 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- Use standard formats (PNG, PDF, SVG) that can be referenced in LaTeX\n"
         "- Include proper figure generation with matplotlib, seaborn, or similar libraries\n"
         "- Ensure figure files are saved with descriptive names\n"
-        "- Reference saved figures in LaTeX using \\includegraphics with proper paths\n\n"
+        "- Reference saved figures in LaTeX using \\includegraphics with proper paths\n"
+        "- GRAPH DRAWING CONSTRAINTS: For any graph, chart, or plot generation, ensure at least 5 data samples are included and use appropriate sizing (minimum 6x4 inches or equivalent)\n"
+        "- DATA ADEQUACY: Graphs must contain sufficient data points to demonstrate meaningful patterns and trends\n"
+        "- VISUALIZATION QUALITY: Use proper axis labels, legends, grid lines, and appropriate scaling for clarity\n\n"
         
         "REFERENCE REQUIREMENTS:\n"
         "- Minimum 15-20 authentic, recently published references (prefer 2018-2025)\n"
@@ -1081,6 +1659,8 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "   - Generated figures must be saved in the local project folder\n"
         "   - LaTeX must reference generated figures with proper \\includegraphics paths\n"
         "   - No external figure dependencies or missing image files\n"
+        "   - GRAPH CONSTRAINTS: Verify graphs contain at least 5 data samples and use appropriate sizing\n"
+        "   - DATA VISUALIZATION QUALITY: Check for proper axis labels, legends, and meaningful data representation\n"
         "9. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file only - no additional .py files or scripts.\n\n"
         
         "STRUCTURE ALIGNMENT CRITERIA:\n"
@@ -1112,7 +1692,8 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- All tables use tabular environment with simulation data from results.txt\n"
         "- All diagrams use LaTeX-native drawing tools\n"
         "- Numbers in tables/figures match simulation outputs exactly\n"
-        "- NO references to external files except those generated by simulation.py\n\n"
+        "- NO references to external files except those generated by simulation.py\n"
+        "- GRAPH QUALITY STANDARDS: Generated graphs must contain at least 5 data samples with appropriate sizing and clear visualization\n\n"
         
         "CONTENT QUALITY CRITERIA:\n"
         "- Scientific rigor and methodology soundness\n"
@@ -1287,7 +1868,9 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "   - Figure generation code must be included in simulation.py\n"
         "   - Generated figures must be saved in the local project folder\n"
         "   - LaTeX must reference generated figures with proper \\includegraphics paths\n"
-        "   - No external figure dependencies or missing image files\n\n"
+        "   - No external figure dependencies or missing image files\n"
+        "   - GRAPH GENERATION STANDARDS: Ensure graphs contain at least 5 data samples and use appropriate sizing (minimum 6x4 inches)\n"
+        "   - VISUALIZATION REQUIREMENTS: Include proper axis labels, legends, grid lines, and clear data representation\n\n"
         
         "STRUCTURE ALIGNMENT REQUIREMENTS:\n"
         "- Theoretical papers: Focus on mathematical rigor, proofs, and theoretical analysis\n"
@@ -1312,7 +1895,8 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "- Ensure all tables use tabular environment with real simulation data\n"
         "- Create diagrams using TikZ or other LaTeX-native tools, or reference simulation-generated figures\n"
         "- Populate all numerical content from actual simulation results\n"
-        "- Allow dependencies only on simulation-generated image files\n\n"
+        "- Allow dependencies only on simulation-generated image files\n"
+        "- GRAPH GENERATION STANDARDS: Ensure all graphs contain at least 5 data samples with proper sizing (minimum 6x4 inches) and clear visualization\n\n"
         
         "REVISION PRIORITIES:\n"
         "1. Address all scientific/methodological concerns raised\n"
@@ -1547,7 +2131,15 @@ def run_workflow(
             final_question = question
         
         print(f"\n📝 Creating paper draft for: {final_topic}")
-        draft = _universal_chat(_initial_draft_prompt(final_topic, field, final_question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
+        
+        # Use test-time compute scaling for initial draft if enabled
+        if hasattr(config, 'use_test_time_scaling') and config.use_test_time_scaling and hasattr(config, 'initial_draft_candidates') and config.initial_draft_candidates > 1:
+            print(f"🧪 Using test-time compute scaling with {config.initial_draft_candidates} draft candidates...")
+            draft = _generate_best_initial_draft_candidate(
+                final_topic, field, final_question, user_prompt, model, request_timeout, config, config.initial_draft_candidates
+            )
+        else:
+            draft = _universal_chat(_initial_draft_prompt(final_topic, field, final_question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
         paper_path.write_text(draft, encoding="utf-8")
         
         if enable_ideation:
@@ -1672,8 +2264,20 @@ def run_workflow(
             revision_reasons.append("review feedback")
             
         print(f"Revising paper to address: {', '.join(revision_reasons)}")
-            
-        revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
+        
+        # Use test-time compute scaling for revisions if enabled
+        use_test_time_scaling = getattr(config, 'use_test_time_scaling', False)
+        revision_candidates = getattr(config, 'revision_candidates', 3)
+        
+        if use_test_time_scaling and revision_candidates > 1:
+            print(f"🧪 Using test-time compute scaling with {revision_candidates} revision candidates...")
+            revised = _generate_best_revision_candidate(
+                current_tex, sim_summary, review, latex_errors if not latex_success else "", 
+                project_dir, user_prompt, model, request_timeout, config, revision_candidates
+            )
+        else:
+            revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
+        
         paper_path.write_text(revised, encoding="utf-8")
         
         print(f"Iteration {i}: Paper revised")
@@ -1867,9 +2471,14 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     
     # Test-time compute scaling parameters
     p.add_argument("--test-scaling", action="store_true", help="Run test-time compute scaling analysis instead of normal workflow")
-    p.add_argument("--scaling-iterations", type=str, default="1,2,5,10", help="Comma-separated list of iteration counts to test (e.g., '1,2,5,10')")
+    p.add_argument("--scaling-candidates", type=str, default="3,5,7,10", help="Comma-separated list of candidate counts to test (e.g., '3,5,7,10')")
     p.add_argument("--scaling-timeout", type=int, default=1800, help="Base timeout for scaling tests (seconds)")
     p.add_argument("--scaling-prompt", type=str, default=None, help="Custom prompt for scaling tests")
+    
+    # Test-time compute scaling for normal workflow
+    p.add_argument("--use-test-time-scaling", action="store_true", help="Enable test-time compute scaling during revision cycles")
+    p.add_argument("--revision-candidates", type=int, default=3, help="Number of revision candidates to generate when using test-time scaling")
+    p.add_argument("--draft-candidates", type=int, default=1, help="Number of initial draft candidates to generate")
     
     args = p.parse_args(argv)
     
@@ -2454,11 +3063,11 @@ if __name__ == "__main__":
         if ns.test_scaling:
             print("\n🔬 Starting Test-Time Compute Scaling Analysis...")
             # Convert comma-separated string to list of integers
-            iterations_list = [int(x.strip()) for x in ns.scaling_iterations.split(',')]
+            candidate_counts_list = [int(x.strip()) for x in ns.scaling_candidates.split(',')]
             result = test_time_compute_scaling(
                 model=ns.model,
                 test_prompt=ns.scaling_prompt,
-                iterations=iterations_list,
+                candidate_counts=candidate_counts_list,
                 timeout_base=ns.scaling_timeout
             )
             if result:
@@ -2466,6 +3075,13 @@ if __name__ == "__main__":
             else:
                 print("\n❌ Test-Time Compute Scaling Analysis Failed!")
             sys.exit(0)
+        
+        # Apply test-time compute scaling configuration
+        if hasattr(ns, 'use_test_time_scaling') and ns.use_test_time_scaling:
+            config.use_test_time_scaling = True
+            config.revision_candidates = ns.revision_candidates
+            config.initial_draft_candidates = ns.draft_candidates
+            print(f"🧪 Test-time compute scaling enabled: {config.revision_candidates} revision candidates")
         
         result_dir = run_workflow(
             topic=ns.topic,

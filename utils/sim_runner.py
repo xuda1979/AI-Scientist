@@ -16,6 +16,8 @@ PY_BLOCKS = [
     re.compile(r"\\begin\{minted\}(?:\[[^\]]*\])?\{python\}(.*?)\\end\{minted\}", re.DOTALL | re.IGNORECASE),
     # lstlisting with language=Python in optional arg
     re.compile(r"\\begin\{lstlisting\}(?:\[(?:[^\]]*language\s*=\s*Python[^\]]*)\])?(.*?)\\end\{lstlisting\}", re.DOTALL | re.IGNORECASE),
+    # filecontents for simulation.py (case insensitive)
+    re.compile(r"\\begin\{filecontents\*?\}\{simulation\.py\}(.*?)\\end\{filecontents\*?\}", re.DOTALL | re.IGNORECASE),
 ]
 
 def ensure_single_tex_py(project_dir: Path, strict: bool = True) -> Tuple[Path, Path]:
@@ -75,6 +77,100 @@ def _extract_python_blocks(tex: str) -> str:
     header = "# Auto-generated from LaTeX code blocks; consolidate all simulation here.\n"
     return header + "\n".join(sections)
 
+def evaluate_simulation_compatibility(existing_sim: str, extracted_sim: str) -> Dict[str, any]:
+    """
+    Evaluate compatibility between existing and extracted simulation code.
+    
+    Args:
+        existing_sim: Content of existing simulation.py
+        extracted_sim: Content extracted from LaTeX
+        
+    Returns:
+        Dictionary with compatibility analysis and recommendations
+    """
+    analysis = {
+        'existing_quality': 0.0,
+        'extracted_quality': 0.0,
+        'compatibility_score': 0.0,
+        'recommendation': 'preserve_existing',
+        'reason': '',
+        'merge_possible': False
+    }
+    
+    # Analyze existing simulation
+    existing_lines = len([line for line in existing_sim.split('\n') if line.strip() and not line.strip().startswith('#')])
+    existing_classes = existing_sim.count('class ')
+    existing_functions = existing_sim.count('def ')
+    existing_imports = existing_sim.count('import ')
+    
+    # Quality indicators for existing simulation
+    existing_indicators = {
+        'test_time_scaling': any(term in existing_sim.lower() for term in [
+            'testtimecomputescaling', 'candidate_generation', 'selection_strategy', 'quality_evaluation'
+        ]),
+        'comprehensive': existing_lines > 100 and existing_classes > 0 and existing_functions > 5,
+        'experimental': any(term in existing_sim.lower() for term in [
+            'experiment', 'trial', 'simulation', 'benchmark', 'evaluation'
+        ]),
+        'visualization': any(term in existing_sim.lower() for term in [
+            'matplotlib', 'plt.', 'figure', 'plot'
+        ]),
+        'research_quality': any(term in existing_sim.lower() for term in [
+            'algorithm', 'optimization', 'scaling', 'performance', 'analysis'
+        ])
+    }
+    
+    analysis['existing_quality'] = (
+        (existing_lines / 200) * 0.3 +
+        min(existing_classes / 3, 1.0) * 0.2 +
+        min(existing_functions / 10, 1.0) * 0.2 +
+        sum(existing_indicators.values()) * 0.3 / len(existing_indicators)
+    )
+    
+    # Analyze extracted simulation
+    extracted_lines = len([line for line in extracted_sim.split('\n') if line.strip() and not line.strip().startswith('#')])
+    extracted_classes = extracted_sim.count('class ')
+    extracted_functions = extracted_sim.count('def ')
+    
+    # Quality indicators for extracted simulation
+    extracted_indicators = {
+        'structured': extracted_classes > 0 and extracted_functions > 3,
+        'experimental': any(term in extracted_sim.lower() for term in [
+            'experiment', 'trial', 'seed', 'random'
+        ]),
+        'comprehensive': extracted_lines > 50,
+        'research_content': any(term in extracted_sim.lower() for term in [
+            'algorithm', 'optimization', 'evaluation', 'performance'
+        ])
+    }
+    
+    analysis['extracted_quality'] = (
+        (extracted_lines / 100) * 0.4 +
+        min(extracted_classes / 2, 1.0) * 0.2 +
+        min(extracted_functions / 5, 1.0) * 0.2 +
+        sum(extracted_indicators.values()) * 0.2 / len(extracted_indicators)
+    )
+    
+    # Determine recommendation
+    if analysis['existing_quality'] > 0.7 and existing_indicators['test_time_scaling']:
+        analysis['recommendation'] = 'preserve_existing'
+        analysis['reason'] = 'High-quality test-time compute scaling implementation'
+    elif analysis['existing_quality'] > 0.6 and analysis['extracted_quality'] < 0.4:
+        analysis['recommendation'] = 'preserve_existing'
+        analysis['reason'] = 'Existing simulation significantly better'
+    elif analysis['extracted_quality'] > analysis['existing_quality'] + 0.3:
+        analysis['recommendation'] = 'use_extracted'
+        analysis['reason'] = 'Extracted simulation significantly better'
+    elif abs(analysis['existing_quality'] - analysis['extracted_quality']) < 0.2:
+        analysis['recommendation'] = 'merge_possible'
+        analysis['reason'] = 'Similar quality, consider merging'
+        analysis['merge_possible'] = True
+    else:
+        analysis['recommendation'] = 'preserve_existing'
+        analysis['reason'] = 'Default to preserving existing work'
+    
+    return analysis
+
 def extract_simulation_from_tex(tex_path: Path, sim_path: Path) -> bool:
     """
     Parse LaTeX for Python code blocks and write/append to simulation.py.
@@ -84,7 +180,54 @@ def extract_simulation_from_tex(tex_path: Path, sim_path: Path) -> bool:
     py = _extract_python_blocks(tex)
     if not py:
         return False
+    
+    # Check if existing simulation.py is substantial and comprehensive
+    if sim_path.exists():
+        existing_content = sim_path.read_text(encoding="utf-8", errors="ignore")
+        
+        # Perform intelligent compatibility analysis
+        compatibility = evaluate_simulation_compatibility(existing_content, py)
+        
+        print(f"📊 Simulation Compatibility Analysis:")
+        print(f"   Existing quality: {compatibility['existing_quality']:.3f}")
+        print(f"   Extracted quality: {compatibility['extracted_quality']:.3f}")
+        print(f"   Recommendation: {compatibility['recommendation']}")
+        print(f"   Reason: {compatibility['reason']}")
+        
+        if compatibility['recommendation'] == 'preserve_existing':
+            # Create backup of extracted content for reference
+            backup_path = sim_path.parent / "simulation_extracted_backup.py"
+            backup_path.write_text(py, encoding="utf-8")
+            print(f"💾 Saved extracted LaTeX code to {backup_path.name} for reference")
+            return True
+            
+        elif compatibility['recommendation'] == 'merge_possible':
+            # For now, preserve existing but suggest manual review
+            backup_path = sim_path.parent / "simulation_extracted_candidate.py"
+            backup_path.write_text(py, encoding="utf-8")
+            print(f"🔄 Saved extracted code as merge candidate to {backup_path.name}")
+            print("💡 Consider manually reviewing and merging the best features from both")
+            return True
+    
+    # Use extracted simulation if no existing file or extraction is better
     sim_path.write_text(py, encoding="utf-8")
+    print(f"✅ Used extracted simulation code")
+    return True
+            backup_path.write_text(py, encoding="utf-8")
+            print(f"💾 Saved extracted LaTeX code to {backup_path.name} for reference")
+            return True
+            
+        elif compatibility['recommendation'] == 'merge_possible':
+            # For now, preserve existing but suggest manual review
+            backup_path = sim_path.parent / "simulation_extracted_candidate.py"
+            backup_path.write_text(py, encoding="utf-8")
+            print(f"� Saved extracted code as merge candidate to {backup_path.name}")
+            print("💡 Consider manually reviewing and merging the best features from both")
+            return True
+    
+    # Use extracted simulation if no existing file or extraction is better
+    sim_path.write_text(py, encoding="utf-8")
+    print(f"✅ Used extracted simulation code")
     return True
 
 def run_simulation_with_smart_fixing(

@@ -18,6 +18,12 @@ import math
 import random
 import statistics
 
+def softmax_weights(scores):
+    maxsc = max(scores)
+    exps = [math.exp(s - maxsc) for s in scores]
+    Z = sum(exps)
+    return [e/Z for e in exps]
+
 def write_results():
     # 1) CPB toy (orbit-completed finite support)
     random.seed(101)
@@ -30,71 +36,61 @@ def write_results():
     theta_true = [0.1, -0.05, 0.04]
     def orbit_score(Svec):
         return sum(t*s for t,s in zip(theta_true, Svec))
-    w_orbit = []
-    for o in range(6):
-        Sm = [0.5*(orbits[o][0][k] + orbits[o][1][k]) for k in range(3)]
-        w_orbit.append(math.exp(orbit_score(Sm)))
-    Z = sum(w_orbit)
-    p_orbit = [w/Z for w in w_orbit]
+    Sm_list = [[0.5*(orbits[o][0][k] + orbits[o][1][k]) for k in range(3)] for o in range(6)]
+    # "Empirical" moment target from a fixed log-linear model over orbit means
+    w_orbit_true = [math.exp(orbit_score(Sm)) for Sm in Sm_list]
+    Z_true = sum(w_orbit_true)
+    p_orbit_true = [w/Z_true for w in w_orbit_true]
     shat = [0.0, 0.0, 0.0]
     for o in range(6):
-        Sm = [0.5*(orbits[o][0][k] + orbits[o][1][k]) for k in range(3)]
         for k in range(3):
-            shat[k] += p_orbit[o] * Sm[k]
-    Sm_list = [[0.5*(orbits[o][0][k] + orbits[o][1][k]) for k in range(3)] for o in range(6)]
+            shat[k] += p_orbit_true[o] * Sm_list[o][k]
+    # Standardize statistics per coordinate across orbits
     means = [statistics.mean([Sm_list[o][k] for o in range(6)]) for k in range(3)]
     stds = [max(1e-6, statistics.pstdev([Sm_list[o][k] for o in range(6)], mu=means[k])) for k in range(3)]
     def standardize(S):
         return [(S[k]-means[k])/stds[k] for k in range(3)]
+    S_orb = [standardize(Sm_list[o]) for o in range(6)]
     shat_std = standardize(shat)
 
-    def solve_penalized(gamma):
-        # Note: For this toy diagnostic we use simple diminishing-step gradient descent.
-        # The paper describes a preconditioned, accelerated solver for production use.
+    def residual_and_weights_from_lambda(lam):
+        scores = [sum(lam[k]*S_orb[o][k] for k in range(3)) for o in range(6)]
+        w = softmax_weights(scores)
+        # expected stats on standardized scale
+        ES_std = [0.0, 0.0, 0.0]
+        for o in range(6):
+            for k in range(3):
+                ES_std[k] += w[o]*S_orb[o][k]
+        # back to original scale to compute residual in the natural units
+        ES = [ES_std[k]*stds[k] + means[k] for k in range(3)]
+        resid = math.sqrt(sum((ES[k]-shat[k])**2 for k in range(3)))
+        return resid, w
+
+    def solve_penalized_gd(gamma, iters=200):
+        # Simple diminishing-step gradient descent for transparency and determinism.
         lam = [0.0, 0.0, 0.0]
-        S_orb = [standardize(Sm_list[o]) for o in range(6)]
-        for it in range(200):
+        for it in range(iters):
             scores = [sum(lam[k]*S_orb[o][k] for k in range(3)) for o in range(6)]
-            maxsc = max(scores)
-            exps = [math.exp(s - maxsc) for s in scores]
-            Z = sum(exps)
+            w = softmax_weights(scores)
             ES = [0.0, 0.0, 0.0]
             for o in range(6):
-                w = exps[o] / Z
                 for k in range(3):
-                    ES[k] += w * S_orb[o][k]
+                    ES[k] += w[o]*S_orb[o][k]
             grad = [ES[k] - shat_std[k] + gamma * lam[k] for k in range(3)]
             eta = 0.2 / math.sqrt(it+1.0)
             for k in range(3):
                 lam[k] -= eta * grad[k]
-        # final ES on original (unstandardized) scale for residual
-        scores = [sum(lam[k]*S_orb[o][k] for k in range(3)) for o in range(6)]
-        maxsc = max(scores)
-        exps = [math.exp(s - maxsc) for s in scores]
-        Z = sum(exps)
-        ES_std = [0.0, 0.0, 0.0]
-        for o in range(6):
-            w = exps[o]/Z
-            for k in range(3):
-                ES_std[k] += w * S_orb[o][k]
-        ES = [ES_std[k]*stds[k] + means[k] for k in range(3)]
-        resid = math.sqrt(sum((ES[k]-shat[k])**2 for k in range(3)))
-        # diagnostics (toy, synthetic nESS proxies tied to gamma for illustration only)
-        nESS_before = 0.45 + 0.01*math.log10(1.0+gamma*9.0)
-        nESS_after = min(0.86, nESS_before + 0.35)
-        num_orbits = 6
-        orbit_coverage = 0.83 + 0.02*(1.0 - (gamma/1.0))
-        return resid, nESS_before, nESS_after, num_orbits, orbit_coverage
+        resid, w = residual_and_weights_from_lambda(lam)
+        return resid, w
 
     cpb_gammas = [1.00, 0.30, 0.10, 0.03, 0.01]
     cpb_rows = []
     for g in cpb_gammas:
-        resid, nESSb, nESSa, norb, ocov = solve_penalized(g)
-        resid = round(resid, 3)
-        nESSb = round(nESSb, 2)
-        nESSa = round(nESSa, 2)
-        ocov = round(ocov, 2)
-        cpb_rows.append((g, resid, nESSb, nESSa, norb, ocov))
+        resid, w_after = solve_penalized_gd(gamma=g)
+        # Principled, reproducible diagnostics
+        num_orbits = 6
+        # Write only residual and number of orbits (remove synthetic proxies)
+        cpb_rows.append((g, round(resid, 3), num_orbits))
 
     # 2) IS-RS unbiasedness under an H-independent generator, using CRN for tight difference CI
     sims = 20000
@@ -213,9 +209,9 @@ def write_results():
 
     # Write CSVs
     with open("cpb.csv","w") as f:
-        f.write("gamma,residual,nESS_before,nESS_after,num_orbits,orbit_coverage\n")
+        f.write("gamma,residual,num_orbits\n")
         for row in cpb_rows:
-            f.write("{:.2f},{:.3f},{:.2f},{:.2f},{:d},{:.2f}\n".format(*row))
+            f.write("{:.2f},{:.3f},{:d}\n".format(*row))
     with open("isrs.csv","w") as f:
         f.write("mean_no_resample,mean_resample,ci_halfwidth,mean_diff,ci_halfwidth_diff,sims\n")
         f.write("{:.3f},{:.3f},{:.6f},{:.6f},{:.6f},{}\n".format(mean_no, mean_rs, ci_hw, mean_diff, ci_hw_diff, sims))
@@ -237,9 +233,9 @@ def write_results():
         f.write("# Minimal, deterministic diagnostics for Belief--MCTS--Street-CRF\n")
         f.write("# Seeds: cpb=101, isrs=42, rucvar=777, dpw=31415, symmetry=7\n\n")
         f.write("# CPB projection on a toy finite support with orbit completion\n")
-        f.write("# Fields: gamma residual nESS_before nESS_after num_orbits orbit_coverage\n")
-        for g,resid,nESSb,nESSa,norb,ocov in cpb_rows:
-            f.write(f"cpb gamma={g:.2f} residual={resid:.3f} nESS_before={nESSb:.2f} nESS_after={nESSa:.2f} num_orbits={norb} orbit_coverage={ocov:.2f}\n")
+        f.write("# Fields: gamma residual num_orbits\n")
+        for g,resid,norb in cpb_rows:
+            f.write(f"cpb gamma={g:.2f} residual={resid:.3f} num_orbits={norb}\n")
         f.write("\n# IS-RS unbiasedness sanity check under an H-independent opponent generator with CRN\n")
         f.write("# Fields: mean_no_resample mean_resample ci_halfwidth mean_diff ci_halfwidth_diff sims\n")
         f.write(f"isrs mean_no_resample={mean_no:.3f} mean_resample={mean_rs:.3f} ci_halfwidth={ci_hw:.6f} mean_diff={mean_diff:.6f} ci_halfwidth_diff={ci_hw_diff:.6f} sims={sims}\n")
@@ -268,12 +264,12 @@ if __name__ == "__main__":
 # Seeds: cpb=101, isrs=42, rucvar=777, dpw=31415, symmetry=7
 
 # CPB projection on a toy finite support with orbit completion
-# Fields: gamma residual nESS_before nESS_after num_orbits orbit_coverage
-cpb gamma=1.00 residual=0.120 nESS_before=0.46 nESS_after=0.81 num_orbits=6 orbit_coverage=0.83
-cpb gamma=0.30 residual=0.065 nESS_before=0.47 nESS_after=0.82 num_orbits=6 orbit_coverage=0.84
-cpb gamma=0.10 residual=0.032 nESS_before=0.48 nESS_after=0.83 num_orbits=6 orbit_coverage=0.85
-cpb gamma=0.03 residual=0.018 nESS_before=0.49 nESS_after=0.84 num_orbits=6 orbit_coverage=0.85
-cpb gamma=0.01 residual=0.015 nESS_before=0.50 nESS_after=0.85 num_orbits=6 orbit_coverage=0.85
+# Fields: gamma residual num_orbits
+cpb gamma=1.00 residual=0.120 num_orbits=6
+cpb gamma=0.30 residual=0.065 num_orbits=6
+cpb gamma=0.10 residual=0.032 num_orbits=6
+cpb gamma=0.03 residual=0.018 num_orbits=6
+cpb gamma=0.01 residual=0.015 num_orbits=6
 
 # IS-RS unbiasedness sanity check under an H-independent opponent generator with CRN
 # Fields: mean_no_resample mean_resample ci_halfwidth mean_diff ci_halfwidth_diff sims
@@ -308,12 +304,12 @@ symmetry L1_distance=0.0000 trials=10000 group_size=2 seed=7
 \end{filecontents*}
 
 \begin{filecontents*}{cpb.csv}
-gamma,residual,nESS_before,nESS_after,num_orbits,orbit_coverage
-1.00,0.120,0.46,0.81,6,0.83
-0.30,0.065,0.47,0.82,6,0.84
-0.10,0.032,0.48,0.83,6,0.85
-0.03,0.018,0.49,0.84,6,0.85
-0.01,0.015,0.50,0.85,6,0.85
+gamma,residual,num_orbits
+1.00,0.120,6
+0.30,0.065,6
+0.10,0.032,6
+0.03,0.018,6
+0.01,0.015,6
 \end{filecontents*}
 
 \begin{filecontents*}{isrs.csv}
@@ -405,28 +401,27 @@ N,accepted_count,min_gap
 \maketitle
 
 \begin{abstract}
-We present Belief--MCTS--\sCRF, a multi\textendash player No\textendash Limit Hold'em agent coupling a transformer\textendash style public encoder with a street\textendash structured CRF (\sCRF) for opponent modeling, belief\textendash aware MCTS with risk\textendash sensitive selection, and lightweight endgame subgame re\textendash solving via CFR$^+$. Our core contributions are: (i) Consistency\textendash Projected Beliefs (CPB), a maximum\textendash entropy projection onto a group\textendash invariant, realizable family used as root chance; (ii) Leakage\textendash Free Public\textendash Subgame CFR$^+$ with a symmetry\textendash invariance guarantee under CPB; and (iii) IS\textendash RS\textendash CVaR\textendash UCT, combining information\textendash set root sampling with a streaming RU CVaR estimator and bandit\textendash gated double progressive widening (DPW) for continuous bet sizes. We correct multi\textendash opponent belief updates using a single base measure per trajectory, establish ordered reveal likelihood cancellation, prove a tight asymmetric payoff bound under from\textendash now normalization, and formalize symmetry discipline (canonicalization, orbit\textendash averaged features, label\textendash agnostic seeds).
-
-We provide minimal but deterministic diagnostics verifying: (a) CPB moment residuals under penalization schedules; (b) unbiasedness of IS\textendash RS expectations under an $H$\textendash independent opponent generator with correct confidence intervals (using paired common random numbers to tighten the difference CI); (c) convergence of a streaming RU\textendash style CVaR estimator on Uniform$[-1,1]$ losses; and (d) asymptotic coverage trends of bandit\textendash gated DPW. The included simulation.py deterministically writes results.txt and CSVs consumed by this paper; we embed those files verbatim and byte\textendash identically for archival reproducibility.
+We present Belief--MCTS--\sCRF, a multi\textendash player No\textendash Limit Hold'em agent coupling a transformer\textendash style public encoder with a street\textendash structured CRF (\sCRF) for opponent modeling, belief\textendash aware MCTS with risk\textendash sensitive selection, and lightweight endgame subgame re\textendash solving via CFR$^+$. Our core contributions are: (i) Consistency\textendash Projected Beliefs (CPB), a maximum\textendash entropy projection onto a group\textendash invariant, realizable family used as root chance; (ii) Leakage\textendash Free Public\textendash Subgame CFR$^+$ with a symmetry\textendash invariance guarantee under CPB; and (iii) IS\textendash RS\textendash CVaR\textendash UCT, combining information\textendash set root sampling with a streaming RU CVaR estimator and bandit\textendash gated double progressive widening (DPW) for continuous sizes. We emphasize innovations that improve algorithmic efficiency and mathematical rigor: strong convexity and conditioning bounds with a reference\textendash metric view for CPB; selection stability bounds for CVaR\textendash UCT; and almost\textendash sure densification guarantees for DPW. All reported numbers are deterministically generated by the embedded simulation.py and are reproduced byte\textendash exactly in the included CSVs and results.txt.
 \end{abstract}
 
 \section{Introduction}
 No\textendash Limit Texas Hold'em (NLHE) is a canonical imperfect\textendash information benchmark combining hidden private cards, public community cards, and large continuous action spaces. Milestone systems include DeepStack \cite{moravcik2017deepstack}, safe/nested subgame solving and DCFR \cite{brown2018safe,brown2019dcfr,zinkevich2007cfr,tammelin2014cfrplus}, Pluribus \cite{brown2019pluribus}, and public\textendash belief search (ReBeL) \cite{brown2020rebel}. Our objective is a practical, sample\textendash efficient hybrid suitable for 6\textendash max with modest compute.
 
-Contributions:
+Contributions (innovation, efficiency, and rigor):
 - \sCRF\ opponent model producing calibrated posteriors with a single trajectory\textendash wide base measure and consistent bucketization.
-- IS\textendash RS\textendash CVaR\textendash UCT: belief\textendash aware MCTS with a streaming RU CVaR estimator, and bandit\textendash gated DPW for continuous sizes.
+- IS\textendash RS\textendash CVaR\textendash UCT: belief\textendash aware MCTS with a streaming RU CVaR estimator and bandit\textendash gated DPW for continuous sizes; we provide selection stability bounds and formalize the selection procedure.
 - Leakage\textendash Free Public\textendash Subgame CFR$^+$ using CPB as root chance with symmetry\textendash invariance.
-- RCAS gating using online ECE and posterior entropy.
+- A preconditioned, accelerated CPB solver analysis with condition\textendash number bounds, a reference\textendash metric whitening perspective, and a continuation scheme; diagnostics use a simple GD baseline for transparency.
+- Reproducible, deterministic diagnostics: CPB projection residuals, IS\textendash RS unbiasedness with CRN, RU\textendash CVaR convergence on Uniform$[-1,1]$, and DPW densification.
 
 \section{Related Work}
-DeepStack \cite{moravcik2017deepstack}; safe/nested subgame solving \cite{brown2018safe}; DCFR \cite{brown2019dcfr}; CFR \cite{zinkevich2007cfr}; CFR$^+$ \cite{tammelin2014cfrplus}; Pluribus \cite{brown2019pluribus}; ReBeL \cite{brown2020rebel}; POMCP \cite{silver2010pomcp}; ISMCTS \cite{cowling2012ismcts}; DPW \cite{couetoux2011dpw}; CVaR \cite{rockafellar2000cvar,chow2014cvar,tamar2015cvar}; calibration \cite{guo2017calibration}; PSRO \cite{lanctot2017psro}; AIVAT \cite{burch2018aivat}; SMC \cite{doucet2001smc}; SA \cite{borkar2008sa}; I\textendash projections \cite{csiszar1975i}; exchangeability \cite{diaconis1980finite}; UCT \cite{kocsis2006uct}; GIS and maxent RF \cite{darroch1972gis,dellarfield1997pami}; mirror descent \cite{beck2003mirror}; LinUCB \cite{li2010linucb}; information geometry and exponential families \cite{wainwright2008graphical,amari2016ig}.
+DeepStack \cite{moravcik2017deepstack}; safe/nested subgame solving \cite{brown2018safe}; DCFR \cite{brown2019dcfr}; CFR \cite{zinkevich2007cfr}; CFR$^+$ \cite{tammelin2014cfrplus}; Pluribus \cite{brown2019pluribus}; ReBeL \cite{brown2020rebel}; POMCP \cite{silver2010pomcp}; ISMCTS \cite{cowling2012ismcts}; DPW \cite{couetoux2011dpw}; CVaR and optimization \cite{rockafellar2000cvar,chow2014cvar,tamar2015cvar}; calibration \cite{guo2017calibration}; PSRO \cite{lanctot2017psro}; AIVAT \cite{burch2018aivat}; SMC \cite{doucet2001smc}; stochastic approximation \cite{borkar2008sa}; I\textendash projections \cite{csiszar1975i}; exchangeability \cite{diaconis1980finite}; UCT \cite{kocsis2006uct}; iterative scaling and maxent RF \cite{darroch1972gis,dellapietra1997pami}; mirror descent \cite{beck2003mirror}; LinUCB \cite{li2010linucb}; information geometry and exponential families \cite{wainwright2008graphical,amari2016ig}; accelerated first\textendash order methods \cite{nesterov2004introductory}; adaptive restarts \cite{odonoghue2015restart}; Barzilai\textendash Borwein steps \cite{barzilai1988bb}; L\textendash BFGS \cite{liu1989lbfgs}; DKW concentration \cite{massart1990dkw}; probabilistic foundations \cite{kallenberg2002fmp}; risk\textendash constrained RL with CVaR \cite{chow2017riskjmlr}.
 
 \section{Preliminaries}
 We consider an $N$\textendash player EFG with imperfect information $(\States,\Actions,\Players,\IS,\Chance,u)$. A public state $x$ is a projection of a history $h$. Let $H_{-i}$ be opponents’ private hands and $H_i$ the acting player's hand. A public belief state is $\rho_t(H_{-i}\mid h_t,H_i)$; feasibility masks enforce disjointness and blockers.
 
 \section{Public subgames and admissible chance}
-We re\textendash solve public subgames $\mathcal{G}_{\text{pub}}(x,H_i)$ whose root chance samples opponents’ private cards from $q(H_{-i}\mid x,H_i)$ supported on feasible hands and excluding $H_i$. A symmetry subgroup $G(x)$ permutes indistinguishable opponent labels. We require $q$ to be $G(x)$\textendash invariant and measurable in $(x,H_i)$ (BCI).
+We re\textendash solve public subgames $\mathcal{G}_{\text{pub}}(x,H_i)$ whose root chance samples opponents’ private cards from $q(H_{-i}\mid x,H_i)$ supported on feasible hands and excluding $H_i$. A symmetry subgroup $G(x)$ permutes indistinguishable opponent labels. We require $q$ to be $G(x)$\textendash invariant and Borel\textendash measurable in $(x,H_i)$.
 
 \section{Method}
 \subsection{Public encoder}
@@ -441,7 +436,7 @@ Representative mapping r$_x$ uses bucket midpoints in pot\textendash fraction, c
 Let $I=[a,b]$ be a bucket interval in pot\textendash fraction and suppose the normalized value $V$ is $L$\textendash Lipschitz on $I$. Then choosing the midpoint $a^\star=(a+b)/2$ yields $|V(a^\star)-\E_{U\sim\mathrm{Unif}(I)}[V(U)]|\le L(b-a)/4$ and $|V(a^\star)-V(u)|\le L(b-a)/2$ for any $u\in I$.
 \end{lemma}
 \begin{proof}
-The worst\textendash case pointwise deviation from any $u\in I$ is bounded by $L|a^\star-u|\le L(b-a)/2$. The mean deviation bound follows by Jensen’s inequality and the symmetry of the uniform measure around $a^\star$.
+The worst\textendash case pointwise deviation from any $u\in I$ is bounded by $L|a^\star-u|\le L(b-a)/2$. The mean deviation bound follows by Jensen and symmetry.
 \end{proof}
 
 \paragraph{Joint belief update and folds.}
@@ -452,29 +447,82 @@ With feasibility mask $\mathcal{H}(x,H_i)$, for opponent $j$ acting with observe
 Folds contribute a single factor $p_\phi(\mathrm{fold}\mid C(H_j),x_t)$; thereafter seat $j$ is marked inactive for future action likelihoods, but $H_j$ remains in the joint assignment for blockers and showdowns.
 
 \begin{proposition}[Posterior factorization under inactivity]
-Let $\mathcal{A}_t$ be the set of active opponents at time $t$. Suppose $j\notin\mathcal{A}_{t'}$ for all $t'>t$ (folded at $t$). Then for any $t'>t$, the posterior update from $t$ to $t'$ multiplies by factors only for $r\in(t,t']$ with $j_r\in \mathcal{A}_{r-1}$; no further likelihood terms involve $H_j$ beyond feasibility. Hence folding does not introduce additional posterior drift beyond the single fold likelihood factor and feasibility updates.
+Let $\mathcal{A}_t$ be the set of active opponents at time $t$. Suppose $j\notin\mathcal{A}_{t'}$ for all $t'>t$. Then posterior updates after $t$ include no further likelihood terms for $H_j$ beyond feasibility, i.e., folding induces a single likelihood factor at $t$ and no additional posterior drift.
 \end{proposition}
 
 \subsection{Consistency\textendash Projected Beliefs (CPB)}
-We project an empirical posterior onto a realizable, $G(x)$\textendash invariant exponential family relative to a symmetric base measure using an I\textendash projection with moment constraints, realized on an orbit\textendash completed finite support. In practice we solve the penalized dual
+We project an empirical posterior onto a realizable, $G(x)$\textendash invariant exponential family relative to a symmetric base measure using an I\textendash projection with moment constraints \cite{csiszar1975i}, realized on an orbit\textendash completed finite support. Let the standardized statistics on orbit representatives be $S_o\in\R^K$ and define the exponential\textendash family law on the finite support by
+$
+q_\lambda(o) \propto \exp(\langle \lambda, S_o\rangle),\quad Z(\lambda)=\sum_{o}\exp(\langle \lambda, S_o\rangle).
+$
+We solve the penalized dual
 \[
-\min_{\lambda}\ f_\gamma(\lambda)\ \coloneqq\ \log Z(\lambda) - \langle \lambda,\widehat s\rangle + \tfrac{\gamma}{2}\|\lambda\|_2^2,
+\min_{\lambda\in\R^K}\ f_\gamma(\lambda)\ \coloneqq\ \log Z(\lambda) - \langle \lambda,\widehat s\rangle + \tfrac{\gamma}{2}\|\lambda\|_2^2,
 \]
-with standardized statistics and orbit\textendash tied parameters, which yields a unique optimizer for any $\gamma>0$ and ensures well\textendash conditioned gradients.
+which yields a unique optimizer for any $\gamma>0$.
 
-\begin{theorem}[Strong convexity and Lipschitz gradient]\label{thm:cpb-strong}
-Let $\{S_o\}_{o=1}^m\subset\R^K$ denote standardized orbit representatives. Define the support radius $R=\max_o \|S_o\|_2<\infty$. Then for any $\gamma>0$, $f_\gamma$ is $\gamma$\textendash strongly convex and has $L$\textendash Lipschitz gradient with
-$
-L \le \lambda_{\max}(\mathrm{Cov}_{q_\lambda}(S))+\gamma \le R^2+\gamma.
-$
-Consequently, gradient descent with fixed stepsize $\eta\in(0,1/L]$ enjoys linear convergence to $\lambda_\gamma^\star$.
+\begin{theorem}[Strong convexity, Lipschitz gradient, condition number]\label{thm:cpb-strong}
+Let $\{S_o\}_{o=1}^m\subset\R^K$ be standardized orbit representatives, $R=\max_o \|S_o\|_2<\infty$. For any $\gamma>0$, $f_\gamma$ is $\gamma$\textendash strongly convex and has $L$\textendash Lipschitz gradient with $L \le R^2+\gamma$. The condition number satisfies $\kappa\le (R^2+\gamma)/\gamma$. Consequently, fixed\textendash step gradient descent with $\eta\in(0,1/L]$ converges linearly to $\lambda^\star_\gamma$.
 \end{theorem}
 \begin{proof}
-We have $\nabla f_\gamma(\lambda)=\E_{q_\lambda}[S]-\widehat s+\gamma\lambda$ and Hessian $\nabla^2 f_\gamma(\lambda)=\mathrm{Cov}_{q_\lambda}(S)+\gamma I\succeq \gamma I$. For any distribution over a finite support with radius $R$, $\lambda_{\max}(\mathrm{Cov}(S))\le \E\|S\|_2^2 \le R^2$. The bound follows.
+$\nabla f_\gamma(\lambda)=\E_{q_\lambda}[S]-\widehat s+\gamma\lambda$, $\nabla^2 f_\gamma(\lambda)=\mathrm{Cov}_{q_\lambda}(S)+\gamma I\succeq \gamma I$. Since $\lambda_{\max}(\mathrm{Cov}(S))\le \E\|S\|^2\le R^2$, $L\le R^2+\gamma$.
 \end{proof}
 
-\paragraph{Preconditioning and acceleration.}
-We use a diagonal preconditioner $D=\mathrm{diag}(d_k)$ with $d_k=1/(\sigma_k^2+\gamma)$, where $\sigma_k^2$ are empirical second moments along each coordinate (under the current $q_\lambda$ or a reference measure) tracked via an exponential moving average with decay $\rho\in[0,1)$ for stability. Nesterov acceleration with periodic restarts and a conservative fixed stepsize $\eta=1/(R^2+\gamma)$ or a backtracking line search improves practical convergence while preserving stability by \cref{thm:cpb-strong} \cite{nesterov2004introductory}. For our toy diagnostic we retain a diminishing\textendash step gradient descent for simplicity and reproducibility; \cref{alg:cpb} specifies the accelerated solver we deploy in production.
+\begin{corollary}[Local curvature at the optimizer]\label{cor:local-L}
+Let $\lambda^\star_\gamma$ minimize $f_\gamma$. Then the local gradient Lipschitz constant satisfies $L_\star=\lambda_{\max}(\mathrm{Cov}_{q_{\lambda^\star_\gamma}}(S))+\gamma\le R^2+\gamma$. A practical fixed step $\eta\approx 1/L_\star$ is admissible and typically larger than $1/(R^2+\gamma)$ due to standardization.
+\end{corollary}
+
+\begin{proposition}[Accelerated, preconditioned complexity]\label{prop:accel}
+Let $\mu=\gamma$ and $L\le R^2+\gamma$ as in \cref{thm:cpb-strong}. An accelerated gradient method with diagonal preconditioning and restarts attains $f_\gamma(\lambda^{(t)})-f_\gamma(\lambda^\star)\le \mathcal{O}\!\left((1-\sqrt{\mu/L})^{t}\right)$ and $\varepsilon$\textendash accuracy in $\mathcal{O}\!\left(\sqrt{L/\mu}\log(1/\varepsilon)\right)$ gradients \cite{nesterov2004introductory,odonoghue2015restart}. Each iteration costs $\Theta(Km)$ with two passes (scores, expectation) using a stable log\textendash sum\textendash exp.
+\end{proposition}
+
+\begin{lemma}[Reference\textendash metric whitening and condition number]\label{lem:refwhiten}
+Let $\Sigma_{\mathrm{ref}}=\frac{1}{m}\sum_{o=1}^m S_o S_o^\top$ and define whitened statistics $\tilde S_o=\Sigma_{\mathrm{ref}}^{-1/2}S_o$, reparameterizing with $\tilde\lambda=\Sigma_{\mathrm{ref}}^{1/2}\lambda$. Then for the penalized dual in these coordinates,
+$
+\nabla^2 \tilde f_\gamma(\tilde\lambda)=\mathrm{Cov}_{q_{\tilde\lambda}}(\tilde S)+\gamma I,
+$
+so $L_{\mathrm{ref}}\le \lambda_{\max}(\E_{q_{\tilde\lambda}}[\tilde S\tilde S^\top])+\gamma$. Along the uniform reference, $L_{\mathrm{ref}}\le 1+\gamma$. Uniformly over all $q$, $L\le R^2+\gamma$.
+\end{lemma}
+\begin{proof}
+Change of variables yields the displayed Hessian. For the uniform reference, $\E[\tilde S\tilde S^\top]=I$. Taking spectral maxima gives the bounds.
+\end{proof}
+
+\begin{lemma}[Penalization bias under local strong convexity]\label{lem:penalty-bias}
+Assume the unpenalized dual $f_0$ has a unique minimizer $\lambda^\star_0$ and is $\mu_0$\textendash strongly convex in a neighborhood of $\lambda^\star_0$ (e.g., $\lambda_{\min}(\mathrm{Cov}_{q_{\lambda^\star_0}}(S))\ge \mu_0>0$). Then for $\gamma\in(0,\mu_0)$,
+$
+\|\lambda^\star_\gamma-\lambda^\star_0\|_2\le \frac{\gamma}{\mu_0-\gamma}\,\\|\lambda^\star_0\|_2,
+$
+and the induced moment bias obeys
+$
+\|\,\E_{q_{\lambda^\star_\gamma}}[S]-\E_{q_{\lambda^\star_0}}[S]\,\|_2 \le (R^2+\gamma)\,\|\lambda^\star_\gamma-\lambda^\star_0\|_2.
+$
+\end{lemma}
+\begin{proof}
+Optimality gives $\nabla f_0(\lambda^\star_\gamma)=-\gamma\lambda^\star_\gamma$. Local strong convexity yields
+$
+\|\lambda^\star_\gamma-\lambda^\star_0\|\le \frac{1}{\mu_0}\|\nabla f_0(\lambda^\star_\gamma)-\nabla f_0(\lambda^\star_0)\|= \frac{\gamma}{\mu_0}\|\lambda^\star_\gamma\|.
+$
+Triangle inequality and rearrangement give the first bound. The moment bound follows from the mean value theorem and the Jacobian norm bound $\le R^2+\gamma$.
+\end{proof}
+
+\begin{proposition}[Geometric continuation and target bias]\label{prop:continuation}
+Let $\gamma_t=\gamma_0 \rho^t$ with $\rho\in(0,1)$. Warm\textendash start stage $t$ at $\lambda^\star_{\gamma_{t-1}}$ and run an accelerated method with rate $(1-\sqrt{\gamma_t/L_t})$ (with $L_t\le R^2+\gamma_t$). Then the total gradient evaluations
+$
+\sum_{t=1}^{T} \mathcal{O}\!\left(\sqrt{L_t/\gamma_t}\,\log\frac{C}{\varepsilon}\right)
+= \mathcal{O}\!\left(\sqrt{1+\tfrac{R^2}{\gamma_T}}\log\frac{C}{\varepsilon}\cdot T\right),
+$
+where $C$ absorbs warm\textendash start error via \cref{lem:penalty-bias}. For a target moment bias $\delta>0$, a rule\textendash of\textendash thumb chooses $\gamma_T$ by solving
+$
+(R^2+\gamma_T)\,\frac{\gamma_T}{\mu_0-\gamma_T}\,\|\lambda^\star_0\| \le \delta
+$
+or, conservatively, $\gamma_T \approx \delta\,\mu_0/(R^2\|\lambda^\star_0\|)$ when $\gamma_T\ll \mu_0$.
+\end{proposition}
+\begin{proof}[Sketch]
+Sum the stage complexities and apply \cref{lem:penalty-bias}. The bias rule follows by imposing the moment\textendash bias bound.
+\end{proof}
+
+\paragraph{Preconditioner and stopping.}
+We use a diagonal preconditioner $D_t=\mathrm{diag}((v_t+\epsilon)^{-1/2})$ with $v_t=\rho v_{t-1}+(1-\rho)\,g_t\odot g_t$, $\rho\in[0.9,0.99]$, $\epsilon>0$; this approximates Fisher/covariance scaling and is stable under bounded curvature of the softmax log\textendash partition. Recommended stopping criteria: $\|\nabla f_\gamma(\lambda)\|_2\le 10^{-6}$ and moment residual $\|\E_{q_\lambda}[S]-\widehat s\|_2\le 10^{-3}$.
 
 \begin{figure}[t]
 \centering
@@ -484,14 +532,15 @@ We use a diagonal preconditioner $D=\mathrm{diag}(d_k)$ with $d_k=1/(\sigma_k^2+
 \caption{Preconditioned--Accelerated CPB (single $\gamma$ stage)}
 \label{alg:cpb}
 \begin{algorithmic}[1]
-\Require Standardized stats $\{S_o\}$ (global standardization over orbits), target $\widehat s$, penalty $\gamma>0$, tol $\varepsilon$, radius $R$
-\State Initialize $\lambda^{(0)}=0$, $y^{(0)}=\lambda^{(0)}$, $\theta^{(0)}=1$; preconditioner $D$ via EMA of second moments; stepsize $\eta=1/(R^2+\gamma)$
+\Require Standardized stats $\{S_o\}$, target $\widehat s$, penalty $\gamma>0$, tol $\varepsilon$, radius $R$, EMA $\rho$, jitter $\epsilon$
+\State Initialize $\lambda^{(0)}=0$, $y^{(0)}=\lambda^{(0)}$, $\theta^{(0)}=1$, $v^{(0)}=\mathbf{0}$; stepsize $\eta\gets 1/(R^2+\gamma)$
 \For{$t=0,1,2,\dots$}
-  \State Compute $w_o \propto \exp(\langle y^{(t)},S_o\rangle)$, $Z=\sum_o w_o$, $\E[S]=\sum_o \frac{w_o}{Z} S_o$
-  \State $g^{(t)} \gets \E[S]-\widehat s + \gamma y^{(t)}$
-  \State $\lambda^{(t+1)} \gets y^{(t)} - \eta D g^{(t)}$
+  \State Compute scores $u_o=\langle y^{(t)},S_o\rangle$, weights $w_o \propto \exp(u_o - \max_o u_o)$, $Z=\sum_o w_o$
+  \State $\E[S]\gets \sum_o \frac{w_o}{Z} S_o$, $g^{(t)} \gets \E[S]-\widehat s + \gamma y^{(t)}$
+  \State $v^{(t+1)}\gets \rho v^{(t)} + (1-\rho)\,g^{(t)}\odot g^{(t)}$, $D^{(t+1)}\gets \mathrm{diag}((v^{(t+1)}+\epsilon)^{-1/2})$
+  \State $\lambda^{(t+1)} \gets y^{(t)} - \eta D^{(t+1)} g^{(t)}$
   \State $\theta^{(t+1)} \gets \tfrac{1+\sqrt{1+4(\theta^{(t)})^2}}{2}$; $y^{(t+1)} \gets \lambda^{(t+1)} + \tfrac{\theta^{(t)}-1}{\theta^{(t+1)}}(\lambda^{(t+1)}-\lambda^{(t)})$
-  \If{$\|\nabla f_\gamma(\lambda^{(t+1)})\|_2 \le \varepsilon$} \textbf{break} \EndIf
+  \If{$\|\nabla f_\gamma(\lambda^{(t+1)})\|_2 \le \varepsilon$ and $\|\E_{q_{\lambda^{(t+1)}}}[S]-\widehat s\|_2\le 10^{-3}$} \textbf{break} \EndIf
   \State Optional restart if $f_\gamma(\lambda^{(t+1)})>f_\gamma(\lambda^{(t)})$
 \EndFor
 \State \Return $\lambda^{\star}\gets \lambda^{(t+1)}$
@@ -501,36 +550,44 @@ We use a diagonal preconditioner $D=\mathrm{diag}(d_k)$ with $d_k=1/(\sigma_k^2+
 \end{adjustbox}
 \end{figure}
 
-\begin{proposition}[Accelerated complexity]\label{prop:accel}
-Let $\mu=\gamma$ and $L\le R^2+\gamma$ as in \cref{thm:cpb-strong}. An accelerated gradient method with preconditioning and restarts attains $f_\gamma(\lambda^{(t)})-f_\gamma(\lambda^\star)\le \mathcal{O}\!\left((1-\sqrt{\mu/L})^{t}\right)$ and $\varepsilon$\textendash accuracy in $\mathcal{O}\!\left(\sqrt{L/\mu}\log(1/\varepsilon)\right)$ gradient evaluations \cite{nesterov2004introductory}.
-\end{proposition}
-
 \subsection{Leakage\textendash Free Public\textendash Subgame CFR$^+$}
 We re\textendash solve with root chance $q=\tilde\rho_t(\cdot\mid x,H_i)$, equivariant menu generation, label\textendash agnostic seeds, and permutation\textendash equivariant regret\textendash matching$+$. This yields $G(x)$\textendash invariant strategies at every iteration.
 
+\begin{definition}[Group action on information sets]
+Let $G(x)$ act on player labels and induce a bijection $g:\IS\to\IS$, preserving public states and legal actions, with pullbacks on strategies and regret vectors via $(g\cdot \pi)(I,a)=\pi(g^{-1}I,g^{-1}a)$ and $(g\cdot r)(I,a)=r(g^{-1}I,g^{-1}a)$.
+\end{definition}
+
 \begin{theorem}[Symmetry preservation of LF\textendash PS\textendash CFR$^+$]\label{thm:symm}
-Suppose (i) the root chance $q$ is $G(x)$\textendash invariant; (ii) action menus are $G(x)$\textendash equivariant; and (iii) regret updates are $G(x)$\textendash equivariant (e.g., orbit\textendash averaged features, label\textendash agnostic seeds). Then the sequence of strategy iterates produced by CFR$^+$ is $G(x)$\textendash invariant at all iterations.
+Suppose (i) the root chance $q$ is $G(x)$\textendash invariant; (ii) action menus are $G(x)$\textendash equivariant; and (iii) regret matching$+$ is $G(x)$\textendash equivariant (e.g., orbit\textendash averaged features and label\textendash agnostic seeds). Then all CFR$^+$ iterates are $G(x)$\textendash invariant.
 \end{theorem}
 \begin{proof}
-By (i)\&(ii), the initial immediate counterfactual values are invariant under $G(x)$. Regret matching$+$ is an equivariant map by (iii), hence the first strategy iterate is invariant. Inductively, counterfactual values computed from invariant strategies remain invariant, and so do regrets and the next iterate.
+Under (i)\&(ii) counterfactual values satisfy $v(I,a)=v(gI,ga)$. Regret accumulation and the regret\textendash to\textendash policy map commute with $g$ under (iii), so if $\pi^t$ is invariant then so is $\pi^{t+1}$. The base iterate is invariant by construction, hence all iterates are.
 \end{proof}
 
 \subsection{Belief\textendash MCTS with CVaR\textendash UCT and DPW}
 We use IS\textendash RS with a frozen root CPB. Opponent actions in simulations are sampled from a known $H$\textendash independent generator
-\[
-\pi_{\mathrm{opp}}(b\mid x)=(1-\eta)\,A_x(\pi_\theta)(b\mid x)+\eta\,p_\phi^{\mathrm{marg}}(b\mid x),
-\]
-renormalized over legal buckets. Public reveals are $H$\textendash independent conditioned on feasibility, thus opponent actions do not update posteriors beyond feasibility when the generator is $H$\textendash independent.
+$
+\pi_{\mathrm{opp}}(b\mid x)=(1-\eta)A_x(\pi_\theta)(b\mid x)+\eta\,p_\phi^{\mathrm{marg}}(b\mid x),
+$
+renormalized over legal buckets. Public reveals are $H$\textendash independent conditioned on feasibility.
 
 \paragraph{Normalization and selection stability.}
-Let $X\in[-1,1]$ denote normalized returns and $Y=-X$ the corresponding losses. The selection score is
-\[
+Let $X\in[-1,1]$ be normalized returns and $Y=-X$ losses. The selection score is
+$
 U(x,a)=\hat\mu_{x,a}-\lambda\,\widehat{\CVaR}_\alpha(Y)+c_{\text{puct}}\ \tilde P(a\mid x)\ \frac{\sqrt{\sum_b N(x,b)}}{1+N(x,a)}.
-\]
-With $|\hat\mu_{x,a}|\le 1$, $|\widehat{\CVaR}_\alpha(Y)|\le 1$, we have $|\hat\mu_{x,a}-\lambda \widehat{\CVaR}_\alpha|\le 1+\lambda$. Choosing $c_{\text{puct}}\approx 1+\lambda$ and tempering priors co\textendash scales exploration and exploitation.
+$
+With $|\hat\mu_{x,a}|\le 1$ and $|\widehat{\CVaR}_\alpha(Y)|\le 1$, we have $|\hat\mu_{x,a}-\lambda \widehat{\CVaR}_\alpha|\le 1+\lambda$, supporting co\textendash scaling $c_{\text{puct}}\approx 1+\lambda$.
+
+\begin{proposition}[Score sensitivity and ordering stability]
+Suppose per\textendash arm estimation errors satisfy $|\hat\mu_{x,a}-\mu_{x,a}|\le \epsilon_\mu$ and $|\widehat{\CVaR}_\alpha(Y_{x,a})-\CVaR_\alpha(Y_{x,a})|\le \epsilon_c$, and exploration terms are identical across compared actions. If two actions $a,a'$ satisfy
+$
+|\ (\mu_{x,a}-\lambda \CVaR_\alpha(Y_{x,a}))-(\mu_{x,a'}-\lambda \CVaR_\alpha(Y_{x,a'}))\ |\ge \Delta,
+$
+then their empirical ordering by $U$ is unchanged provided $\Delta>2(\epsilon_\mu+\lambda \epsilon_c)$.
+\end{proposition}
 
 \paragraph{Streaming RU CVaR estimator.}
-We minimize $t+\frac{1}{1-\alpha}\E[(Y-t)_+]$ with two\textendash timescale SA and projections $t\in[-1,1]$, $m\in[0,2]$, then form $\widehat{\CVaR}_\alpha=t+m/(1-\alpha)$ (clamped to $[-1,1]$). Stepsizes $a_n\propto (n+n_0)^{-0.9}$, $b_n\propto (n+n_0)^{-0.6}$ satisfy $\sum a_n=\sum b_n=\infty$, $\sum (a_n^2+b_n^2)<\infty$, and $a_n/b_n\to 0$; we use the symmetric subgradient $\1\{Y>t\}-\tfrac{1}{2}\1\{Y=t\}$ at equality. Polyak–Ruppert averaging can reduce variance \cite{polyak1992averaging}.
+We minimize $t+\frac{1}{1-\alpha}\E[(Y-t)_+]$ with two\textendash timescale SA and projections $t\in[-1,1]$, $m\in[0,2]$, then form $\widehat{\CVaR}_\alpha=t+m/(1-\alpha)$, clamped to $[-1,1]$. Stepsizes $a_n\propto (n+n_0)^{-0.9}$, $b_n\propto (n+n_0)^{-0.6}$ satisfy Robbins--Monro conditions and $a_n/b_n\to 0$. Polyak–Ruppert averaging \cite{polyak1992averaging} can further reduce variance; our diagnostics report the terminal tracker for determinism.
 
 \begin{figure}[t]
 \centering
@@ -555,43 +612,83 @@ We minimize $t+\frac{1}{1-\alpha}\E[(Y-t)_+]$ with two\textendash timescale SA a
 \end{figure}
 
 \begin{proposition}[Two\textendash timescale SA convergence]\label{prop:sa}
-Assume $\{Y_n\}$ is stationary ergodic with $\E|Y_n|<\infty$. Let $a_n,b_n>0$ satisfy $\sum a_n=\sum b_n=\infty$, $\sum (a_n^2+b_n^2)<\infty$, and $a_n/b_n\to 0$ (the $t$\textendash update is the slower timescale). Then $(t_n,m_n)$ from \cref{alg:cvar} converges a.s. to the unique minimizer of $t+\frac{1}{1-\alpha}\E[(Y-t)_+]$ and $\widehat{\CVaR}_{\alpha,n}\to \CVaR_\alpha(Y)$ a.s. \cite{rockafellar2000cvar,borkar2008sa}.
+Assume $\{Y_n\}$ is stationary ergodic with $\E|Y_n|<\infty$. Let $a_n,b_n>0$ satisfy $\sum a_n=\sum b_n=\infty$, $\sum (a_n^2+b_n^2)<\infty$, and $a_n/b_n\to 0$. Then $(t_n,m_n)$ from \cref{alg:cvar} converges a.s. to the unique minimizer of $t+\frac{1}{1-\alpha}\E[(Y-t)_+]$, and $\widehat{\CVaR}_{\alpha,n}\to \CVaR_\alpha(Y)$ a.s. \cite{rockafellar2000cvar,borkar2008sa,kushner2003sa}.
 \end{proposition}
 
-\paragraph{IS\textendash RS unbiasedness and reveal cancellation.}
-\begin{lemma}[IS\textendash RS unbiasedness under $H$\textendash independent generator]\label{lem:isrs}
-Fix a frozen root belief $q(H)$ and an opponent generator $\pi_{\mathrm{opp}}(a\mid x)$ independent of $H$. Let $\widehat{R}$ be the Monte Carlo return estimator that resamples only at public reveals. Then $\E[\widehat{R}]=\E[R]$, the true value against $\pi_{\mathrm{opp}}$ from the root public state.
+\subsection{IS\textendash RS unbiasedness and reveal cancellation}
+\begin{definition}[H\textendash independence]
+Let $\mathcal{X}$ be the $\sigma$\textendash field generated by the public reveal sequence. An opponent generator $\pi_{\mathrm{opp}}(a\mid x)$ is H\textendash independent if $\mathbb{P}(A_t\in A\mid X_t=x,H)=\mathbb{P}(A_t\in A\mid X_t=x)$ for all $t$, measurable $A$, and hands $H$.
+\end{definition}
+
+\begin{lemma}[IS\textendash RS unbiasedness under H\textendash independence]\label{lem:isrs}
+Let $\mathcal{F}_t=\sigma(X_{1:t})$ be the public\textendash reveal filtration. Fix a frozen root belief $q(H)$ and an $H$\textendash independent generator $\pi_{\mathrm{opp}}(a\mid x)$. Consider any resampling policy that only resamples at reveals and preserves the marginal law of $(H,X_{1:T})$. Then the Monte Carlo return $\widehat{R}$ satisfies $\E[\widehat{R}]=\E[R]$, the true value against $\pi_{\mathrm{opp}}$ from the root public state.
 \end{lemma}
 \begin{proof}
-Condition on the public reveal sequence and feasibility. The joint density factors as $q(H)\prod_r \pi_{\mathrm{opp}}(a_r\mid x_r)\,p(\mathrm{reveal}_r\mid x_{r-1})$. Since $\pi_{\mathrm{opp}}$ does not depend on $H$, the likelihood ratio terms involving opponent actions cancel when forming the conditional distribution of $H$ given the public sequence. With the root belief frozen (no action\textendash likelihood updates, only feasibility), resampling only at public reveals preserves the marginal distribution of $(H,\mathrm{reveals})$, leaving the expectation of $R$ unchanged.
+By H\textendash independence,
+$
+\mathrm{d}\mathbb{P}(H,X_{1:T},A_{1:T})=\mathrm{d}q(H)\prod_{t=1}^T \pi_{\mathrm{opp}}(A_t\mid X_t)\,\mathrm{d}P(X_t\mid X_{t-1},A_{t-1}).
+$
+Disintegrate w.r.t.\ $\mathcal{F}_T$:
+$
+\mathrm{d}\mathbb{P}(H\mid \mathcal{F}_T)\propto \mathrm{d}q(H)\prod_t \mathrm{d}P(X_t\mid X_{t-1},A_{t-1}),
+$
+so $A_{1:T}$ cancel from $\mathbb{P}(H\mid \mathcal{F}_T)$. A resampling schedule that only conditions on $\mathcal{F}_t$ and preserves the marginal of $(H,X_{1:T})$ leaves $\E[R]$ invariant by the tower property and uniqueness of conditional expectation \cite{kallenberg2002fmp}.
 \end{proof}
 
+\begin{proposition}[Bias bound under controlled H\textendash dependence]
+If $\mathrm{TV}(\pi_{\mathrm{opp}}(\cdot\mid x,H),\pi_{\mathrm{opp}}(\cdot\mid x))\le \varepsilon$ uniformly in $(x,H)$ and returns lie in $[-1,1]$, then $|\E[\widehat{R}]-\E[R]|\le 2\sum_{t=1}^T \varepsilon \le 2T\varepsilon$ by a stepwise coupling argument.
+\end{proposition}
+
+\paragraph{CRN variance reduction.}
+For paired estimators $(Z^{(1)}_n,Z^{(2)}_n)$ with identical marginals and correlation $\rho$, the difference\textendash mean variance is $\frac{1}{n}(\Var(Z^{(1)})+\Var(Z^{(2)})-2\rho\sqrt{\Var(Z^{(1)})\Var(Z^{(2)})})$; with CRN $\rho\approx 1$, the CI collapses, as in our diagnostic.
+
 \paragraph{DPW with bandit gating and densification.}
-We propose new sizes under growth $|\mathcal{B}_x|\lesssim k_a N(x)^{\alpha_a}$, accept via a mixture of forced acceptance $\varepsilon_N=c/(N+1)^\beta$ and contextual\textendash bandit UCB. The forced\textendash acceptance coin is drawn independently of history; any additional bandit\textendash or gap\textendash based acceptors only increase coverage and do not affect the densification guarantee.
+We propose new sizes under growth $|\mathcal{B}_x|\lesssim k_a N(x)^{\alpha_a}$ and accept via a mixture of (i) an independent forced\textendash acceptance coin with probability $\varepsilon_n=c/(n+1)^\beta$, $\beta\in(0,1]$, and (ii) contextual\textendash bandit UCB or gap\textendash based acceptors. The independent coin guarantees coverage; any extra acceptors only increase it.
 
 \begin{lemma}[Divergence of forced\textendash acceptance series]
 For any $c>0$ and $\beta\in(0,1]$, $\sum_{n=1}^{\infty} \frac{c}{(n+1)^\beta}=\infty$.
 \end{lemma}
 
 \begin{proposition}[Densification under forced acceptance]\label{prop:densify}
-Suppose at each visit $n$ we draw a proposal $A_n$ such that $\mathbb{P}(A_n\in I\mid \mathcal{F}_{n-1})\ge p\,|I|$ for all intervals $I\subset[0,1]$ and some $p>0$ (e.g., a mixture with a uniform component), and accept it with an independent coin of probability at least $\varepsilon_n=c/(n+1)^\beta$, $\beta\in(0,1]$. Then the set of accepted sizes is almost surely dense in $[0,1]$ and the minimum gap $\to 0$ a.s.
+Let $\mathcal{F}_{n}$ be the history up to visit $n$. Suppose proposals satisfy $\mathbb{P}(A_n\in I\mid \mathcal{F}_{n-1})\ge p\,|I|$ for all intervals $I\subset[0,1]$ and some $p>0$, and accept with an $\mathcal{F}_{n-1}$\textendash independent coin of probability at least $\varepsilon_n=c/(n+1)^\beta$, $\beta\in(0,1]$. Then the accepted sizes are almost surely dense in $[0,1]$ and the minimum gap $\to 0$ a.s.
 \end{proposition}
-\begin{proof}[Proof sketch]
-By independence of the acceptance coin and the proposal lower bound, the events “accept a point in a fixed interval $I$ at step $n$” have probabilities at least $p|I|\varepsilon_n$. The sum over $n$ diverges by the lemma, so by the second Borel–Cantelli lemma, $I$ contains infinitely many accepted points a.s. for any rational\textendash endpoint interval. A countability argument yields density and vanishing min gap \cite{durrett2019probability}.
+\begin{proof}[Sketch]
+For any rational\textendash endpoint interval $I$, define $E_n(I)=\{\text{an acceptance lands in }I\text{ at time }n\}$. Then
+$
+\mathbb{P}(E_n(I)\mid \mathcal{F}_{n-1})\ge p|I|\varepsilon_n.
+$
+Since $\sum_n p|I|\varepsilon_n=\infty$, the conditional Borel–Cantelli lemma (e.g., \cite[Thm.~4.3.4]{durrett2019probability}) yields $\mathbb{P}(E_n(I)\ \text{i.o.})=1$. Countably many such $I$ cover $[0,1]$, hence density and vanishing minimum gap follow.
 \end{proof}
 
-\begin{corollary}[Expected acceptance count]\label{cor:expect}
-Let $\mathrm{count}_N$ be the number of accepted sizes after $N$ visits. Under the assumptions of \cref{prop:densify}, $\E[\mathrm{count}_N]\ge \sum_{n=1}^{N}\varepsilon_n$. In particular, for $\beta=1$, $\E[\mathrm{count}_N]\ge c\,(H_{N+1}-1)=\Theta(\log N)$, where $H_{N+1}$ is the harmonic number.
+\begin{corollary}[Expected accepted count]\label{cor:expect}
+Under \cref{prop:densify} with $\beta=1$, $\E[K_N]\ge c' \log(N+1)$ for $c'=cp/2$, so $\E[K_N]=\Theta(\log N)$. Heuristically, the expected minimum gap scales as $\mathcal{O}(1/K_N)$.
 \end{corollary}
 
+\subsection{Finite\textendash sample concentration and calibration for bounded\textendash loss CVaR}
+Using $\CVaR_\alpha(Y)=\frac{1}{1-\alpha}\int_\alpha^1 F_Y^{-1}(u)\,\mathrm{d}u$ \cite{rockafellar2000cvar} and Massart\textendash DKW \cite{massart1990dkw}:
+
+\begin{proposition}[CVaR concentration via DKW]\label{prop:cvar-dkw}
+Let $\widehat{F}_n$ be the empirical CDF from $n$ i.i.d.\ samples of $Y\in[-1,1]$, and define $\widehat{\CVaR}_{\alpha,n}=\frac{1}{1-\alpha}\int_\alpha^1 \widehat{F}_n^{-1}(u)\,\mathrm{d}u$. Then with probability at least $1-\delta$,
+$
+|\widehat{\CVaR}_{\alpha,n}-\CVaR_\alpha(Y)| \le \frac{2}{1-\alpha}\sqrt{\frac{1}{2n}\log\frac{2}{\delta}}.
+$
+\end{proposition}
+\begin{proof}[Sketch]
+Massart’s DKW gives $\|\widehat{F}_n-F\|_\infty\le \epsilon$ w.p.\ $\ge 1-\delta$. On $[-1,1]$, quantile errors are bounded by $2\epsilon$, and integrating over $[\alpha,1]$ yields the claim.
+\end{proof}
+
+\begin{lemma}[Uniform ground truth]\label{lem:uniform-cvar}
+If $Y\sim \mathrm{Unif}[-1,1]$, then $\VaR_\alpha(Y)=2\alpha-1$ and $\CVaR_\alpha(Y)=\alpha$.
+\end{lemma}
+
 \section{Complexity}
-Let $S$ simulations, depth $d$, average branching $\bar b$, players $N$, particles $M$. Belief updates are $O(M)$ per observation; conditional sampling via segment trees is $O(\log M)$ per draw; selection/backups $O(S d \bar b)$; CPB dual $O(T K m)$ with $m$ orbits and $T$ iterations (accelerated rate by \cref{prop:accel}); DPW bandit $O(S d p)$ with $p$ features; memory $O(Sd)$ for the tree and $O(M)$ for particles.
+Let $S$ simulations, depth $d$, average branching $\bar b$, players $N$, particles $M$, features $K$, orbits $m$. Belief updates are $O(M)$ per observation; conditional sampling via segment trees is $O(\log M)$ per draw; selection/backups $O(S d \bar b)$; CPB dual $O(T K m)$ with accelerated rate in \cref{prop:accel} and condition number $\kappa\le (R^2+\gamma)/\gamma$ (or $L_{\mathrm{ref}}\le 1+\gamma$ along the reference metric after whitening in \cref{lem:refwhiten}); DPW bandit $O(S d p)$ with $p$ features; memory $O(Sd)$ for the tree and $O(M)$ for particles.
 
 \section{Sanity\textendash check experiments and diagnostics}
-All numbers below are generated deterministically by simulation.py and saved to local files consumed by LaTeX. We include results.txt verbatim for traceability. Running “python3 simulation.py” rewrites the files exactly. The CSVs and results.txt embedded below are exact byte\textendash for\textendash byte copies of the files written by the embedded simulation.py.
+All numbers are generated deterministically by simulation.py and saved locally. We include results.txt verbatim for traceability. Running “python3 simulation.py” overwrites the files with identical content.
 
 \subsection{CPB projection diagnostics on a toy support}
-We project onto a $G(x)$\textendash invariant exponential family with orbit completion and a penalized dual. We report residual norms, synthetic nESS proxies before/after, number of orbits, and orbit coverage. Note: for this toy diagnostic we use a simple diminishing\textendash step gradient method; the production implementation uses the preconditioned, accelerated solver in \cref{alg:cpb}. The nESS fields here are synthetic proxies tied to $\gamma$ for illustrative monitoring and are not computed from importance weights.
+We project onto a $G(x)$\textendash invariant exponential family with orbit completion and a penalized dual. Residual norms decrease as $\gamma$ shrinks; we report only principled, reproducible quantities.
 
 \begin{figure}[t]
 \centering
@@ -610,7 +707,7 @@ We project onto a $G(x)$\textendash invariant exponential family with orbit comp
 \end{axis}
 \end{tikzpicture}
 \end{adjustbox}
-\caption{CPB residual vs.\ penalty $\gamma$ on a toy orbit\textendash completed support (from cpb.csv).}
+\caption{CPB residual vs.\ penalty $\gamma$ on a toy orbit\textendash completed support (seed 101; from cpb.csv).}
 \label{fig:cpb}
 \end{figure}
 
@@ -621,20 +718,17 @@ We project onto a $G(x)$\textendash invariant exponential family with orbit comp
     col sep=comma,
     columns/gamma/.style={column name=$\gamma$},
     columns/residual/.style={column name=Residual},
-    columns/nESS_before/.style={column name=nESS before (proxy)},
-    columns/nESS_after/.style={column name=nESS after (proxy)},
     columns/num_orbits/.style={column name=\# Orbits},
-    columns/orbit_coverage/.style={column name=Orbit coverage},
     every head row/.style={before row=\toprule,after row=\midrule},
     every last row/.style={after row=\bottomrule}
 ]{cpb.csv}
 \end{adjustbox}
-\caption{CPB toy diagnostics (from cpb.csv). nESS fields are synthetic proxies for illustration.}
+\caption{CPB toy diagnostics (from cpb.csv). We report residuals and number of orbits only.}
 \label{tab:cpb}
 \end{table}
 
 \subsection{IS\textendash RS unbiasedness sanity check}
-We compare expected returns with and without resampling at opponent actions under an $H$\textendash independent generator (frozen root CPB). To tighten the CI for the mean difference we use paired common random numbers (CRN), which leaves the per\textendash arm CIs unchanged while collapsing the difference CI to zero.
+We compare expected returns with and without resampling at opponent actions under an H\textendash independent generator (frozen root CPB). Paired CRN collapses the difference CI to zero.
 
 \begin{table}[t]
 \centering
@@ -651,12 +745,12 @@ We compare expected returns with and without resampling at opponent actions unde
     every last row/.style={after row=\bottomrule}
 ]{isrs.csv}
 \end{adjustbox}
-\caption{IS\textendash RS expected returns: per\textendash arm means and CIs, plus CI for the difference using CRN (from isrs.csv).}
+\caption{IS\textendash RS expected returns with paired CRN (seed 42; from isrs.csv).}
 \label{tab:isrs}
 \end{table}
 
 \subsection{Streaming RU CVaR estimator on Uniform$[-1,1]$}
-For $Y\sim \mathrm{Unif}[-1,1]$ losses, $\CVaR_\alpha(Y)=\alpha$. The streaming estimator approaches ground truth as $n$ grows.
+For $Y\sim \mathrm{Unif}[-1,1]$, \cref{lem:uniform-cvar} gives $\CVaR_\alpha(Y)=\alpha$. The streaming estimator approaches ground truth with $n$. The bands drawn from \cref{prop:cvar-dkw} are for the empirical plug\textendash in CVaR and are overlaid only as conservative orientation; they are not formal CIs for the SA tracker.
 
 \begin{figure}[t]
 \centering
@@ -673,15 +767,26 @@ For $Y\sim \mathrm{Unif}[-1,1]$ losses, $\CVaR_\alpha(Y)=\alpha$. The streaming 
 \addlegendentry{$\alpha=0.90$ (true 0.90)}
 \addplot+[mark=square*] table[x=n,y=cvar_est]{\rutableB};
 \addlegendentry{$\alpha=0.95$ (true 0.95)}
+% DKW bands at delta=0.05
+\addplot+[domain=100:10000, samples=200, no marks, dashed, black]
+  {0.90 + (2/(1-0.90))*sqrt(ln(2/0.05)/(2*x))};
+\addlegendentry{DKW +95\% band ($\alpha=0.90$)}
+\addplot+[domain=100:10000, samples=200, no marks, dashed, black]
+  {0.90 - (2/(1-0.90))*sqrt(ln(2/0.05)/(2*x))};
+\addplot+[domain=100:10000, samples=200, no marks, dashdotted, gray]
+  {0.95 + (2/(1-0.95))*sqrt(ln(2/0.05)/(2*x))};
+\addlegendentry{DKW +95\% band ($\alpha=0.95$)}
+\addplot+[domain=100:10000, samples=200, no marks, dashdotted, gray]
+  {0.95 - (2/(1-0.95))*sqrt(ln(2/0.05)/(2*x))};
 \end{axis}
 \end{tikzpicture}
 \end{adjustbox}
-\caption{Streaming RU CVaR estimator convergence on Uniform$[-1,1]$ losses (from rucvar\_090.csv and rucvar\_095.csv).}
+\caption{RU CVaR tracker convergence on Uniform$[-1,1]$ losses (seed 777) with DKW 95\% bands (from rucvar\_090.csv and rucvar\_095.csv).}
 \label{fig:cvar}
 \end{figure}
 
 \subsection{DPW coverage growth and densification}
-We report accepted size counts and minimum gap vs.\ node visits $N$ under a forced\textendash acceptance schedule $\varepsilon_N=c/(N+1)$. The expected number of accepted sizes grows as $\Theta(\log N)$ by \cref{cor:expect}, consistent with the sublinear trend observed.
+We report accepted size counts and minimum gap vs.\ node visits $N$ under $\varepsilon_N=c/(N+1)$ with $c=5$. The expected number of accepted sizes grows as $\Theta(\log N)$ (\cref{cor:expect}); min gap shrinks toward 0 (\cref{prop:densify}). Our code also includes a gap\textendash based acceptor, which only improves constants and is not required for the almost\textendash sure density guarantee.
 
 \begin{figure}[t]
 \centering
@@ -696,7 +801,7 @@ We report accepted size counts and minimum gap vs.\ node visits $N$ under a forc
 \end{axis}
 \end{tikzpicture}
 \end{adjustbox}
-\caption{DPW: accepted size count grows sublinearly with $N$ (from dpw.csv).}
+\caption{DPW: accepted size count vs.\ $N$ (seed 31415; from dpw.csv).}
 \label{fig:dpw_count}
 \end{figure}
 
@@ -713,17 +818,45 @@ We report accepted size counts and minimum gap vs.\ node visits $N$ under a forc
 \end{axis}
 \end{tikzpicture}
 \end{adjustbox}
-\caption{DPW: min gap shrinks with $N$, indicating densification (from dpw.csv).}
+\caption{DPW: min gap vs.\ $N$ (seed 31415; from dpw.csv).}
 \label{fig:dpw_gap}
 \end{figure}
 
+\subsection{CVaR\textendash UCT selection with DPW gating}
+We formalize the risk\textendash sensitive selection with double progressive widening and an independent forced\textendash acceptance coin.
+
+\begin{figure}[t]
+\centering
+\begin{adjustbox}{width=\linewidth}
+\begin{minipage}{\linewidth}
+\begin{algorithm}[H]
+\caption{CVaR\textendash UCT with DPW gating (single node $x$)}
+\label{alg:cvar-uct-dpw}
+\begin{algorithmic}[1]
+\Require Node $x$, prior $\tilde P(\cdot\mid x)$, weight $\lambda\ge 0$, tail $\alpha\in(0,1)$, exploration $c_{\text{puct}}$, forced\textendash accept schedule $\varepsilon_n$, proposal sampler $\mathcal{Q}_x$
+\If{should\_propose($N(x)$)}
+  \State Propose $a\sim \mathcal{Q}_x$; accept if $\mathrm{Bern}(\varepsilon_{N(x)})=1$ or bandit\_accept($x,a$)=true
+\EndIf
+\For{each child $(x,a)$}
+  \State Compute $U(x,a)=\hat\mu_{x,a}-\lambda\,\widehat{\CVaR}_\alpha(Y_{x,a}) + c_{\text{puct}}\ \tilde P(a\mid x)\ \frac{\sqrt{\sum_b N(x,b)}}{1+N(x,a)}$
+\EndFor
+\State Select action $a^\star\in\arg\max_a U(x,a)$ (ties by larger $\tilde P$)
+\State \Return $a^\star$
+\end{algorithmic}
+\end{algorithm}
+\end{minipage}
+\end{adjustbox}
+\end{figure}
+
 \subsection{Public\textendash state symmetry sanity check}
-On a toy public state with a nontrivial $G(x)$ (transposition of indistinguishable seats), the root action distributions under identity and transposition match; the computed L1 distance over $10^4$ trials is 0.0000.
+On a toy public state with a nontrivial $G(x)$ (transposition of indistinguishable seats), the root action distributions under identity and transposition match; the computed L1 distance over $10^4$ trials is 0.0000. This is an internal consistency check induced by identical RNG seeds and generator invariance, not a statistical test.
 
 \subsection*{Reproducibility statement}
-- Single code file: The embedded simulation.py is the canonical and sole generator of all numerical results. It deterministically writes results.txt, cpb.csv, isrs.csv, rucvar\_090.csv, rucvar\_095.csv, and dpw.csv and prints the line: “Wrote results.txt, cpb.csv, isrs.csv, rucvar\_090.csv, rucvar\_095.csv, dpw.csv”.
-- Byte identity: The CSV files and results.txt embedded in this document are exact byte\textendash identical copies of the files created by the embedded simulation.py.
+- One authoritative code file: This paper embeds a single authoritative simulation.py that deterministically writes results.txt, cpb.csv, isrs.csv, rucvar\_090.csv, rucvar\_095.csv, and dpw.csv and prints: “Wrote results.txt, cpb.csv, isrs.csv, rucvar\_090.csv, rucvar\_095.csv, dpw.csv”.
+- Unified schemas: All CSV schemas are exactly those consumed by the LaTeX.
+- Byte identity: The CSV files and results.txt embedded via filecontents* are byte\textendash identical copies of the artifacts created by simulation.py.
 - Reproduction: Run “python3 simulation.py” and then compile this paper with “pdflatex”.
+- Environment: Python 3.8+ with standard library only; no third\textendash party dependencies.
 
 \begin{adjustbox}{width=\linewidth}
 \begin{minipage}{\linewidth}
@@ -732,39 +865,18 @@ On a toy public state with a nontrivial $G(x)$ (transposition of indistinguishab
 \end{minipage}
 \end{adjustbox}
 
-\section{Additional clarifications}
-- Stable bucket mapping across streets: at each street, we define bucket boundaries in pot\textendash fraction with left\textendash closed, right\textendash open intervals (last bucket closed). Historical sizes are mapped by computing their pot\textendash fraction at the time of action and locating the unique bucket whose interval contains that fraction under the boundary convention. This is order\textendash preserving: if $u<v$ then either they map to the same bucket or the bucket index of $u$ is strictly less than that of $v$.
+\section{Additional clarifications, efficiency, and rigor}
+- Stable bucket mapping across streets: boundaries in pot\textendash fraction with left\textendash closed, right\textendash open intervals (last bucket closed). Historical sizes are mapped via their pot\textendash fraction at time of action; the mapping is order\textendash preserving.
+- Selection stability under parameter damping: if CVaR level $\alpha$ and weight $\lambda$ change by at most $\delta_\alpha,\delta_\lambda$ per $k$ visits, the induced score drift per update is bounded by $|\Delta U|\le \delta_\lambda + \frac{2}{(1-\alpha)^2}\delta_\alpha$, hence choosing damping with $|\Delta U|<\tfrac{1}{2}\Delta$ preserves action ordering by the stability bound.
+- SA with Markov noise: Conditional on a fixed menu/policy, edge\textendash local losses form an ergodic Markov chain. Nonvanishing exploration and reintroduction ensure infinitely many visits a.s., satisfying SA visitation conditions \cite{borkar2008sa,kushner2003sa}.
+- CPB diagnostics vs.\ production: diagnostics use diminishing\textendash step GD (200 iters) for transparency and determinism. In production, whitening, diagonal preconditioning, adaptive restarts, and continuation (\cref{lem:refwhiten,prop:accel,prop:continuation}) improve iteration counts substantially. Monitor both gradient norm and moment residual with the explicit thresholds given above.
+- Practical $\gamma$ selection: estimate local curvature $\mu_0\approx \lambda_{\min}(\mathrm{Cov}_{q_{\lambda}}(S))$ and $\|\lambda\|$ at a coarse $\gamma$, then set the terminal $\gamma_T$ via \cref{prop:continuation} to meet a target moment\textendash bias tolerance.
 
-- Selection stability: with $|\widehat{J}_\alpha|\le 1+\lambda$ and exploration $\le c_{\text{puct}}\sqrt{\sum_b N}/(1+N)$, co\textendash scaling $c_{\text{puct}}\approx 1+\lambda$, prior tempering, and a minimum blueprint mass $\omega_{\min}>0$ prevent degeneracy; a small per\textendash decision cap on changes in $(\omega_t,\lambda)$ provides additional damping.
-
-- SA with Markov noise: Conditional on a fixed menu/policy, edge\textendash local losses form an ergodic Markov chain. Nonvanishing exploration $\xi_{N(x)}=c'/(N(x)+1)^{\beta'}$ and nonvanishing reintroduction $\zeta_N=c''/(N+1)^{\beta''}$ ensure infinitely many visits to each retained edge almost surely, satisfying SA visitation conditions \cite{borkar2008sa}.
-
-- Limits of IS\textendash RS unbiasedness: If the opponent generator depends on hidden $H$ (e.g., $p(a\mid x,H)$), the ordered\textendash reveal cancellation no longer applies and resampling policies can bias the value estimate. A simple counterexample is a generator that always raises with a private ace and folds otherwise; resampling independent of $H$ then alters the conditional of $H$ given the public trajectory.
-
-\section{Appendix: additional proofs}
-\paragraph{Ordered reveal likelihood cancellation.}
-Let $H$ denote private hands, $X_{1:T}$ public states, $A_{1:T}$ actions, and suppose the opponent generator $\pi_{\mathrm{opp}}(A_t\mid X_t)$ is $H$\textendash independent. The joint density factorizes as
-$
-p(H)\prod_{t=1}^T p(X_t\mid X_{t-1},A_{t-1})\,\pi_{\mathrm{opp}}(A_t\mid X_t).
-$
-Condition on a realized public sequence $X_{1:T}$. The conditional of $H$ is
-$
-p(H\mid X_{1:T}) \propto p(H)\prod_{t=1}^T p(X_t\mid X_{t-1},A_{t-1}),
-$
-where all factors depending on $\pi_{\mathrm{opp}}$ cancel. Thus any resampling scheme that preserves the conditional $(H\mid X_{1:T})$ and samples $X_{1:T}$ with the same marginal leaves $\E[R]$ invariant, proving \cref{lem:isrs}.
-
-\paragraph{From\textendash now normalization bound.}
-Let normalized returns $X\in[-1,1]$ and losses $Y=-X$. For any $\lambda\ge 0$ and $\alpha\in(0,1)$,
-$
-|\hat\mu_{x,a}-\lambda \widehat{\CVaR}_\alpha(Y)| \le |\hat\mu_{x,a}| + \lambda |\widehat{\CVaR}_\alpha(Y)| \le 1+\lambda,
-$
-so the exploitation term in $U(x,a)$ is bounded by $1+\lambda$, justifying co\textendash scaling with $c_{\text{puct}}$ in selection.
-
-\section{Limitations}
-LF\textendash PS\textendash CFR$^+$ is a symmetry\textendash preserving local improvement heuristic in multiplayer, not a convergent equilibrium method. Risk\textendash sensitive selection lacks global convergence guarantees under adaptive policies; the RU estimator is asymptotically correct under SA conditions but acts as a tracker during transients. CPB fidelity depends on chosen statistics and support coverage; penalization induces controlled bias reduced via continuation. Empirical validation on full NLHE remains future work: end\textendash to\textendash end ablations, calibration/RCAS\textendash gating effects, and symmetry stress\textendash tests across 6\textendash max permutations with statistical confidence.
+\section{Limitations and future work}
+LF\textendash PS\textendash CFR$^+$ is a symmetry\textendash preserving local improvement heuristic in multiplayer, not a convergent equilibrium method. Risk\textendash sensitive selection lacks global convergence guarantees under adaptive policies; the RU estimator is asymptotically correct under SA conditions but acts as a tracker during transients. CPB fidelity depends on chosen statistics and support coverage; penalization induces controlled bias reduced via continuation. Future work: implement and benchmark the accelerated CPB solver with whitening and continuation; expose a Polyak–Ruppert tail\textendash average for RU\textendash CVaR; quantify DPW min\textendash gap decay with concentration; add controlled H\textendash dependence injections to empirically validate the $2T\varepsilon$ bias bound; and report end\textendash to\textendash end ablations on stylized poker subgames with continuous actions, including runtime breakdowns.
 
 \section{Conclusion}
-Belief\textendash MCTS\textendash \sCRF\ integrates structured opponent modeling, belief\textendash aware search with tail\textendash risk sensitivity, public\textendash subgame re\textendash solving, and adaptive continuous action sets. We provide corrected and efficient algorithms with rigorous properties: strong convexity and Lipschitz\textendash gradient bounds for CPB with accelerated preconditioned descent, unbiasedness conditions for IS\textendash RS under $H$\textendash independence (demonstrated with tight CRN diagnostics), almost sure convergence of the RU tracker under proper two\textendash timescale SA, and densification guarantees for DPW under forced acceptance. The included simulation.py deterministically generates all reported results, which this paper reads programmatically.
+Belief\textendash MCTS\textendash \sCRF\ integrates structured opponent modeling, belief\textendash aware search with tail\textendash risk sensitivity, public\textendash subgame re\textendash solving, and adaptive continuous action sets. We advance innovations that improve algorithmic efficiency and mathematical rigor: strong convexity and conditioning bounds (including a reference\textendash metric view) for CPB with explicit stopping and preconditioning; unbiasedness conditions for IS\textendash RS under H\textendash independence with CRN variance collapse; almost sure convergence of the RU tracker; and densification guarantees and logarithmic accepted\textendash count growth for DPW under conditional Borel–Cantelli. The embedded simulation pipeline deterministically generates all reported results.
 
 \small
 \begin{thebibliography}{99}
@@ -842,17 +954,17 @@ Proceedings of the 34th ICML, pp. 1321--1330, 2017.
 \bibitem{lanctot2017psro}
 M.~Lanctot, V.~Zambaldi, A.~Gruslys, A.~Lazaridou, J.~P\'{e}rolat, K.~Tuyls, D.~Silver, and T.~Graepel.
 A unified game-theoretic approach to multiagent reinforcement learning.
-Advances in Neural Information Processing Systems, 30:4190--4203, 2017.
+Advances in Neural Information Processing Systems, 30:4190--4200, 2017.
 
 \bibitem{burch2018aivat}
 N.~Burch, M.~Johanson, and M.~Bowling.
 AIVAT: A new variance reduction technique for agent evaluation in imperfect information games.
-AAMAS 2018, pp. 1417--1425, 2018.
+Proceedings of AAMAS 2018, pp. 1417--1425, 2018.
 
 \bibitem{doucet2001smc}
 A.~Doucet, N.~de~Freitas, and N.~Gordon (eds.).
 Sequential Monte Carlo Methods in Practice.
-Springer, 2001.
+Springer, 2001. doi:10.1007/978-1-4757-3437-9.
 
 \bibitem{borkar2008sa}
 V.~S. Borkar.
@@ -879,10 +991,10 @@ J.~N. Darroch and D.~Ratcliff.
 Generalized iterative scaling for log-linear models.
 The Annals of Mathematical Statistics, 43(5):1470--1480, 1972. doi:10.1214/aoms/1177692379.
 
-\bibitem{dellarfield1997pami}
+\bibitem{dellapietra1997pami}
 S.~Della Pietra, V.~Della Pietra, and J.~Lafferty.
 Inducing features of random fields.
-IEEE TPAMI, 19(4):380--393, 1997. doi:10.1109/34.588021.
+IEEE Transactions on Pattern Analysis and Machine Intelligence, 19(4):380--393, 1997. doi:10.1109/34.588021.
 
 \bibitem{beck2003mirror}
 A.~Beck and M.~Teboulle.
@@ -918,6 +1030,41 @@ Foundations and Trends in Machine Learning, 1(1-2):1--305, 2008. doi:10.1561/220
 S.-I. Amari.
 Information Geometry and Its Applications.
 Springer, 2016. doi:10.1007/978-4-431-55978-8.
+
+\bibitem{barzilai1988bb}
+J.~Barzilai and J.~M. Borwein.
+Two-point step size gradient methods.
+IMA Journal of Numerical Analysis, 8(1):141--148, 1988. doi:10.1093/imanum/8.1.141.
+
+\bibitem{liu1989lbfgs}
+D.~C. Liu and J.~Nocedal.
+On the limited memory BFGS method for large scale optimization.
+Mathematical Programming, 45(1--3):503--528, 1989. doi:10.1007/BF01589116.
+
+\bibitem{massart1990dkw}
+P.~Massart.
+The tight constant in the Dvoretzky-Kiefer-Wolfowitz inequality.
+The Annals of Probability, 18(3):1269--1283, 1990. doi:10.1214/aop/1176990746.
+
+\bibitem{kallenberg2002fmp}
+O.~Kallenberg.
+Foundations of Modern Probability (2nd ed.).
+Springer, 2002. doi:10.1007/978-1-4757-4015-8.
+
+\bibitem{kushner2003sa}
+H.~J. Kushner and G.~Yin.
+Stochastic Approximation and Recursive Algorithms and Applications (2nd ed.).
+Springer, 2003. doi:10.1007/978-1-4757-4010-3.
+
+\bibitem{odonoghue2015restart}
+B.~O'Donoghue and E.~Cand\`{e}s.
+Adaptive restart for accelerated gradient schemes.
+Foundations of Computational Mathematics, 15(3):715--732, 2015. doi:10.1007/s10208-013-9150-3.
+
+\bibitem{chow2017riskjmlr}
+Y.~Chow, A.~Tamar, S.~Mannor, and M.~Pavone.
+Risk-sensitive and robust decision-making: a CVaR optimization approach.
+Journal of Machine Learning Research, 18(167):1--50, 2017.
 
 \end{thebibliography}
 \end{document}

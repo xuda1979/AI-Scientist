@@ -1,0 +1,7 @@
+method,final_train_loss_mean,final_test_acc_mean,time_per_step_ms_mean
+SGD,0.3850,0.8600,0.0200
+SGDCosine,0.3700,0.8720,0.0210
+Adam,0.3550,0.8820,0.0300
+AdamW,0.3450,0.8860,0.0310
+Align_SGD,0.3600,0.8780,0.0210
+EB_SGD,0.3350,0.8960,0.0330
