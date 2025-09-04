@@ -1,0 +1,6 @@
+method,best_lr,best_final_acc
+SGD,0.1,0.9622
+SGDCosine,0.1,0.9606
+Adam,0.02,0.9622
+AdamW,0.02,0.9622
+EB_SGD,0.03,0.9596

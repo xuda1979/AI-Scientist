@@ -213,22 +213,6 @@ def extract_simulation_from_tex(tex_path: Path, sim_path: Path) -> bool:
     sim_path.write_text(py, encoding="utf-8")
     print(f"✅ Used extracted simulation code")
     return True
-            backup_path.write_text(py, encoding="utf-8")
-            print(f"💾 Saved extracted LaTeX code to {backup_path.name} for reference")
-            return True
-            
-        elif compatibility['recommendation'] == 'merge_possible':
-            # For now, preserve existing but suggest manual review
-            backup_path = sim_path.parent / "simulation_extracted_candidate.py"
-            backup_path.write_text(py, encoding="utf-8")
-            print(f"� Saved extracted code as merge candidate to {backup_path.name}")
-            print("💡 Consider manually reviewing and merging the best features from both")
-            return True
-    
-    # Use extracted simulation if no existing file or extraction is better
-    sim_path.write_text(py, encoding="utf-8")
-    print(f"✅ Used extracted simulation code")
-    return True
 
 def run_simulation_with_smart_fixing(
     sim_path: Path, 

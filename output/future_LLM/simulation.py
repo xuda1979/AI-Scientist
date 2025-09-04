@@ -1,31 +1,5 @@
-#!/usr/bin/env python3
-"""
-Test-Time Compute Scaling Simulation for Future LLM Research
-
-This simulation demonstrates test-time compute scaling where we generate multiple
-candidate responses and select the best one, showing how additional compute at
-inference time can improve performance quality.
-
-Simulation covers:
-1. Candidate generation with different strategies
-2. Quality evaluation metrics
-3. Selection mechanisms
-4. Performance scaling analysis
-5. Computational efficiency trade-offs
-"""
-
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import time
-import random
-from typing import List, Dict, Tuple, Any
-import json
-import os
-
-# Set random seeds for reproducibility
-np.random.seed(42)
-random.seed(42)
+# Auto-generated from LaTeX code blocks; consolidate all simulation here.
+# === Begin extracted block 1 ===
 #!/usr/bin/env python3
 # Reproducible EB-SGD experiments and ablations.
 # How to run: python3 simulation.py
@@ -39,11 +13,15 @@ random.seed(42)
 # - grid_lr.csv (small learning-rate grid for fairness)
 # - best_grid.csv (best-of-grid summary used by the fairness figure)
 # All numbers in the manuscript are read from these files.
+
 import numpy as np, time, json, sys, platform, math
 
-def sigmoid(z): return 1.0/(1.0+np.exp(-z))
+def sigmoid(z):
+    "Numerically stable logistic function."
+    return 1.0/(1.0+np.exp(-z))
 
 def loss_and_grad_logreg(w, Xb, yb, lam=1e-4):
+    "Binary logistic loss and gradient with L2 regularization for a minibatch."
     p = sigmoid(Xb.dot(w))
     eps = 1e-12
     loss = -np.mean(yb*np.log(p+eps)+(1-yb)*np.log(1-p+eps)) + 0.5*lam*np.sum(w*w)
@@ -51,6 +29,7 @@ def loss_and_grad_logreg(w, Xb, yb, lam=1e-4):
     return loss, grad
 
 def accuracy_logreg(w, X, y):
+    "Binary accuracy for logistic regression."
     p = sigmoid(X.dot(w))
     yhat = (p>0.5).astype(np.float64)
     return float((yhat==y).mean())
@@ -58,20 +37,24 @@ def accuracy_logreg(w, X, y):
 def relu(x): return np.maximum(0.0, x)
 
 def init_mlp(d, h, k, rng):
+    "He initialization for a 2-layer ReLU MLP."
     return {"W1": rng.randn(d,h)*np.sqrt(2.0/d), "b1": np.zeros(h),
             "W2": rng.randn(h,k)*np.sqrt(2.0/h), "b2": np.zeros(k)}
 
 def softmax(z):
+    "Row-wise softmax."
     z = z - z.max(axis=1, keepdims=True)
     e = np.exp(z)
     return e/np.sum(e, axis=1, keepdims=True)
 
 def mlp_forward(params, X):
+    "Forward pass for the 2-layer MLP."
     h = relu(X.dot(params["W1"]) + params["b1"])
     logits = h.dot(params["W2"]) + params["b2"]
     return h, logits
 
 def mlp_loss_and_grad(params, Xb, yb, lam=1e-4):
+    "Cross-entropy loss and gradients for the MLP on a minibatch."
     h, logits = mlp_forward(params, Xb)
     P = softmax(logits)
     n = Xb.shape[0]
@@ -85,14 +68,22 @@ def mlp_loss_and_grad(params, Xb, yb, lam=1e-4):
     return loss, {"W1": dW1, "b1": db1, "W2": dW2, "b2": db2}
 
 def mlp_accuracy(params, X, y):
+    "Classification accuracy for the MLP."
     _, logits = mlp_forward(params, X)
     yhat = np.argmax(logits, axis=1)
     return float((yhat==y).mean())
 
-def unit(v): n = np.linalg.norm(v)+1e-12; return v/n
+def unit(v):
+    "Safe normalization to unit vector."
+    n = np.linalg.norm(v)+1e-12
+    return v/n
 
 def vMF_entropy_from_window(grad_dir_window):
-    # vMF entropy proxy from mean resultant length R in R^d; monotone in R
+    """
+    vMF-based directional entropy proxy from a window of unit vectors in R^d.
+    Uses mean resultant length R and a monotone heuristic for kappa(R).
+    Returns a squashed value in [0,1] for robustness.
+    """
     if len(grad_dir_window)==0: return 0.5*np.log(2*np.pi)
     d = grad_dir_window.shape[1]
     R_vec = grad_dir_window.mean(axis=0); R = float(np.linalg.norm(R_vec))
@@ -105,6 +96,7 @@ def vMF_entropy_from_window(grad_dir_window):
 
 def run_logreg_once(seed, method, epochs=20, batch=64, base_eta=0.05, d=20, N_train=2000, N_test=1000,
                     eb_target=0.65, eb_alpha=2.0, W=50, align_target=0.70, align_beta=2.0):
+    "Single run of the synthetic logistic regression task with the specified optimizer."
     rng = np.random.RandomState(seed)
     X = rng.randn(N_train + N_test, d)
     w_true = rng.randn(d)
@@ -176,33 +168,9 @@ def run_logreg_once(seed, method, epochs=20, batch=64, base_eta=0.05, d=20, N_tr
         results.append((ep, float(tr_loss), float(acc), eta_mean, ent_mean, align_mean, float(step_time)))
     return results
 
-def mlp_forward(params, X):
-    h = relu(X.dot(params["W1"]) + params["b1"])
-    logits = h.dot(params["W2"]) + params["b2"]
-    return h, logits
-
-def mlp_loss_and_grad(params, Xb, yb, lam=1e-4):
-    h, logits = mlp_forward(params, Xb)
-    P = softmax(logits)
-    n = Xb.shape[0]
-    y_one = np.zeros_like(P); y_one[np.arange(n), yb] = 1.0
-    loss = -np.sum(y_one*np.log(P+1e-12))/n
-    loss += 0.5*lam*(np.sum(params["W1"]**2)+np.sum(params["W2"]**2))
-    dlogits = (P - y_one)/n
-    dW2 = h.T.dot(dlogits) + lam*params["W2"]; db2 = dlogits.sum(axis=0)
-    dh = dlogits.dot(params["W2"].T); dh[h<=0] = 0.0
-    dW1 = Xb.T.dot(dh) + lam*params["W1"]; db1 = dh.sum(axis=0)
-    return loss, {"W1": dW1, "b1": db1, "W2": dW2, "b2": db2}
-
-def mlp_accuracy(params, X, y):
-    _, logits = mlp_forward(params, X)
-    yhat = np.argmax(logits, axis=1)
-    return float((yhat==y).mean())
-
-def unit(v): n = np.linalg.norm(v)+1e-12; return v/n
-
 def run_mlp_once(seed, method, epochs=15, batch=128, base_eta=0.05, d=40, h=64, k=4, N_train=4000, N_test=1000,
                  eb_target=0.60, eb_alpha=1.5, W=50):
+    "Single run of the synthetic 4-class MLP task with the specified optimizer."
     rng = np.random.RandomState(seed)
     X = rng.randn(N_train+N_test, d)
     centers = rng.randn(k, d)
@@ -252,6 +220,7 @@ def run_mlp_once(seed, method, epochs=15, batch=128, base_eta=0.05, d=40, h=64, 
 
 def aggregate_over_seeds_logreg(seeds, methods, epochs=20, d=20, N_train=2000, N_test=1000,
                                 eb_target=0.65, eb_alpha=2.0, W=50, align_target=0.70, align_beta=2.0):
+    "Aggregate metrics over seeds for the logistic task; compute means, CIs, and diagnostics."
     per_method = {m: [] for m in methods}
     base_etas = {'SGD':0.05, 'SGDM':0.05, 'SGDCosine':0.05, 'RMSprop':0.01, 'Adam':0.02, 'AdamW':0.02, 'Align_SGD':0.05, 'EB_SGD':0.03}
     for s in seeds:
@@ -293,12 +262,13 @@ def aggregate_over_seeds_logreg(seeds, methods, epochs=20, d=20, N_train=2000, N
     return agg, summary
 
 def write_csv(path, header, rows):
+    "Write a CSV file given header (list) and rows (list of lists)."
     with open(path, "w") as f:
         f.write(",".join(header)+"\n")
         for r in rows: f.write(",".join(r)+"\n")
 
 def small_lr_grid(seeds, method, lrs, epochs=20):
-    # Returns mean final accuracy over seeds for each lr
+    "Evaluate a small learning-rate grid; return mean final accuracy over seeds for each lr."
     results = []
     for lr in lrs:
         finals=[]
@@ -309,6 +279,7 @@ def small_lr_grid(seeds, method, lrs, epochs=20):
     return results
 
 def main():
+    "Main entry point to generate all result files used by the manuscript."
     seeds = list(range(10))
     methods = ['SGD','SGDM','SGDCosine','RMSprop','Adam','AdamW','Align_SGD','EB_SGD']
     epochs = 20; d = 20; N_train, N_test = 2000, 1000
@@ -446,7 +417,6 @@ def main():
     best = {}
     for m in grid_methods:
         results = small_lr_grid(grid_seeds, m, lr_grid[m], epochs=15)
-        # write rows and track best
         best_lr, best_acc = None, -1.0
         for lr, acc in results:
             rows.append([m, f"{lr}", f"{acc:.4f}"])

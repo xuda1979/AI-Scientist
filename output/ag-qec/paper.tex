@@ -33,7 +33,7 @@
   output-exponent-marker = \mathrm{e}
 }
 \DeclareSIUnit\dBm{dBm}
-\newcommand{\nexact}[1]{\num[round-mode=off]{#1}}
+\newcommand{\nexact}[1]{#1}
 
 \newcommand{\ie}{i.e.,\xspace}
 \newcommand{\eg}{e.g.,\xspace}
@@ -635,7 +635,6 @@ Algorithm~\ref{alg:mc} summarizes the Monte Carlo used in the script. Note that 
 \begin{algorithm}[t!]
 \small
 \caption{BDD Monte Carlo under Model 2 (per script)}\label{alg:mc}
-\begin{adjustbox}{width=\linewidth}
 \begin{algorithmic}[1]
 \Require Code length \(n\), radius \(t\), persistence \(\rho\), burst factor \(\beta\), baseline \(p_X,p_Z\), trials \(T\)
 \State failures \(\gets 0\)
@@ -648,7 +647,6 @@ Algorithm~\ref{alg:mc} summarizes the Monte Carlo used in the script. Note that 
 \EndFor
 \State Report \(\hat P_L=\) failures/\(T\) with a 95\% Wilson CI \cite{Wilson1927JASA}
 \end{algorithmic}
-\end{adjustbox}
 \end{algorithm}
 
 \section{Attenuation Calibration: Sensitivity to dB-to-neper Conversion}\label{sec:atten}

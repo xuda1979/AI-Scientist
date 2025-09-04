@@ -1,0 +1,35 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\usepackage{xspace}
+
+\sisetup{
+  detect-weight = true,
+  detect-family = true,
+  exponent-mode = scientific,
+  scientific-notation = true,
+  round-mode = places,
+  round-precision = 4,
+  separate-uncertainty = true,
+  output-exponent-marker = \mathrm{e}
+}
+
+\newcommand{\nexact}[1]{#1}
+
+\begin{document}
+
+\title{Test Document}
+\author{Test}
+\maketitle
+
+\begin{abstract}
+Test \nexact{123} abstract.
+\end{abstract}
+
+\section{Introduction}
+This is a test.
+
+\end{document}

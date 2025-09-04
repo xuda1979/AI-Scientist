@@ -7,6 +7,7 @@ Extended workflow:
 """
 from __future__ import annotations
 import argparse
+import difflib
 import json
 import os
 import re
@@ -28,7 +29,7 @@ try:
     GOOGLE_AI_AVAILABLE = True
 except ImportError:
     GOOGLE_AI_AVAILABLE = False
-    print("⚠️ Google AI SDK not installed. Run: pip install google-generativeai")
+    print("WARNING: Google AI SDK not installed. Run: pip install google-generativeai")
 
 # Local helpers
 from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex, run_simulation_with_smart_fixing, summarize_simulation_outputs
@@ -50,11 +51,15 @@ class WorkflowConfig:
     max_doi_cache_size: int = 1000
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
+    output_diffs: bool = False  # Optional diff output for each review/revision cycle
     
     # Test-time compute scaling parameters
     use_test_time_scaling: bool = False
     revision_candidates: int = 3
     initial_draft_candidates: int = 1
+    
+    # Combined approach - single API call for review/editorial/revision with diffs
+    use_combined_approach: bool = True  # Always True - this is the only approach
     
     def __post_init__(self):
         if self.fallback_models is None:
@@ -355,6 +360,41 @@ def _create_simulation_fixer(model: str, request_timeout: Optional[int] = None):
             return {"action": "accept", "reason": f"Unexpected error: {str(e)}"}
     
     return _fix_simulation
+
+def _save_iteration_diff(old_content: str, new_content: str, output_dir: Path, iteration: int, filename: str = "paper.tex"):
+    """
+    Generate and display a unified diff between old and new file content to terminal only.
+    
+    Args:
+        old_content: Content before revision
+        new_content: Content after revision  
+        output_dir: Directory (unused - no files saved)
+        iteration: Current iteration number
+        filename: Name of the file being diffed (default: paper.tex)
+    """
+    try:
+        # Generate unified diff
+        diff_lines = list(difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            new_content.splitlines(keepends=True),
+            fromfile=f"{filename} (before iteration {iteration})",
+            tofile=f"{filename} (after iteration {iteration})",
+            lineterm=""
+        ))
+        
+        if diff_lines:
+            print(f"\n{'='*80}")
+            print(f"📝 DIFF FOR ITERATION {iteration} - {filename}")
+            print(f"{'='*80}")
+            # Print diff to terminal
+            for line in diff_lines:
+                print(line, end='')
+            print(f"{'='*80}\n")
+        else:
+            print(f"📝 No changes detected in iteration {iteration}")
+            
+    except Exception as e:
+        print(f"⚠️ Failed to generate diff for iteration {iteration}: {e}")
 
 def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
     """
@@ -1455,12 +1495,26 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         
         "CRITICAL REQUIREMENTS - NO EXCEPTIONS:\n"
         "1. SINGLE FILE ONLY: Create ONE LaTeX file with NO separate bibliography files\n"
-        "2. EMBEDDED REFERENCES: Include ALL references using \\begin{filecontents*}{refs.bib}...\\end{filecontents*} at the TOP of the file\n"
+        "2. EMBEDDED REFERENCES MANDATORY: Include ALL references directly in the paper.tex file using EITHER:\n"
+        "   - \\begin{filecontents*}{refs.bib}...\\end{filecontents*} at the TOP of the file, OR\n"
+        "   - \\begin{thebibliography}...\\end{thebibliography} at the END of the file\n"
+        "   - NO separate refs.bib files are allowed - everything must be in paper.tex\n"
+        "   - Use \\bibliography{refs} to reference the embedded filecontents\n"
         "3. COMPILABLE: The file must compile successfully with pdflatex\n"
-        "4. REAL REFERENCES ONLY: All references must be authentic, published works with correct details (authors, titles, journals, years, DOIs). NO FAKE or PLACEHOLDER references.\n"
-        "5. SELF-CONTAINED CONTENT: ALL tables, figures, diagrams must be defined within the LaTeX file using TikZ, tabular, or other LaTeX constructs. NO external image files.\n"
-        "6. DATA-DRIVEN RESULTS: All numerical values in tables/figures must come from actual simulation results, not made-up numbers.\n"
-        "7. SIMULATION REQUIREMENTS: If the paper needs numerical results, you MUST include a comprehensive simulation.py file with:\n"
+        "4. NO FILENAMES IN TEXT: The paper text must NOT contain ANY references to specific filenames, code files, data files, or directory structures. Avoid:\n"
+        "   - Specific filenames like 'simulation.py', 'results.txt', 'data.csv', 'model.pkl', etc.\n"
+        "   - Directory paths like 'output/', 'src/', 'data/', etc.\n"
+        "   - File extensions like '.py', '.txt', '.csv', '.pkl', etc.\n"
+        "   - Use generic descriptions like 'our implementation', 'experimental setup', 'computational framework'\n"
+        "   - The paper should describe methods and results without revealing the underlying file structure\n"
+        "5. AUTHENTIC REFERENCES MANDATORY: All references must be real, published works with correct details:\n"
+        "   - Minimum 15-20 authentic references from reputable sources\n"
+        "   - Authors, titles, journals, years, DOIs must be accurate\n"
+        "   - NO FAKE or PLACEHOLDER references\n"
+        "   - All references must be cited in the text using \\cite{} commands\n"
+        "6. SELF-CONTAINED CONTENT: ALL tables, figures, diagrams must be defined within the LaTeX file using TikZ, tabular, or other LaTeX constructs. NO external image files.\n"
+        "7. DATA-DRIVEN RESULTS: All numerical values in tables/figures must come from actual simulation results, not made-up numbers.\n"
+        "8. SIMULATION REQUIREMENTS: If the paper needs numerical results, you MUST include a comprehensive simulation.py file with:\n"
         "   - Complete, runnable Python code implementing the paper's main contribution\n"
         "   - Proper experiment design with multiple trials, statistical analysis, and reproducible results\n"
         "   - For ML/AI papers: Include test-time compute scaling where appropriate (generate multiple candidates, select best)\n"
@@ -1468,7 +1522,7 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "   - For system papers: Include performance benchmarks and comparative evaluation\n"
         "   - All experimental parameters clearly documented and configurable\n"
         "   - Results saved to 'results.txt' for verification and reproducibility\n"
-        "8. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
+        "9. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
         "8. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
         "   - Theoretical papers: Abstract, Introduction, Related Work, Theory/Methods, Analysis, Discussion, Conclusion\n"
         "   - Experimental papers: Abstract, Introduction, Related Work, Methodology, Experiments, Results, Discussion, Conclusion\n"
@@ -1519,6 +1573,14 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- Generated plots: Include generation code in simulation.py, save locally, reference properly\n"
         "- ALL visual content must either be LaTeX-generated or traceable to simulation.py\n\n"
         
+        "TABLE/FIGURE POSITIONING REQUIREMENTS:\n"
+        "- Use contextual positioning: [h] (here if possible), [ht] (here or top of section), or [H] (force here)\n"
+        "- NEVER use [t] or [!t] positioning which forces floats to page tops regardless of context\n"
+        "- Place tables/figures in relevant subsections immediately after first text mention\n"
+        "- Ensure visual self-containment with comprehensive, descriptive captions\n"
+        "- Each float must appear in logical context, not forced to arbitrary page positions\n"
+        "- Tables/figures should enhance understanding within their specific subsection context\n\n"
+        
         "STRUCTURE REQUIREMENTS:\n"
         "- Start with \\begin{filecontents*}{refs.bib}...\\end{filecontents*} containing ALL bibliography entries\n"
         "- Follow with standard LaTeX document structure\n"
@@ -1534,7 +1596,7 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- SINGLE CODE FILE: Consolidate ALL computational code into simulation.py only\n"
         "- Ensure all mathematical notation is properly formatted\n\n"
         
-        "EXAMPLE STRUCTURE:\n"
+        "EXAMPLE STRUCTURE - ALL REFERENCES IN PAPER.TEX:\n"
         "\\begin{filecontents*}{refs.bib}\n"
         "@article{RealAuthor2024,\n"
         "  author = {A. Real and B. Author},\n"
@@ -1545,6 +1607,7 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "  pages = {1234},\n"
         "  doi = {10.1038/s41467-024-xxxxx}\n"
         "}\n"
+        "% Add all 15-20 references here in paper.tex - NO separate .bib file!\n"
         "\\end{filecontents*}\n"
         "\\documentclass{...}\n"
         "...\n"
@@ -1556,8 +1619,10 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "\\begin{tabular} % With real simulation data from results.txt\n"
         "...\n"
         "\\end{tabular}\n"
-        "\\bibliography{refs}\n"
-        "\\end{document}"
+        "\\bibliography{refs} % References the embedded filecontents above\n"
+        "\\end{document}\n"
+        "\n"
+        "CRITICAL: NO separate refs.bib files - everything in paper.tex!"
     )
     
     # Add custom user prompt if provided - it takes priority
@@ -1578,13 +1643,18 @@ def _collect_project_files(project_dir: Path) -> str:
     
     # Define file extensions and patterns to include
     include_patterns = [
-        "*.py", "*.tex", "*.bib", "*.txt", "*.csv", "*.json", "*.md", "*.yml", "*.yaml", "*.png"
+        "*.py", "*.tex", "*.bib", "*.txt", "*.csv", "*.json", "*.md", "*.yml", "*.yaml", 
+        "*.png", "*.log", "*.dat", "*.tsv", "*.xml", "*.html", "*.js", "*.cpp", "*.c", 
+        "*.h", "*.hpp", "*.java", "*.scala", "*.r", "*.R", "*.m", "*.sh", "*.bat", 
+        "*.cfg", "*.conf", "*.ini", "*.properties", "*.toml", "*.result", "*.output", 
+        "*.summary", "*.stats", "*.metrics", "*.benchmark", "*.trace", "*.report"
     ]
     
     # Define files/directories to exclude
     exclude_patterns = [
-        "__pycache__", "*.aux", "*.log", "*.bbl", "*.blg", "*.out", "*.pdf", 
-        "*.npy", "*.npz", "*.pkl", "*.cache", ".git", "node_modules"
+        "__pycache__", "*.aux", "*.bbl", "*.blg", "*.out", "*.pdf", 
+        "*.npy", "*.npz", "*.pkl", "*.cache", ".git", "node_modules", "*.pyc", 
+        "*.pyo", "*.class", "*.o", "*.obj", "*.so", "*.dll", "*.exe"
     ]
     
     try:
@@ -1622,6 +1692,217 @@ def _collect_project_files(project_dir: Path) -> str:
     else:
         return "No additional project files found."
 
+def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, iteration_count: int = 1) -> List[Dict[str, str]]:
+    """Combined prompt for review, editorial decision, and revision with diff output."""
+    sys_prompt = (
+        "You are a combined AI system acting as: (1) Top-tier journal reviewer, (2) Handling editor, and (3) Paper author. "
+        "Your task is to review the paper, make an editorial decision, and if needed, provide complete file diffs for all revisions.\n\n"
+        
+        "WORKFLOW STEPS:\n"
+        "1. REVIEW: Conduct a thorough peer review meeting top journal standards\n"
+        "2. EDITORIAL DECISION: Decide if the paper is ready for publication (YES/NO/REJECT)\n"
+        "3. REVISION: If not ready, provide complete file diffs for ALL files that need changes\n\n"
+        
+        "REVIEW CRITERIA (same as top-tier journals):\n"
+        "- Scientific rigor, methodology soundness, and novel contribution\n"
+        "- Proper literature review with 15-20 authentic references\n"
+        "- Clear research question, appropriate experimental design\n"
+        "- Results interpretation, limitations acknowledgment\n"
+        "- LaTeX compilation success and proper formatting\n"
+        "- Self-contained visuals with proper size constraints\n"
+        "- No filename references in paper text\n"
+        "- Authentic references (no fake citations)\n"
+        "- Single file structure with embedded references\n"
+        "- Real simulation data usage (no fake numbers)\n"
+        "- Reproducible results documentation\n"
+        "- CRITICAL: Tables/figures positioned contextually in relevant subsections (NOT forced to page tops)\n\n"
+        
+        "EDITORIAL DECISION CRITERIA:\n"
+        "- YES: Paper meets top journal standards, compiles successfully, quality threshold met\n"
+        "- NO: Significant issues require revision but paper is fundamentally sound\n"
+        "- REJECT: Fundamental flaws make paper unsuitable for publication\n\n"
+        
+        "REVISION OUTPUT FORMAT (when decision is NO):\n"
+        "Provide complete file diffs in this exact format:\n\n"
+        "```diff\n"
+        "--- a/filename.ext\n"
+        "+++ b/filename.ext\n"
+        "@@ -line_start,line_count +line_start,line_count @@\n"
+        " unchanged line\n"
+        "-removed line\n"
+        "+added line\n"
+        " unchanged line\n"
+        "```\n\n"
+        
+        "CRITICAL REVISION REQUIREMENTS:\n"
+        "- Address ALL review concerns completely\n"
+        "- Fix LaTeX compilation errors if any\n"
+        "- Use only authentic references (no fake citations)\n"
+        "- Ensure single file structure with embedded references\n"
+        "- Apply proper size constraints to all visuals\n"
+        "- Remove filename references from paper text\n"
+        "- Use only real simulation data\n"
+        "- Maintain paper structure appropriate for field\n"
+        "- Include all necessary files in diffs (paper.tex, simulation.py, etc.)\n"
+        "- ESSENTIAL: Fix table/figure positioning using contextual placement:\n"
+        "  * Use [h] (here if possible), [ht] (here or top of section), or [H] (force here) for contextual positioning\n"
+        "  * AVOID [t] and [!t] positioning which forces floats to page tops regardless of context\n"
+        "  * Place tables/figures in relevant subsections after first text mention\n"
+        "  * Ensure visual self-containment with descriptive captions\n"
+        "  * Verify each float appears in logical context, not forced to random page positions\n\n"
+    )
+    
+    # Add custom user prompt if provided
+    if user_prompt:
+        sys_prompt = (
+            f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
+            "The above user instruction takes precedence when evaluating and revising the paper. "
+            "However, still maintain the critical technical requirements.\n\n"
+            + sys_prompt
+        )
+    
+    # Collect all project files for complete context
+    project_files_content = ""
+    if project_dir and project_dir.exists():
+        project_files_content = _collect_project_files(project_dir)
+    
+    user = (
+        f"This is iteration {iteration_count}. Please complete the 3-step workflow:\n\n"
+        "STEP 1: REVIEW\n"
+        "Conduct a thorough peer review of the paper using top journal standards.\n\n"
+        "STEP 2: EDITORIAL DECISION\n"
+        "Based on your review, make an editorial decision: YES/NO/REJECT\n\n"
+        "STEP 3: REVISION (if decision is NO)\n"
+        "If decision is NO, provide complete file diffs for all necessary changes.\n\n"
+        "----- CURRENT PAPER (LATEX) -----\n" + paper_tex + "\n"
+        "----- SIMULATION CODE & OUTPUTS -----\n" + sim_summary + "\n"
+        "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
+    )
+    
+    # Add LaTeX compilation information
+    if latex_errors:
+        user += (
+            "\n----- LATEX COMPILATION ERRORS (LAST 20 LINES OF .log) -----\n" + 
+            latex_errors + 
+            "\n----- END LATEX ERRORS -----\n\n"
+            "CRITICAL: Fix ALL LaTeX compilation errors in your revision diffs.\n"
+        )
+    else:
+        user += (
+            "\n----- LATEX COMPILATION STATUS -----\n" +
+            "Previous compilation was SUCCESSFUL. No errors detected.\n" +
+            "----- END COMPILATION STATUS -----\n\n"
+        )
+    
+    user += (
+        "\nProvide your response in this format:\n\n"
+        "## REVIEW\n"
+        "[Your detailed review here]\n\n"
+        "## EDITORIAL DECISION\n"
+        "[YES/NO/REJECT with brief justification]\n\n"
+        "## REVISION DIFFS (if decision is NO)\n"
+        "[Complete file diffs for all changes needed]\n"
+    )
+    
+    return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
+
+def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str, dict]:
+    """
+    Parse the combined review/editorial/revision response.
+    
+    Returns:
+        (review_text, decision, file_changes)
+        where file_changes is a dict {filename: new_content}
+    """
+    import re
+    
+    # Extract sections using regex
+    review_match = re.search(r'## REVIEW\s*\n(.*?)(?=## EDITORIAL DECISION)', response, re.DOTALL | re.IGNORECASE)
+    decision_match = re.search(r'## EDITORIAL DECISION\s*\n(.*?)(?=## REVISION DIFFS|$)', response, re.DOTALL | re.IGNORECASE)
+    diffs_match = re.search(r'## REVISION DIFFS.*?\n(.*)', response, re.DOTALL | re.IGNORECASE)
+    
+    review_text = review_match.group(1).strip() if review_match else "No review section found"
+    decision_text = decision_match.group(1).strip() if decision_match else "NO"
+    diffs_text = diffs_match.group(1).strip() if diffs_match else ""
+    
+    # Extract decision (YES/NO/REJECT)
+    decision_lines = decision_text.split('\n')
+    decision = "NO"  # default
+    for line in decision_lines:
+        line_upper = line.strip().upper()
+        if line_upper.startswith(('YES', 'NO', 'REJECT')):
+            decision = line_upper.split()[0]
+            break
+    
+    # Parse diffs and apply them to get new file contents
+    file_changes = {}
+    
+    if decision == "NO" and diffs_text:
+        # Parse diff format and extract file changes
+        diff_blocks = re.findall(r'```diff\s*\n(.*?)\n```', diffs_text, re.DOTALL)
+        
+        for diff_block in diff_blocks:
+            lines = diff_block.split('\n')
+            current_file = None
+            
+            for line in lines:
+                # Extract filename from diff header
+                if line.startswith('--- a/') or line.startswith('+++ b/'):
+                    filename = line.split('/', 1)[1] if '/' in line else line.split(' ', 1)[1]
+                    if line.startswith('+++ b/'):
+                        current_file = filename
+                        continue
+                
+                # Process diff content
+                if current_file and not line.startswith(('---', '+++', '@@')):
+                    if current_file not in file_changes:
+                        # Start with original file content if it exists
+                        original_path = project_dir / current_file
+                        if original_path.exists():
+                            try:
+                                with open(original_path, 'r', encoding='utf-8') as f:
+                                    file_changes[current_file] = f.read().split('\n')
+                            except:
+                                file_changes[current_file] = []
+                        else:
+                            file_changes[current_file] = []
+        
+        # Alternative: Extract complete file contents if diff parsing fails
+        if not file_changes and diffs_text:
+            # Look for complete file contents in code blocks
+            file_blocks = re.findall(r'```(?:python|tex|txt|py)?\s*\n# ?(?:File: ?)?([^\n]+)\n(.*?)\n```', diffs_text, re.DOTALL)
+            for filename, content in file_blocks:
+                filename = filename.strip()
+                file_changes[filename] = content
+            
+            # Also look for explicit file sections
+            file_sections = re.findall(r'(?:File: ?|Filename: ?)([^\n]+)\n```[^\n]*\n(.*?)\n```', diffs_text, re.DOTALL)
+            for filename, content in file_sections:
+                filename = filename.strip()
+                file_changes[filename] = content
+    
+    return review_text, decision, file_changes
+
+def _apply_file_changes(file_changes: dict, project_dir: Path) -> None:
+    """Apply file changes from the revision response."""
+    for filename, content in file_changes.items():
+        file_path = project_dir / filename
+        try:
+            # Ensure directory exists
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Write the new content
+            if isinstance(content, list):
+                content = '\n'.join(content)
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"✅ Updated {filename}")
+            
+        except Exception as e:
+            print(f"❌ Failed to update {filename}: {e}")
+
 def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
         "Act as a top-tier journal reviewer (Nature, Science, Cell level) with expertise in LaTeX formatting and scientific programming. "
@@ -1630,38 +1911,58 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         
         "MANDATORY REQUIREMENTS - CHECK CAREFULLY:\n"
         "1. SINGLE FILE ONLY: Paper must be ONE LaTeX file with NO \\input{} or \\include{} commands\n"
-        "2. EMBEDDED REFERENCES: References must be embedded using \\begin{filecontents*}{refs.bib}...\\end{filecontents*} or \\begin{thebibliography}...\\end{thebibliography}\n"
+        "2. EMBEDDED REFERENCES MANDATORY: References MUST be embedded directly in the paper.tex file using EITHER:\n"
+        "   - \\begin{filecontents*}{refs.bib}...\\end{filecontents*} at the TOP of the file, OR\n"
+        "   - \\begin{thebibliography}...\\end{thebibliography} at the END of the file\n"
+        "   - NO separate refs.bib files are allowed - everything must be in paper.tex\n"
+        "   - Verify \\bibliography{refs} command uses the embedded filecontents, not external files\n"
         "3. COMPILABLE: File must compile successfully with pdflatex (check for syntax errors, missing packages, etc.)\n"
-        "4. AUTHENTIC REFERENCES ONLY: ALL references must be real, published works with correct bibliographic details. Verify:\n"
+        "4. NO FILENAMES IN TEXT: The paper text must NOT contain ANY references to uploaded filenames, code files, data files, or directory structures. Examples to avoid:\n"
+        "   - 'simulation.py', 'results.txt', 'data.csv', 'model.pkl', etc.\n"
+        "   - Directory paths like 'output/', 'src/', 'data/', etc.\n"
+        "   - File extensions like '.py', '.txt', '.csv', '.pkl', etc.\n"
+        "   - The paper should describe methods and results without revealing the underlying file structure\n"
+        "   - Use generic descriptions like 'our implementation', 'experimental results', 'computational analysis'\n"
+        "5. AUTHENTIC REFERENCES MANDATORY: ALL references must be real, published works with correct bibliographic details. Verify:\n"
+        "   - Minimum 15-20 authentic references from reputable sources\n"
         "   - Author names are real and spelled correctly\n"
         "   - Journal/venue names are authentic\n"
         "   - Publication years are realistic\n"
         "   - DOIs are properly formatted (if provided)\n"
         "   - References are directly relevant to the topic\n"
         "   - NO placeholder, fake, or made-up citations\n"
-        "5. SELF-CONTAINED VISUALS: ALL tables, figures, and diagrams must be:\n"
+        "   - All references must be cited in the text using \\cite{} commands\n"
+        "6. SELF-CONTAINED VISUALS: ALL tables, figures, and diagrams must be:\n"
         "   - Defined within the LaTeX file using TikZ, tabular, PGFPlots, etc., OR\n"
         "   - Generated by simulation.py and saved as local files with proper \\includegraphics references\n"
         "   - Populated with REAL data from simulation results\n"
         "   - NO fake, placeholder, or estimated numbers\n"
-        "6. APPROPRIATE STRUCTURE: The paper structure must align with the paper type and field conventions:\n"
+        "7. APPROPRIATE STRUCTURE: The paper structure must align with the paper type and field conventions:\n"
         "   - Verify section organization matches the paper's contribution type\n"
         "   - Check for field-specific sections and evaluation methodologies\n"
         "   - Ensure logical flow appropriate for the research area\n"
         "   - Validate that section names and content align with journal standards\n"
-        "7. RESULTS DOCUMENTATION: Check that numerical results are properly documented:\n"
+        "8. RESULTS DOCUMENTATION: Check that numerical results are properly documented:\n"
         "   - Simulation.py should save key results to 'results.txt' for reproducibility\n"
         "   - All numerical values in the paper must be traceable to simulation output\n"
         "   - Results file should be well-structured and human-readable\n"
         "   - Verify consistency between cited numbers and simulation output\n"
-        "8. FIGURE GENERATION: If paper includes computational figures:\n"
+        "9. FIGURE GENERATION: If paper includes computational figures:\n"
         "   - Figure generation code must be included in simulation.py\n"
         "   - Generated figures must be saved in the local project folder\n"
         "   - LaTeX must reference generated figures with proper \\includegraphics paths\n"
         "   - No external figure dependencies or missing image files\n"
         "   - GRAPH CONSTRAINTS: Verify graphs contain at least 5 data samples and use appropriate sizing\n"
         "   - DATA VISUALIZATION QUALITY: Check for proper axis labels, legends, and meaningful data representation\n"
-        "9. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file only - no additional .py files or scripts.\n\n"
+        "   - FIGURE POSITIONING: Figures and graphs must be positioned appropriately within the paper - they CANNOT be placed between references/bibliography sections\n"
+        "10. TABLE/FIGURE CONTEXTUAL POSITIONING: Tables and figures must be positioned in their relevant subsections, not forced to page tops:\n"
+        "   - Use [h] for 'here if possible', [ht] for 'here or top of section', [H] for 'exactly here'\n"
+        "   - Avoid [t] or [!t] positioning that forces floats to page tops regardless of context\n"
+        "   - Tables/figures should appear after their first mention in text within the same subsection\n"
+        "   - Keep floats contextually relevant to their surrounding discussion\n"
+        "   - No orphaned tables appearing in unrelated sections or far from their text references\n"
+        "   - Ensure logical reading flow where visuals enhance their specific subsection content\n"
+        "11. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file only - no additional .py files or scripts.\n\n"
         
         "STRUCTURE ALIGNMENT CRITERIA:\n"
         "- Theoretical papers should emphasize theory, proofs, and mathematical analysis\n"
@@ -1731,6 +2032,7 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "CRITICAL REQUIREMENTS:\n"
         "- NO FAKE NUMBERS: All numerical results must come from actual simulation output\n"
         "- NO FAKE REFERENCES: All citations must be authentic, published works\n"
+        "- NO FILENAMES: The paper must not mention specific filenames, file extensions, or directory structures\n"
         "- DOCUMENTED RESULTS: Key findings must be saved in results.txt\n"
         "- GENERATED FIGURES: Computational figures must be created by simulation.py\n"
         "- NO OVERFLOW: All content must fit within page margins\n"
@@ -1740,8 +2042,8 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- APPROPRIATE STRUCTURE: Paper organization must match the research type and field standards\n"
         
         "Provide specific, actionable feedback with concrete suggestions for improvement. "
-        "If the paper violates any of the 8 mandatory requirements, mark it as needing major revision. "
-        "Pay special attention to reference authenticity, results documentation, figure generation, and structural appropriateness."
+        "If the paper violates any of the 10 mandatory requirements, mark it as needing major revision. "
+        "Pay special attention to reference authenticity, results documentation, figure generation, filename removal, and structural appropriateness."
     )
     
     # Add custom user prompt if provided - it takes priority
@@ -1840,37 +2142,50 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         
         "CRITICAL REQUIREMENTS - NO EXCEPTIONS:\n"
         "1. SINGLE FILE ONLY: The paper must be contained in ONE LaTeX file with NO separate bibliography files\n"
-        "2. EMBEDDED REFERENCES: All references must be included in the paper using \\begin{filecontents*}{refs.bib}...\\end{filecontents*} or \\begin{thebibliography}...\\end{thebibliography}\n"
+        "2. EMBEDDED REFERENCES MANDATORY: All references MUST be embedded directly in the paper.tex file using EITHER:\n"
+        "   - \\begin{filecontents*}{refs.bib}...\\end{filecontents*} at the TOP of the file, OR\n"
+        "   - \\begin{thebibliography}...\\end{thebibliography} at the END of the file\n"
+        "   - NO separate refs.bib files are allowed - everything must be in paper.tex\n"
+        "   - Ensure \\bibliography{refs} command uses the embedded filecontents, not external files\n"
         "3. COMPILABLE: The file must compile successfully with pdflatex\n"
-        "4. AUTHENTIC REFERENCES ONLY: ALL references must be real, published works. Verify and correct:\n"
+        "4. NO FILENAMES IN TEXT: The paper text must NOT contain ANY references to uploaded filenames, code files, data files, or directory structures. Remove or replace:\n"
+        "   - Specific filenames like 'simulation.py', 'results.txt', 'data.csv', 'model.pkl', etc.\n"
+        "   - Directory paths like 'output/', 'src/', 'data/', etc.\n"
+        "   - File extensions like '.py', '.txt', '.csv', '.pkl', etc.\n"
+        "   - Replace with generic descriptions like 'our implementation', 'experimental results', 'computational framework'\n"
+        "   - The paper should describe methods and results without revealing the underlying file structure\n"
+        "5. AUTHENTIC REFERENCES MANDATORY: ALL references must be real, published works. Verify and correct:\n"
+        "   - Minimum 15-20 authentic references from reputable sources\n"
         "   - Author names are real researchers in the field\n"
         "   - Journal/venue names are authentic and properly formatted\n"
         "   - Publication years are realistic and consistent\n"
         "   - DOIs are properly formatted (when available)\n"
         "   - References directly support claims in the text\n"
         "   - NO placeholder, fake, or fictional citations\n"
-        "5. SELF-CONTAINED VISUALS: ALL tables, figures, diagrams must be:\n"
+        "   - All references must be cited in the text using \\cite{} commands\n"
+        "6. SELF-CONTAINED VISUALS: ALL tables, figures, diagrams must be:\n"
         "   - Created using LaTeX code only (TikZ, tabular, PGFPlots, etc.), OR\n"
         "   - Generated by simulation.py and saved as local files with proper \\includegraphics references\n"
         "   - Populated with actual simulation data, not fake numbers\n"
         "   - Self-rendering within the LaTeX document\n"
-        "6. APPROPRIATE STRUCTURE: Ensure the paper structure aligns with the paper type and field conventions:\n"
+        "7. APPROPRIATE STRUCTURE: Ensure the paper structure aligns with the paper type and field conventions:\n"
         "   - Organize sections according to the paper's contribution type\n"
         "   - Include field-specific sections and evaluation methodologies\n"
         "   - Follow established academic writing conventions for the research area\n"
         "   - Ensure logical flow and appropriate section transitions\n"
-        "7. RESULTS DOCUMENTATION: Ensure numerical results are properly documented:\n"
+        "8. RESULTS DOCUMENTATION: Ensure numerical results are properly documented:\n"
         "   - Simulation.py should save key results to 'results.txt' for reproducibility\n"
         "   - All numerical values in the paper must be traceable to simulation output\n"
         "   - Results file should be well-structured and human-readable\n"
         "   - Maintain consistency between cited numbers and simulation output\n"
-        "8. FIGURE GENERATION: If paper includes computational figures:\n"
+        "9. FIGURE GENERATION: If paper includes computational figures:\n"
         "   - Figure generation code must be included in simulation.py\n"
         "   - Generated figures must be saved in the local project folder\n"
         "   - LaTeX must reference generated figures with proper \\includegraphics paths\n"
         "   - No external figure dependencies or missing image files\n"
         "   - GRAPH GENERATION STANDARDS: Ensure graphs contain at least 5 data samples and use appropriate sizing (minimum 6x4 inches)\n"
-        "   - VISUALIZATION REQUIREMENTS: Include proper axis labels, legends, grid lines, and clear data representation\n\n"
+        "   - VISUALIZATION REQUIREMENTS: Include proper axis labels, legends, grid lines, and clear data representation\n"
+        "   - FIGURE POSITIONING: Figures and graphs must be positioned appropriately within the paper - they CANNOT be placed between references/bibliography sections\n\n"
         
         "STRUCTURE ALIGNMENT REQUIREMENTS:\n"
         "- Theoretical papers: Focus on mathematical rigor, proofs, and theoretical analysis\n"
@@ -1898,17 +2213,28 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "- Allow dependencies only on simulation-generated image files\n"
         "- GRAPH GENERATION STANDARDS: Ensure all graphs contain at least 5 data samples with proper sizing (minimum 6x4 inches) and clear visualization\n\n"
         
+        "TABLE/FIGURE POSITIONING REQUIREMENTS:\n"
+        "- CRITICAL: Use contextual positioning specifiers - [h] (here if possible), [ht] (here or top of section), or [H] (force here)\n"
+        "- NEVER use [t] or [!t] positioning which forces floats to page tops regardless of context\n"
+        "- Place tables/figures in relevant subsections immediately after first text mention\n"
+        "- Ensure visual self-containment with comprehensive, descriptive captions\n"
+        "- Each float must appear in logical context within its subsection, not forced to arbitrary page positions\n"
+        "- Tables/figures should enhance understanding within their specific subsection context\n"
+        "- Review all existing \\begin{table} and \\begin{figure} environments to ensure proper positioning\n\n"
+        
         "REVISION PRIORITIES:\n"
         "1. Address all scientific/methodological concerns raised\n"
         "2. Fix LaTeX formatting issues (figures, tables, equations, citations)\n"
         "3. Update content based on actual simulation results\n"
         "4. Replace fake references with authentic ones\n"
-        "5. Convert external visuals to self-contained LaTeX code or simulation-generated files\n"
-        "6. Restructure sections to match paper type and field conventions\n"
-        "7. Ensure proper documentation of results in results.txt\n"
-        "8. Implement figure generation in simulation.py with local file saving\n"
-        "9. Improve clarity and presentation quality\n"
-        "10. Ensure reproducibility and code quality\n\n"
+        "5. Remove all specific filenames, file extensions, and directory structures from paper text\n"
+        "6. Convert external visuals to self-contained LaTeX code or simulation-generated files\n"
+        "7. Restructure sections to match paper type and field conventions\n"
+        "8. Ensure proper documentation of results in results.txt\n"
+        "9. Implement figure generation in simulation.py with local file saving\n"
+        "10. CRITICAL: Fix table/figure positioning using [h]/[ht]/[H] instead of [t]/[!t] for contextual placement\n"
+        "11. Improve clarity and presentation quality\n"
+        "12. Ensure reproducibility and code quality\n\n"
         
         "FORMATTING REQUIREMENTS (CRITICAL - NO EXCEPTIONS):\n"
         "- ALL content: use width=\\linewidth constraints (never exceed page width)\n"
@@ -1922,14 +2248,15 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         
         "CONTENT REQUIREMENTS:\n"
         "- Use ONLY actual simulation results (no fake numbers)\n"
+        "- Remove all specific filenames, file extensions, and directory references from paper text\n"
         "- Ensure numerical results are documented in results.txt\n"
         "- Include simulation-generated figures with proper local file references\n"
         "- Ensure claims are supported by authentic references\n"
         "- Address limitations and future work\n"
         "- Improve clarity of methodology and results\n\n"
         
-        "BIBLIOGRAPHY INTEGRATION OPTIONS:\n"
-        "Option 1 - filecontents (recommended):\n"
+        "BIBLIOGRAPHY INTEGRATION REQUIREMENTS - MANDATORY:\n"
+        "Option 1 - filecontents (RECOMMENDED - all in paper.tex):\n"
         "\\begin{filecontents*}{refs.bib}\n"
         "@article{RealAuthor2024,\n"
         "  author = {A. Real and B. Author},\n"
@@ -1945,10 +2272,12 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "...\n"
         "\\bibliography{refs}\n"
         "\n"
-        "Option 2 - Direct thebibliography:\n"
+        "Option 2 - Direct thebibliography (all in paper.tex):\n"
         "\\begin{thebibliography}{99}\n"
         "\\bibitem{RealAuthor2024} A. Real, B. Author, \"Authentic Title,\" Nature Communications, vol. 15, p. 1234, 2024.\n"
-        "\\end{thebibliography}\n\n"
+        "\\end{thebibliography}\n"
+        "\n"
+        "CRITICAL: NO separate refs.bib files - all references must be embedded in paper.tex!\n\n"
         
         "SELF-CONTAINED VISUAL EXAMPLES:\n"
         "- Figures: \\begin{tikzpicture}...\\end{tikzpicture} (not \\includegraphics)\n"
@@ -1979,12 +2308,19 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
     )
     
+    # Always include LaTeX compilation information
     if latex_errors:
         user += (
             "\n----- LATEX COMPILATION ERRORS (LAST 20 LINES OF .log) -----\n" + 
             latex_errors + 
             "\n----- END LATEX ERRORS -----\n\n"
             "CRITICAL: Fix ALL LaTeX compilation errors. The paper MUST compile successfully with pdflatex.\n"
+        )
+    else:
+        user += (
+            "\n----- LATEX COMPILATION STATUS -----\n" +
+            "Previous compilation was SUCCESSFUL. No errors detected.\n" +
+            "----- END COMPILATION STATUS -----\n\n"
         )
     
     user += (
@@ -2012,7 +2348,8 @@ def run_workflow(
     user_prompt: Optional[str] = None,  # New parameter for custom user prompt
     config: Optional[WorkflowConfig] = None,  # Configuration parameter
     enable_ideation: bool = True,     # Enable ideation phase for new papers
-    num_ideas: int = 15              # Number of ideas to generate
+    num_ideas: int = 15,             # Number of ideas to generate
+    output_diffs: bool = False       # Optional diff output for each review/revision cycle
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
     
@@ -2068,6 +2405,13 @@ def run_workflow(
     print(f"\n📁 Project directory: {project_dir}")
     print(f"📄 Paper file: {paper_path}")
     print(f"🐍 Simulation file: {sim_path}")
+
+    # Check for separate refs.bib files and warn user
+    refs_bib_files = list(project_dir.glob("*.bib"))
+    if refs_bib_files:
+        print(f"⚠️ WARNING: Found separate bibliography files: {[f.name for f in refs_bib_files]}")
+        print("   All references must be embedded in paper.tex using filecontents or thebibliography")
+        print("   Separate .bib files will be ignored during compilation!")
 
     # Check if this is actually a minimal template (new paper) or has real content
     paper_content = paper_path.read_text(encoding="utf-8").strip()
@@ -2230,11 +2574,42 @@ def run_workflow(
         if stagnation_count >= 2 and i > 1:
             print(f"⚠️ Quality stagnation detected ({stagnation_count} iterations without improvement)")
         
-        # Enhanced review with quality metrics
-        review = _universal_chat(_review_prompt(current_tex, sim_summary, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="review", fallback_models=config.fallback_models)
+        # COMBINED REVIEW, EDITORIAL DECISION, AND REVISION IN ONE CALL
+        print(f"🔄 Running combined review/editorial/revision process...")
+        combined_response = _universal_chat(
+            _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i), 
+            model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", fallback_models=config.fallback_models
+        )
         
-        # Enhanced editorial decision with iteration count
-        decision = _universal_chat(_editor_prompt(review, i, user_prompt), model=model, request_timeout=request_timeout, prompt_type="editor", fallback_models=config.fallback_models)
+        # Parse the combined response
+        review, decision, file_changes = _parse_combined_response(combined_response, project_dir)
+        
+        print(f"📝 Review completed")
+        print(f"📋 Editorial decision: {decision}")
+        
+        # Store original content for diff generation if enabled
+        original_content = current_tex if output_diffs else None
+        
+        # Apply file changes if any were provided
+        if file_changes:
+            print(f"📁 Applying file changes to {len(file_changes)} files...")
+            _apply_file_changes(file_changes, project_dir)
+            print(f"✅ File changes applied successfully")
+            
+            # Generate and save diff if enabled
+            if output_diffs and original_content:
+                new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
+                _save_iteration_diff(original_content, new_content, project_dir, i, "paper.tex")
+                
+        elif decision.strip().upper().startswith("NO"):
+            print(f"⚠️ Decision was NO but no file changes were provided. Using fallback revision...")
+            # Fallback to traditional revision if no diffs were provided
+            revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
+            paper_path.write_text(revised, encoding="utf-8")
+            
+            # Generate and save diff if enabled (for fallback revision)
+            if output_diffs and original_content:
+                _save_iteration_diff(original_content, revised, project_dir, i, "paper.tex")
         
         # ENHANCED DECISION LOGIC WITH QUALITY THRESHOLD
         decision_upper = decision.strip().upper()
@@ -2253,34 +2628,8 @@ def run_workflow(
         elif decision_upper.startswith("REJECT"):
             print(f"[REJECT] Editor rejected the paper at iteration {i}.")
             print("Paper has fundamental issues but continuing with revisions to improve it...")
-            
-        # Continue with revision (whether NO or REJECT or quality issues or LaTeX errors)
-        revision_reasons = []
-        if not latex_success:
-            revision_reasons.append("LaTeX compilation errors")
-        if not meets_quality_threshold:
-            revision_reasons.append(f"quality below threshold ({quality_score:.2f} < {config.quality_threshold})")
-        if not revision_reasons:
-            revision_reasons.append("review feedback")
-            
-        print(f"Revising paper to address: {', '.join(revision_reasons)}")
         
-        # Use test-time compute scaling for revisions if enabled
-        use_test_time_scaling = getattr(config, 'use_test_time_scaling', False)
-        revision_candidates = getattr(config, 'revision_candidates', 3)
-        
-        if use_test_time_scaling and revision_candidates > 1:
-            print(f"🧪 Using test-time compute scaling with {revision_candidates} revision candidates...")
-            revised = _generate_best_revision_candidate(
-                current_tex, sim_summary, review, latex_errors if not latex_success else "", 
-                project_dir, user_prompt, model, request_timeout, config, revision_candidates
-            )
-        else:
-            revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
-        
-        paper_path.write_text(revised, encoding="utf-8")
-        
-        print(f"Iteration {i}: Paper revised")
+        print(f"Iteration {i}: Combined review/editorial/revision completed")
     
     # Final quality report
     print(f"\n📈 Quality progression: {[f'{q:.2f}' for q in quality_history]}")
@@ -2437,10 +2786,21 @@ def _check_existing_paper(output_dir: Path) -> Optional[Tuple[str, str, str]]:
     return None
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    # First stage: Check if --modify-existing is present
+    # We need to do this to determine which arguments to make available
+    if argv is None:
+        argv = sys.argv[1:]
+    
+    modify_existing = "--modify-existing" in argv
+    
     p = argparse.ArgumentParser(description="Enhanced SciResearch Workflow with Quality Validation")
-    p.add_argument("--topic", required=False, help="Research topic")
-    p.add_argument("--field", required=False, help="Research question")
-    p.add_argument("--question", required=False, help="Research question")
+    
+    # Conditionally add topic/field/question arguments only if NOT modifying existing
+    if not modify_existing:
+        p.add_argument("--topic", required=False, help="Research topic")
+        p.add_argument("--field", required=False, help="Research field")
+        p.add_argument("--question", required=False, help="Research question")
+    
     p.add_argument("--output-dir", default="output", help="Output directory root (contains project subfolder)")
     p.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use (default: gpt-5)")
     p.add_argument("--request-timeout", type=int, default=3600, help="Per-request timeout seconds (0 means no timeout)")
@@ -2469,6 +2829,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # Custom prompt parameter
     p.add_argument("--user-prompt", type=str, default=None, help="Custom prompt that takes priority over standard requirements")
     
+    # Diff output parameter
+    p.add_argument("--output-diffs", action="store_true", help="Save diff files for each review/revision cycle to track changes")
+    
     # Test-time compute scaling parameters
     p.add_argument("--test-scaling", action="store_true", help="Run test-time compute scaling analysis instead of normal workflow")
     p.add_argument("--scaling-candidates", type=str, default="3,5,7,10", help="Comma-separated list of candidate counts to test (e.g., '3,5,7,10')")
@@ -2489,6 +2852,15 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.validate_figures = False
     if args.skip_ideation:
         args.enable_ideation = False
+    
+    # Initialize topic, field, question attributes if they don't exist (modify-existing mode)
+    if modify_existing:
+        if not hasattr(args, 'topic'):
+            args.topic = None
+        if not hasattr(args, 'field'):
+            args.field = None
+        if not hasattr(args, 'question'):
+            args.question = None
     
     # Check if there's an existing paper first
     output_path = Path(args.output_dir)
@@ -2512,20 +2884,20 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # If we found an existing paper, use its metadata; otherwise prompt for missing args
     if existing_metadata:
         topic, field, question = existing_metadata
-        if not args.topic:
+        if not getattr(args, 'topic', None):
             args.topic = topic
-        if not args.field:
+        if not getattr(args, 'field', None):
             args.field = field
-        if not args.question:
+        if not getattr(args, 'question', None):
             args.question = question
         print(f"Detected existing paper - Topic: {args.topic}, Field: {args.field}")
     elif not args.modify_existing:
         # Interactive prompts if missing and no existing paper (but NOT when modifying existing)
-        if not args.topic:
+        if not getattr(args, 'topic', None):
             args.topic = input("Topic: ").strip()
-        if not args.field:
+        if not getattr(args, 'field', None):
             args.field = input("Field: ").strip()
-        if not args.question:
+        if not getattr(args, 'question', None):
             args.question = input("Research question: ").strip()
     # If modify_existing is True but no existing metadata found, we'll use whatever args were provided
     
@@ -2566,16 +2938,86 @@ def _validate_research_quality(paper_content: str, sim_summary: str) -> List[str
     if '\\input{' in paper_content or '\\include{' in paper_content:
         issues.append("Paper uses \\input or \\include - must be a single self-contained file")
     
-    # Check for embedded references requirement
+    # Check for embedded references requirement - MANDATORY
     has_filecontents = bool(re.search(r'\\begin\{filecontents\*?\}\{[^}]*\.bib\}', paper_content))
     has_thebibliography = bool(re.search(r'\\begin\{thebibliography\}', paper_content))
     has_external_bib = bool(re.search(r'\\bibliography\{[^}]+\}', paper_content)) and not has_filecontents
     
     if has_external_bib and not has_filecontents:
-        issues.append("Paper references external .bib file - must embed references using filecontents or thebibliography")
+        issues.append("CRITICAL: Paper references external .bib file - all references must be embedded in paper.tex using filecontents or thebibliography")
     
     if not has_filecontents and not has_thebibliography:
-        issues.append("No embedded bibliography found - use filecontents or thebibliography")
+        issues.append("CRITICAL: No embedded bibliography found - all references must be embedded in paper.tex using filecontents or thebibliography")
+    
+    # Check for minimum number of references
+    if has_filecontents:
+        bib_entries = len(re.findall(r'@\w+\{', paper_content))
+    elif has_thebibliography:
+        bib_entries = len(re.findall(r'\\bibitem\{', paper_content))
+    else:
+        bib_entries = 0
+    
+    if bib_entries < 15:
+        issues.append(f"Insufficient references: only {bib_entries} found (minimum 15 required)")
+    
+    # Check that all references are cited in text
+    if has_filecontents:
+        # Extract citation keys from filecontents
+        cite_keys = re.findall(r'@\w+\{([^,]+),', paper_content)
+        citations_in_text = re.findall(r'\\cite\{([^}]+)\}', paper_content)
+        cited_keys = []
+        for citation in citations_in_text:
+            cited_keys.extend(citation.split(','))
+        cited_keys = [key.strip() for key in cited_keys]
+        
+        uncited_refs = [key for key in cite_keys if key not in cited_keys]
+        if uncited_refs:
+            issues.append(f"Uncited references found: {', '.join(uncited_refs[:5])}{'...' if len(uncited_refs) > 5 else ''}")
+    
+    # Verify no separate bibliography files are referenced
+    if '\\input{refs}' in paper_content or '\\input{references}' in paper_content:
+        issues.append("CRITICAL: Found \\input command for bibliography - all references must be embedded in paper.tex")
+    
+    # Check for filenames in paper text - NO filenames should appear except when referencing embedded filecontents
+    # Extract embedded filecontents filenames to allow legitimate references
+    filecontents_files = set()
+    filecontents_matches = re.findall(r'\\begin\{filecontents\*?\}\{([^}]+)\}', paper_content)
+    for filename in filecontents_matches:
+        filecontents_files.add(filename)
+    
+    filename_patterns = [
+        r'\b\w+\.py\b',     # Python files
+        r'\b\w+\.csv\b',    # CSV files  
+        r'\b\w+\.npy\b',    # NumPy files
+        r'\b\w+\.txt\b',    # Text files
+        r'\b\w+\.dat\b',    # Data files
+        r'\b\w+\.json\b',   # JSON files
+        r'\b\w+\.pkl\b',    # Pickle files
+        r'\b\w+\.h5\b',     # HDF5 files
+        r'\b\w+\.mat\b',    # MATLAB files
+        r'\b\w+\.xlsx?\b',  # Excel files
+        r'\b__pycache__\b', # Python cache directory
+        r'\bdata/\b',       # Data directory
+        r'\bcode/\b',       # Code directory
+        r'\bresults/\b',    # Results directory
+        r'\bsrc/\b',        # Source directory
+        r'\boutput/\b',     # Output directory
+    ]
+    
+    found_filenames = []
+    for pattern in filename_patterns:
+        matches = re.findall(pattern, paper_content, re.IGNORECASE)
+        for match in matches:
+            # Skip if this filename is from an embedded filecontents block
+            if match not in filecontents_files:
+                # Also check if it's used in legitimate pgfplots table references like {filename.csv}
+                # Look for patterns like table [...] {filename} or \addplot table [...] {filename}
+                table_refs = re.findall(rf'table\s*\[[^\]]*\]\s*\{{{re.escape(match)}\}}', paper_content, re.IGNORECASE)
+                if not table_refs:
+                    found_filenames.append(match)
+    
+    if found_filenames:
+        issues.append(f"CRITICAL: Filenames found in paper text: {', '.join(set(found_filenames[:10]))}{'...' if len(set(found_filenames)) > 10 else ''}")
     
     # Check for authentic references
     suspicious_refs = _check_reference_authenticity(paper_content)
@@ -2752,6 +3194,50 @@ def _check_visual_self_containment(paper_content: str) -> List[str]:
     for table in table_content:
         if any(word in table.lower() for word in ['example', 'placeholder', 'xxx', 'tbd', 'todo']):
             issues.append("Table contains placeholder data - populate with real simulation results")
+    
+    # Check for figure positioning issues - figures should not be between references
+    # Find bibliography/references section
+    bib_start_patterns = [
+        r'\\begin\{thebibliography\}',
+        r'\\bibliography\{',
+        r'\\section\*?\{.*?[Rr]eferences.*?\}',
+        r'\\section\*?\{.*?[Bb]ibliography.*?\}'
+    ]
+    
+    bib_positions = []
+    for pattern in bib_start_patterns:
+        matches = list(re.finditer(pattern, paper_content, re.IGNORECASE))
+        bib_positions.extend([match.start() for match in matches])
+    
+    if bib_positions:
+        bib_start = min(bib_positions)
+        # Check for figures after bibliography start
+        figures_after_bib = re.finditer(r'\\begin\{figure\}', paper_content[bib_start:])
+        if any(figures_after_bib):
+            issues.append("CRITICAL: Figures found after bibliography/references section - figures must be positioned before references")
+    
+    # Check for adequate data samples in plots (minimum 5 samples)
+    if has_pgfplots:
+        # Look for addplot commands with coordinate data
+        plot_coords = re.findall(r'\\addplot.*?coordinates\s*\{([^}]+)\}', paper_content, re.DOTALL)
+        for coords in plot_coords:
+            # Count coordinate pairs
+            coord_pairs = re.findall(r'\([^)]+\)', coords)
+            if len(coord_pairs) < 5:
+                issues.append(f"CRITICAL: Plot has insufficient data points ({len(coord_pairs)} found, minimum 5 required)")
+        
+        # Look for table-based plots and check CSV data
+        table_plots = re.findall(r'\\addplot.*?table.*?\{([^}]+)\}', paper_content)
+        for table_ref in table_plots:
+            # Look for corresponding filecontents data
+            csv_pattern = rf'\\begin\{{filecontents\*?\}}\{{{re.escape(table_ref)}\}}(.*?)\\end\{{filecontents\*?\}}' 
+            csv_matches = re.search(csv_pattern, paper_content, re.DOTALL)
+            if csv_matches:
+                csv_content = csv_matches.group(1)
+                # Count data rows (excluding header)
+                data_lines = [line.strip() for line in csv_content.strip().split('\n') if line.strip() and not line.startswith('%')]
+                if len(data_lines) < 6:  # Header + 5 data rows minimum
+                    issues.append(f"CRITICAL: CSV data in '{table_ref}' has insufficient samples ({len(data_lines)-1} data rows, minimum 5 required)")
     
     return issues
 
@@ -3016,6 +3502,32 @@ def _validate_figures_tables(paper_content: str) -> List[str]:
             issues.append("Tables contain placeholder data - populate with real simulation results")
             break
     
+    # CHECK FOR POOR TABLE/FIGURE POSITIONING
+    # Find tables and figures with problematic positioning specifiers
+    bad_table_positioning = re.findall(r'\\begin\{table\}\[([^\]]*[!]?[t][^\]]*)\]', paper_content)
+    bad_figure_positioning = re.findall(r'\\begin\{figure\}\[([^\]]*[!]?[t][^\]]*)\]', paper_content)
+    
+    problematic_positions = []
+    if bad_table_positioning:
+        for pos in bad_table_positioning:
+            if 't' in pos and ('h' not in pos or '!' in pos):
+                problematic_positions.append(f"table[{pos}]")
+    
+    if bad_figure_positioning:
+        for pos in bad_figure_positioning:
+            if 't' in pos and ('h' not in pos or '!' in pos):
+                problematic_positions.append(f"figure[{pos}]")
+    
+    if problematic_positions:
+        issues.append(f"Found poor positioning specifiers forcing floats to page tops: {', '.join(problematic_positions[:3])}{'...' if len(problematic_positions) > 3 else ''} - use [h], [ht], or [H] for contextual placement")
+    
+    # Check for tables/figures without any positioning specifier (defaults to [tbp])
+    unspecified_tables = len(re.findall(r'\\begin\{table\}(?!\[)', paper_content))
+    unspecified_figures = len(re.findall(r'\\begin\{figure\}(?!\[)', paper_content))
+    
+    if unspecified_tables > 0 or unspecified_figures > 0:
+        issues.append(f"Found {unspecified_tables + unspecified_figures} floats without explicit positioning specifiers - specify [h], [ht], or [H] for better contextual placement")
+
     return issues
 
 def _validate_bibliography(paper_content: str) -> List[str]:
@@ -3101,7 +3613,8 @@ if __name__ == "__main__":
             user_prompt=ns.user_prompt,
             config=config,
             enable_ideation=ns.enable_ideation,
-            num_ideas=ns.num_ideas
+            num_ideas=ns.num_ideas,
+            output_diffs=ns.output_diffs
         )
         print(f"✅ Workflow completed! Results in: {result_dir}")
     except Exception as e:
