@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.request
 import urllib.parse
+import asyncio
 import functools
 import logging
 from dataclasses import dataclass, asdict
@@ -32,6 +33,9 @@ except ImportError:
 
 # Local helpers
 from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex, run_simulation_with_smart_fixing, summarize_simulation_outputs
+from utils.latex_tools import compile_with_autofix
+from utils.parallel_checks import run_parallel_checks
+from utils.model_client import OSS120BClient
 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
 
@@ -50,6 +54,16 @@ class WorkflowConfig:
     max_doi_cache_size: int = 1000
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
+    review_model: Optional[str] = None
+    revision_model: Optional[str] = None
+    brainstorm_model: Optional[str] = None
+    num_brainstorm_ideas: int = 5
+    top_brainstorm_ideas: int = 3
+    oss120b_endpoint: Optional[str] = None
+    oss120b_api_key: Optional[str] = None
+    latex_auto_fix: bool = False
+    fast_ref_check: bool = False
+    qa_model: Optional[str] = None
     
     def __post_init__(self):
         if self.fallback_models is None:
@@ -57,6 +71,14 @@ class WorkflowConfig:
                 self.fallback_models = ["gpt-4o", "gpt-4"]
             else:
                 self.fallback_models = ["gpt-3.5-turbo"]
+        if self.review_model is None:
+            self.review_model = self.default_model
+        if self.revision_model is None:
+            self.revision_model = self.default_model
+        if self.brainstorm_model is None:
+            self.brainstorm_model = self.review_model
+        if self.qa_model is None:
+            self.qa_model = self.review_model
     
     @classmethod
     def from_file(cls, config_path: Path) -> 'WorkflowConfig':
@@ -115,6 +137,9 @@ def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = Non
 
 # Global logger instance
 logger = setup_workflow_logging()
+
+# Optional OSS 120B client
+OSS_CLIENT: Optional[OSS120BClient] = None
 
 class APIError(Exception):
     """Custom exception for API-related errors"""
@@ -352,17 +377,17 @@ def _create_simulation_fixer(model: str, request_timeout: Optional[int] = None):
     return _fix_simulation
 
 def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
-    """
-    Universal chat function that automatically detects whether to use OpenAI or Google AI
-    based on the model name and routes the request accordingly.
-    """
-    # Detect provider based on model name
+    """Route chat requests to the appropriate backend based on model name."""
     if model.startswith(('gemini', 'models/gemini')):
-        # Google AI model
         return _google_chat(messages, model, request_timeout, prompt_type, fallback_models)
-    else:
-        # OpenAI model
-        return _openai_chat(messages, model, request_timeout, prompt_type, fallback_models)
+    if model.startswith('oss-120b'):
+        return _oss120b_chat(messages, request_timeout)
+    return _openai_chat(messages, model, request_timeout, prompt_type, fallback_models)
+
+def _oss120b_chat(messages: List[Dict[str, str]], request_timeout: Optional[int] = None) -> str:
+    if OSS_CLIENT is None:
+        raise APIError("OSS120BClient not configured")
+    return OSS_CLIENT.chat(messages, timeout=request_timeout)
 
 def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
     """
@@ -470,13 +495,16 @@ def _prepare_project_dir(output_dir: Path, modify_existing: bool) -> Path:
     return project_dir
 
 def _generate_research_ideas(
-    topic: str, 
-    field: str, 
-    question: str, 
+    topic: str,
+    field: str,
+    question: str,
     model: str,
     num_ideas: int = 15,
     request_timeout: Optional[int] = 3600,
-    fallback_models: Optional[List[str]] = None
+    fallback_models: Optional[List[str]] = None,
+    brainstorm_model: Optional[str] = None,
+    num_brainstorm: int = 5,
+    top_k: int = 3,
 ) -> Dict[str, Any]:
     """
     Generate and rank multiple research ideas for the given topic/field/question.
@@ -494,7 +522,61 @@ def _generate_research_ideas(
         Dictionary containing ranked ideas with analysis
     """
     print(f"🧠 Generating {num_ideas} research ideas for '{topic}' in {field}...")
-    
+
+    if brainstorm_model:
+        brainstorm_ideas = []
+        for _ in range(num_brainstorm):
+            single_prompt = (
+                "Generate one research idea for the following topic. Provide Title, Core Concept, Originality (1-10), Impact (1-10), and Feasibility (1-10).\n"
+                f"TOPIC: {topic}\nFIELD: {field}\nQUESTION: {question}"
+            )
+            try:
+                resp = _universal_chat(
+                    [{"role": "user", "content": single_prompt}],
+                    model=brainstorm_model,
+                    request_timeout=request_timeout,
+                    prompt_type="ideation",
+                    fallback_models=fallback_models or [],
+                )
+                parsed = _parse_ideation_response(resp)
+                if parsed:
+                    brainstorm_ideas.append(parsed[0])
+            except Exception as e:
+                print(f"  ⚠️ Brainstorming failed: {e}")
+
+        ideas_sorted = sorted(
+            brainstorm_ideas,
+            key=lambda i: (
+                i.get('originality', 0) + i.get('impact', 0) + i.get('feasibility', 0)
+            ) / 3,
+            reverse=True,
+        )
+        top_ideas = ideas_sorted[:top_k]
+        summary = "\n".join(
+            [
+                f"Title: {i.get('title','')}\nConcept: {i.get('core_concept','')}\nScores: O={i.get('originality','')}, I={i.get('impact','')}, F={i.get('feasibility','')}"
+                for i in top_ideas
+            ]
+        )
+        ranking_prompt = "Rank the following research ideas and select the best one:\n" + summary
+        ranking_response = _universal_chat(
+            [{"role": "user", "content": ranking_prompt}],
+            model=model,
+            request_timeout=request_timeout,
+            prompt_type="ideation",
+            fallback_models=fallback_models or [],
+        )
+        selected = top_ideas[0] if top_ideas else None
+        return {
+            "ideas": top_ideas,
+            "raw_response": ranking_response,
+            "selected_idea": selected,
+            "brainstorm_ideas": brainstorm_ideas,
+            "topic": topic,
+            "field": field,
+            "question": question,
+        }
+
     ideation_prompt = f"""
 You are a brilliant research strategist tasked with generating innovative research ideas.
 
@@ -579,6 +661,7 @@ Select the single best idea and explain why it's optimal for development into a 
             "ideas": ideas,
             "raw_response": response,
             "selected_idea": ideas[0] if ideas else None,
+            "brainstorm_ideas": ideas,
             "topic": topic,
             "field": field,
             "question": question
@@ -607,6 +690,7 @@ Select the single best idea and explain why it's optimal for development into a 
                 "impact": 7,
                 "feasibility": 8
             },
+            "brainstorm_ideas": [],
             "topic": topic,
             "field": field,
             "question": question
@@ -1206,8 +1290,111 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "Return ONLY the complete revised LaTeX file. CRITICAL: Apply proper size constraints to ALL figures, tables, and diagrams. "
         "Ensure the paper is self-contained with embedded references and compiles without errors."
     )
-    
+
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
+
+
+def review_paper(
+    current_tex: str,
+    sim_summary: str,
+    paper_path: Path,
+    project_dir: Path,
+    iteration: int,
+    config: WorkflowConfig,
+    request_timeout: Optional[int],
+    user_prompt: Optional[str],
+) -> Tuple[str, str, bool, str, float, str]:
+    """Run the review stage and return review text, decision, latex status, quality score, and ref report."""
+    dynamic_timeout = _calculate_dynamic_timeout(current_tex, config)
+    latex_success, latex_errors = _compile_latex_and_get_errors(paper_path, timeout=dynamic_timeout)
+    if not latex_success:
+        print("⚠️ LaTeX compilation failed. Errors will be sent to LLM for fixing.")
+        print(f"Error log (last 20 lines):\n{latex_errors}")
+    else:
+        print("✅ LaTeX compilation successful!")
+
+    quality_issues = _validate_research_quality(current_tex, sim_summary)
+    if config.reference_validation:
+        quality_issues.extend(_validate_references_with_external_apis(current_tex, config))
+    if config.figure_validation:
+        quality_issues.extend(
+            _validate_figure_generation(current_tex, project_dir / 'simulation.py', project_dir)
+        )
+
+    ref_report = ""
+    if config.fast_ref_check:
+        ref_report = validate_references_with_llm(current_tex, config.review_model, request_timeout)
+        if ref_report:
+            (project_dir / "reference_validation.txt").write_text(ref_report, encoding="utf-8")
+
+    qa_results = asyncio.run(run_parallel_checks(current_tex, config.qa_model))
+    (project_dir / "qa_summary.json").write_text(json.dumps(qa_results, indent=2), encoding="utf-8")
+    if qa_results.get("figures"):
+        quality_issues.extend(qa_results["figures"])
+    if qa_results.get("bibliography"):
+        quality_issues.extend(qa_results["bibliography"])
+
+    current_metrics = _extract_quality_metrics(current_tex, sim_summary)
+    quality_score = _calculate_quality_score(current_metrics, quality_issues)
+
+    review = _universal_chat(
+        _review_prompt(current_tex, sim_summary, project_dir, user_prompt),
+        model=config.review_model,
+        request_timeout=request_timeout,
+        prompt_type="review",
+        fallback_models=config.fallback_models,
+    )
+    decision = _universal_chat(
+        _editor_prompt(review, iteration, user_prompt),
+        model=config.review_model,
+        request_timeout=request_timeout,
+        prompt_type="editor",
+        fallback_models=config.fallback_models,
+    )
+    (project_dir / f"review_{iteration}.txt").write_text(review, encoding="utf-8")
+    return review, decision, latex_success, latex_errors, quality_score, ref_report
+
+
+def revise_paper(
+    current_tex: str,
+    sim_summary: str,
+    review_text: str,
+    latex_errors: str,
+    paper_path: Path,
+    project_dir: Path,
+    iteration: int,
+    config: WorkflowConfig,
+    request_timeout: Optional[int],
+    user_prompt: Optional[str],
+    ref_report: str = "",
+) -> None:
+    """Run the revision stage and update paper.tex in place."""
+    full_review = review_text
+    if ref_report:
+        full_review += "\nREFERENCE ISSUES:\n" + ref_report
+    revised = _universal_chat(
+        _revise_prompt(current_tex, sim_summary, full_review, latex_errors, project_dir, user_prompt),
+        model=config.revision_model,
+        request_timeout=request_timeout,
+        prompt_type="revise",
+        fallback_models=config.fallback_models,
+    )
+    paper_path.write_text(revised, encoding="utf-8")
+    (project_dir / f"revision_{iteration}.tex").write_text(revised, encoding="utf-8")
+    if config.latex_auto_fix:
+        def llm_fix(tex: str, log: str) -> str:
+            messages = [
+                {"role": "system", "content": "You are a LaTeX expert. Fix the document so it compiles."},
+                {"role": "user", "content": f"LOG:\n{log}\n\nTEX:\n{tex}"},
+            ]
+            return _universal_chat(
+                messages,
+                model=config.review_model,
+                request_timeout=request_timeout,
+                prompt_type="latex_fix",
+                fallback_models=config.fallback_models,
+            )
+        compile_with_autofix(project_dir, tex_file=paper_path.name, llm_fix=llm_fix)
 
 def run_workflow(
     topic: str,
@@ -1301,7 +1488,10 @@ def run_workflow(
                 model=model,
                 num_ideas=num_ideas,
                 request_timeout=request_timeout,
-                fallback_models=config.fallback_models
+                fallback_models=config.fallback_models,
+                brainstorm_model=config.brainstorm_model,
+                num_brainstorm=config.num_brainstorm_ideas,
+                top_k=config.top_brainstorm_ideas,
             )
             
             # Use the best idea to refine the topic and question
@@ -1330,7 +1520,16 @@ def run_workflow(
                     f.write("FULL IDEATION RESPONSE:\n")
                     f.write("-" * 30 + "\n")
                     f.write(ideation_result.get("raw_response", ""))
-                
+
+                brainstorm_file = project_dir / "ideation_brainstorm.txt"
+                with open(brainstorm_file, 'w', encoding='utf-8') as bf:
+                    for idea in ideation_result.get("brainstorm_ideas", []):
+                        bf.write(f"Title: {idea.get('title','')}\n")
+                        bf.write(f"Concept: {idea.get('core_concept','')}\n")
+                        bf.write(
+                            f"Scores: O={idea.get('originality','')}, I={idea.get('impact','')}, F={idea.get('feasibility','')}\n\n"
+                        )
+
                 print(f"💾 Ideation analysis saved to: {ideation_file}")
                 
                 # Use refined topic and question for paper generation
@@ -1363,90 +1562,56 @@ def run_workflow(
     # Review-Revise loop with quality tracking
     for i in range(1, config.max_iterations + 1):
         print(f"Starting iteration {i} of {max_iterations}")
-        
-        # ALWAYS run simulation before each review to get current results
+
         print(f"Running simulation before review {i}...")
-        
-        # Enhanced simulation extraction with validation
         extract_success, extract_message = _extract_simulation_code_with_validation(paper_path, sim_path)
         if not extract_success:
             print(f"⚠️ Simulation extraction issues: {extract_message}")
-        
+
         simulation_fixer = _create_simulation_fixer(model, request_timeout)
         sim_out = run_simulation_with_smart_fixing(
-            sim_path, 
-            python_exec=python_exec, 
+            sim_path,
+            python_exec=python_exec,
             cwd=project_dir,
             llm_fixer=simulation_fixer,
-            max_fix_attempts=2
+            max_fix_attempts=2,
         )
-        # Include both simulation code and outputs for LLM review
         simulation_code = sim_path.read_text(encoding="utf-8", errors="ignore")
         sim_summary = summarize_simulation_outputs(sim_out, simulation_code)
-        
-        # COMPILE LATEX WITH DYNAMIC TIMEOUT
-        print(f"Compiling LaTeX file with pdflatex...")
+
         current_tex = paper_path.read_text(encoding="utf-8", errors="ignore")
-        dynamic_timeout = _calculate_dynamic_timeout(current_tex, config)
-        latex_success, latex_errors = _compile_latex_and_get_errors(paper_path, timeout=dynamic_timeout)
-        
-        if not latex_success:
-            print(f"⚠️ LaTeX compilation failed. Errors will be sent to LLM for fixing.")
-            print(f"Error log (last 20 lines):\n{latex_errors}")
-        else:
-            print(f"✅ LaTeX compilation successful!")
-        
-        # COMPREHENSIVE QUALITY VALIDATION
-        quality_issues = _validate_research_quality(current_tex, sim_summary)
-        
-        # Additional validations based on config
-        if config.reference_validation:
-            ref_issues = _validate_references_with_external_apis(current_tex, config)
-            quality_issues.extend(ref_issues)
-        
-        if config.figure_validation:
-            fig_issues = _validate_figure_generation(current_tex, sim_path, project_dir)
-            quality_issues.extend(fig_issues)
-        
-        if quality_issues:
-            print(f"Quality issues detected: {', '.join(quality_issues[:5])}{'...' if len(quality_issues) > 5 else ''}")
-        
-        # CALCULATE QUALITY METRICS AND TRACK PROGRESS
-        current_metrics = _extract_quality_metrics(current_tex, sim_summary)
-        quality_score = _calculate_quality_score(current_metrics, quality_issues)
+        review, decision, latex_success, latex_errors, quality_score, ref_report = review_paper(
+            current_tex,
+            sim_summary,
+            paper_path,
+            project_dir,
+            i,
+            config,
+            request_timeout,
+            user_prompt,
+        )
+
         quality_history.append(quality_score)
-        
-        # Resource management - limit quality history size using config
         if len(quality_history) > config.max_quality_history_size:
             keep_size = config.max_quality_history_size // 2
-            quality_history = quality_history[-keep_size:]  # Keep recent entries
+            quality_history = quality_history[-keep_size:]
             logger.info(f"Quality history trimmed to {keep_size} entries")
             print("🔧 Quality history trimmed for memory management")
-        
+
         logger.info(f"Iteration {i} quality score: {quality_score:.2f}")
         print(f"📊 Iteration {i} quality score: {quality_score:.2f}")
-        
-        # Check for improvement
+
         if quality_score > best_quality_score:
             best_quality_score = quality_score
             stagnation_count = 0
         else:
             stagnation_count += 1
-        
-        # Early stopping for stagnation
+
         if stagnation_count >= 2 and i > 1:
             print(f"⚠️ Quality stagnation detected ({stagnation_count} iterations without improvement)")
-        
-        # Enhanced review with quality metrics
-        review = _universal_chat(_review_prompt(current_tex, sim_summary, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="review", fallback_models=config.fallback_models)
-        
-        # Enhanced editorial decision with iteration count
-        decision = _universal_chat(_editor_prompt(review, i, user_prompt), model=model, request_timeout=request_timeout, prompt_type="editor", fallback_models=config.fallback_models)
-        
-        # ENHANCED DECISION LOGIC WITH QUALITY THRESHOLD
+
         decision_upper = decision.strip().upper()
         meets_quality_threshold = quality_score >= config.quality_threshold
-        
         if decision_upper.startswith("YES") and latex_success and meets_quality_threshold:
             print(f"[OK] Editor accepted at iteration {i}, LaTeX compiles, and quality threshold met (score: {quality_score:.2f})")
             final_metrics = _extract_quality_metrics(current_tex, sim_summary)
@@ -1460,21 +1625,21 @@ def run_workflow(
         elif decision_upper.startswith("REJECT"):
             print(f"[REJECT] Editor rejected the paper at iteration {i}.")
             print("Paper has fundamental issues but continuing with revisions to improve it...")
-            
-        # Continue with revision (whether NO or REJECT or quality issues or LaTeX errors)
-        revision_reasons = []
-        if not latex_success:
-            revision_reasons.append("LaTeX compilation errors")
-        if not meets_quality_threshold:
-            revision_reasons.append(f"quality below threshold ({quality_score:.2f} < {config.quality_threshold})")
-        if not revision_reasons:
-            revision_reasons.append("review feedback")
-            
-        print(f"Revising paper to address: {', '.join(revision_reasons)}")
-            
-        revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
-        paper_path.write_text(revised, encoding="utf-8")
-        
+
+        revise_paper(
+            current_tex,
+            sim_summary,
+            review,
+            latex_errors if not latex_success else "",
+            paper_path,
+            project_dir,
+            i,
+            config,
+            request_timeout,
+            user_prompt,
+            ref_report,
+        )
+
         print(f"Iteration {i}: Paper revised")
     
     # Final quality report
@@ -1660,6 +1825,15 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--enable-ideation", action="store_true", default=True, help="Enable research ideation phase for new papers")
     p.add_argument("--skip-ideation", action="store_true", help="Skip research ideation phase (use original topic directly)")
     p.add_argument("--num-ideas", type=int, default=15, help="Number of research ideas to generate (10-20)")
+
+    # Model customization
+    p.add_argument("--review-model", type=str, default=None, help="Model to use for review stage")
+    p.add_argument("--revision-model", type=str, default=None, help="Model to use for revision stage")
+    p.add_argument("--brainstorm-model", type=str, default=None, help="Model for brainstorming stage")
+    p.add_argument("--num-brainstorm-ideas", type=int, default=5, help="Number of brainstorm ideas to generate")
+    p.add_argument("--top-brainstorm-ideas", type=int, default=3, help="Top brainstorm ideas to consider")
+    p.add_argument("--latex-auto-fix", action="store_true", help="Enable automatic LaTeX fixing loop")
+    p.add_argument("--fast-ref-check", action="store_true", help="Enable lightweight reference validation with LLM")
     
     # Custom prompt parameter
     p.add_argument("--user-prompt", type=str, default=None, help="Custom prompt that takes priority over standard requirements")
@@ -1938,6 +2112,26 @@ def _check_visual_self_containment(paper_content: str) -> List[str]:
             issues.append("Table contains placeholder data - populate with real simulation results")
     
     return issues
+
+def validate_references_with_llm(paper_content: str, model: str, request_timeout: Optional[int] = None) -> str:
+    """Use a lightweight LLM to detect reference formatting issues."""
+    bib_match = re.search(r'\\begin\{thebibliography\}.*?\\end\{thebibliography\}', paper_content, re.DOTALL)
+    if not bib_match:
+        return ""
+    bib_text = bib_match.group(0)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a reference checker. Identify formatting problems or missing fields in the following bibliography."
+            ),
+        },
+        {"role": "user", "content": bib_text},
+    ]
+    try:
+        return _universal_chat(messages, model=model, request_timeout=request_timeout, prompt_type="reference_check")
+    except Exception:
+        return ""
 
 def _validate_references_with_external_apis(paper_content: str, config: Optional[WorkflowConfig] = None) -> List[str]:
     """Validate references using external APIs like CrossRef DOI validation."""
@@ -2234,7 +2428,24 @@ if __name__ == "__main__":
             config.to_file(Path(ns.save_config))
             print(f"✅ Configuration saved to: {ns.save_config}")
             sys.exit(0)
-        
+
+        if ns.review_model:
+            config.review_model = ns.review_model
+        if ns.revision_model:
+            config.revision_model = ns.revision_model
+        if ns.brainstorm_model:
+            config.brainstorm_model = ns.brainstorm_model
+        config.num_brainstorm_ideas = ns.num_brainstorm_ideas
+        config.top_brainstorm_ideas = ns.top_brainstorm_ideas
+        config.latex_auto_fix = ns.latex_auto_fix
+        config.fast_ref_check = ns.fast_ref_check
+        config.qa_model = config.review_model
+
+        if config.oss120b_endpoint and config.oss120b_api_key:
+            OSS_CLIENT = OSS120BClient(config.oss120b_endpoint, config.oss120b_api_key)
+            if not OSS_CLIENT.ping():
+                print("⚠️ OSS 120B server not reachable")
+
         print(f"📁 Working with: {ns.output_dir}")
         print(f"🤖 Using model: {ns.model}")
         print(f"🔄 Max iterations: {ns.max_iterations}")
