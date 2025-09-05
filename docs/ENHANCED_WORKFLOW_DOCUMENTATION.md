@@ -225,3 +225,15 @@ The enhanced workflow now enforces these requirements:
 - **Self-Sufficiency**: Papers can be shared and compiled anywhere without missing files
 
 This enhanced workflow ensures that every generated paper meets the highest standards for academic publishing while maintaining complete self-containment and authenticity.
+
+## Open Source 120B Model and NPU Support
+
+- The workflow can load the vendored **OpenAI OSS 120B** model located under `models/openai_120b/`.
+- Select it via `"default_model": "openai-oss-120b"` in `config_example.json`.
+- Specify the inference `"device"` (e.g., `"npu"` for Ascend 910B) and ensure `torch` and `torch-npu` are installed.
+- Appropriate Ascend drivers must be installed; verify availability with `python -c "import torch; print(torch.npu.is_available())"`.
+
+## Modular Review and LaTeX Fix Cycles
+
+- Review, editorial, and revision steps are now executed by the `run_review_cycle` orchestrator, writing `review_<n>.txt`, `editor_<n>.txt`, and `revise_<n>.tex` files to the project directory.
+- `latex_fix_cycle` iteratively compiles and fixes LaTeX sources, storing logs and proposed fixes under `latex_logs/` until the document compiles successfully.
