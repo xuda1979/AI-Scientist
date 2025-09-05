@@ -10,5 +10,14 @@
   "doi_rate_limit_delay": 0.05,
   "max_doi_cache_size": 2000,
   "default_model": "gpt-5",
+  "review_model": "gpt-4o-mini",
+  "revision_model": "gpt-4o",
+  "brainstorm_model": "gpt-3.5-turbo",
+  "num_brainstorm_ideas": 8,
+  "top_brainstorm_ideas": 3,
+  "oss120b_endpoint": "http://localhost:8000",
+  "oss120b_api_key": "CHANGE_ME",
+  "latex_auto_fix": false,
+  "fast_ref_check": false,
   "fallback_models": ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]
 }
