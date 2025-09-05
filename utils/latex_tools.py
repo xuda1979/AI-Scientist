@@ -180,3 +180,50 @@ def compile_with_autofix(
         else:
             return False
     return False
+
+
+def latex_fix_cycle(project_dir: Path, model: str, tex_file: str = "paper.tex", llm_fix: Optional[callable] = None, max_attempts: int = 3) -> Tuple[bool, str]:
+    """Iteratively sanitize, compile, and fix LaTeX sources.
+
+    Parameters
+    ----------
+    project_dir: Path
+        Directory containing the LaTeX project.
+    model: str
+        Name of the model used for fixing (for logging only).
+    tex_file: str
+        Target LaTeX file name.
+    llm_fix: callable
+        Function accepting (tex, log) and returning fixed tex.
+    max_attempts: int
+        Maximum number of fix attempts.
+
+    Returns
+    -------
+    success: bool
+        True if compilation succeeded.
+    log: str
+        Compiler log of the final attempt.
+    """
+    tex_path = project_dir / tex_file
+    logs_dir = project_dir / "latex_logs"
+    logs_dir.mkdir(exist_ok=True)
+    last_log = ""
+    for attempt in range(1, max_attempts + 1):
+        sanitize_and_constrain_file(tex_path)
+        ok, log_text = compile_latex(project_dir, tex_file=tex_file)
+        log_path = logs_dir / f"attempt_{attempt}.log"
+        log_path.write_text(log_text, encoding="utf-8")
+        last_log = log_text
+        if ok:
+            return True, log_text
+        if llm_fix is None:
+            continue
+        fixed_tex = llm_fix(tex_path.read_text(encoding="utf-8", errors="ignore"), log_text)
+        if fixed_tex:
+            patch_path = logs_dir / f"attempt_{attempt}_fix.tex"
+            patch_path.write_text(fixed_tex, encoding="utf-8")
+            tex_path.write_text(fixed_tex, encoding="utf-8")
+        else:
+            break
+    return False, last_log

@@ -22,6 +22,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
+from utils import load_oss120b
+
 # Google AI SDK
 try:
     import google.generativeai as genai
@@ -32,8 +34,11 @@ except ImportError:
 
 # Local helpers
 from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex, run_simulation_with_smart_fixing, summarize_simulation_outputs
+from utils.latex_tools import latex_fix_cycle
 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
+DEFAULT_DEVICE = os.environ.get("SCI_DEVICE", "cpu")
+ACTIVE_DEVICE = DEFAULT_DEVICE
 
 @dataclass
 class WorkflowConfig:
@@ -50,6 +55,7 @@ class WorkflowConfig:
     max_doi_cache_size: int = 1000
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
+    device: str = DEFAULT_DEVICE
     
     def __post_init__(self):
         if self.fallback_models is None:
@@ -115,6 +121,8 @@ def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = Non
 
 # Global logger instance
 logger = setup_workflow_logging()
+
+_OSS_MODEL = None
 
 class APIError(Exception):
     """Custom exception for API-related errors"""
@@ -348,14 +356,42 @@ def _create_simulation_fixer(model: str, request_timeout: Optional[int] = None):
         except Exception as e:
             print(f"LLM fixer error: {e}")
             return {"action": "accept", "reason": f"Unexpected error: {str(e)}"}
-    
+
     return _fix_simulation
+
+def _create_latex_fixer(model: str, request_timeout: Optional[int] = None, config: Optional[WorkflowConfig] = None):
+    """Return a callable that fixes LaTeX compilation issues using the active model."""
+    def _fix_latex(tex: str, log: str) -> str:
+        sys_prompt = (
+            "You are a LaTeX expert. Given a LaTeX source and the compiler log, return a corrected LaTeX file."
+        )
+        user = (
+            "===== LATEX SOURCE =====\n" + tex + "\n\n" +
+            "===== COMPILER LOG =====\n" + log + "\n\n" +
+            "Return ONLY the fixed LaTeX."
+        )
+        return _universal_chat(
+            [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}],
+            model=model,
+            request_timeout=request_timeout,
+            prompt_type="latex_fix",
+            fallback_models=config.fallback_models if config else None,
+        )
+
+    return _fix_latex
 
 def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
     """
     Universal chat function that automatically detects whether to use OpenAI or Google AI
     based on the model name and routes the request accordingly.
     """
+    if model == "openai-oss-120b":
+        global _OSS_MODEL
+        if _OSS_MODEL is None:
+            _OSS_MODEL = load_oss120b(ACTIVE_DEVICE)
+        prompt = "\n".join(m["content"] for m in messages)
+        return _OSS_MODEL(prompt)
+
     # Detect provider based on model name
     if model.startswith(('gemini', 'models/gemini')):
         # Google AI model
@@ -1209,6 +1245,52 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
     
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
 
+
+def _review_step(current_tex: str, sim_summary: str, project_dir: Path, user_prompt: Optional[str], model: str, request_timeout: Optional[int], config: WorkflowConfig, iteration: int) -> str:
+    """Run reviewer model and persist output."""
+    review = _universal_chat(
+        _review_prompt(current_tex, sim_summary, project_dir, user_prompt),
+        model=model,
+        request_timeout=request_timeout,
+        prompt_type="review",
+        fallback_models=config.fallback_models,
+    )
+    (project_dir / f"review_{iteration}.txt").write_text(review, encoding="utf-8")
+    return review
+
+
+def _editor_step(review_text: str, iteration: int, project_dir: Path, user_prompt: Optional[str], model: str, request_timeout: Optional[int], config: WorkflowConfig) -> str:
+    """Run editor model and persist output."""
+    decision = _universal_chat(
+        _editor_prompt(review_text, iteration, user_prompt),
+        model=model,
+        request_timeout=request_timeout,
+        prompt_type="editor",
+        fallback_models=config.fallback_models,
+    )
+    (project_dir / f"editor_{iteration}.txt").write_text(decision, encoding="utf-8")
+    return decision
+
+
+def _revise_step(current_tex: str, sim_summary: str, review_text: str, latex_errors: str, project_dir: Path, user_prompt: Optional[str], model: str, request_timeout: Optional[int], config: WorkflowConfig, iteration: int) -> str:
+    """Run revision model and persist output."""
+    revised = _universal_chat(
+        _revise_prompt(current_tex, sim_summary, review_text, latex_errors, project_dir, user_prompt),
+        model=model,
+        request_timeout=request_timeout,
+        prompt_type="revise",
+        fallback_models=config.fallback_models,
+    )
+    (project_dir / f"revise_{iteration}.tex").write_text(revised, encoding="utf-8")
+    return revised
+
+
+def run_review_cycle(current_tex: str, sim_summary: str, latex_errors: str, project_dir: Path, user_prompt: Optional[str], model: str, request_timeout: Optional[int], config: WorkflowConfig, iteration: int) -> Tuple[str, str]:
+    """Execute review and editor steps sequentially."""
+    review = _review_step(current_tex, sim_summary, project_dir, user_prompt, model, request_timeout, config, iteration)
+    decision = _editor_step(review, iteration, project_dir, user_prompt, model, request_timeout, config)
+    return review, decision
+
 def run_workflow(
     topic: str,
     field: str,
@@ -1384,17 +1466,16 @@ def run_workflow(
         simulation_code = sim_path.read_text(encoding="utf-8", errors="ignore")
         sim_summary = summarize_simulation_outputs(sim_out, simulation_code)
         
-        # COMPILE LATEX WITH DYNAMIC TIMEOUT
-        print(f"Compiling LaTeX file with pdflatex...")
+        # COMPILE LATEX USING ITERATIVE FIX CYCLE
         current_tex = paper_path.read_text(encoding="utf-8", errors="ignore")
-        dynamic_timeout = _calculate_dynamic_timeout(current_tex, config)
-        latex_success, latex_errors = _compile_latex_and_get_errors(paper_path, timeout=dynamic_timeout)
-        
+        latex_fixer = _create_latex_fixer(model, request_timeout, config)
+        latex_success, latex_errors = latex_fix_cycle(project_dir, model, llm_fix=latex_fixer)
         if not latex_success:
-            print(f"⚠️ LaTeX compilation failed. Errors will be sent to LLM for fixing.")
-            print(f"Error log (last 20 lines):\n{latex_errors}")
+            print("⚠️ LaTeX compilation failed after automatic fixes.")
+            print(f"Error log (last attempt):\n{latex_errors}")
         else:
-            print(f"✅ LaTeX compilation successful!")
+            print("✅ LaTeX compilation successful!")
+        current_tex = paper_path.read_text(encoding="utf-8", errors="ignore")
         
         # COMPREHENSIVE QUALITY VALIDATION
         quality_issues = _validate_research_quality(current_tex, sim_summary)
@@ -1437,16 +1518,23 @@ def run_workflow(
         if stagnation_count >= 2 and i > 1:
             print(f"⚠️ Quality stagnation detected ({stagnation_count} iterations without improvement)")
         
-        # Enhanced review with quality metrics
-        review = _universal_chat(_review_prompt(current_tex, sim_summary, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="review", fallback_models=config.fallback_models)
-        
-        # Enhanced editorial decision with iteration count
-        decision = _universal_chat(_editor_prompt(review, i, user_prompt), model=model, request_timeout=request_timeout, prompt_type="editor", fallback_models=config.fallback_models)
+        # Run modular review cycle (review + editor)
+        review, decision = run_review_cycle(
+            current_tex,
+            sim_summary,
+            latex_errors if not latex_success else "",
+            project_dir,
+            user_prompt,
+            model,
+            request_timeout,
+            config,
+            i,
+        )
         
         # ENHANCED DECISION LOGIC WITH QUALITY THRESHOLD
         decision_upper = decision.strip().upper()
         meets_quality_threshold = quality_score >= config.quality_threshold
-        
+
         if decision_upper.startswith("YES") and latex_success and meets_quality_threshold:
             print(f"[OK] Editor accepted at iteration {i}, LaTeX compiles, and quality threshold met (score: {quality_score:.2f})")
             final_metrics = _extract_quality_metrics(current_tex, sim_summary)
@@ -1460,22 +1548,32 @@ def run_workflow(
         elif decision_upper.startswith("REJECT"):
             print(f"[REJECT] Editor rejected the paper at iteration {i}.")
             print("Paper has fundamental issues but continuing with revisions to improve it...")
-            
-        # Continue with revision (whether NO or REJECT or quality issues or LaTeX errors)
+
+        # Determine reasons for revision
         revision_reasons = []
         if not latex_success:
             revision_reasons.append("LaTeX compilation errors")
         if not meets_quality_threshold:
             revision_reasons.append(f"quality below threshold ({quality_score:.2f} < {config.quality_threshold})")
-        if not revision_reasons:
+        if not decision_upper.startswith("YES"):
             revision_reasons.append("review feedback")
-            
-        print(f"Revising paper to address: {', '.join(revision_reasons)}")
-            
-        revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors if not latex_success else "", project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
-        paper_path.write_text(revised, encoding="utf-8")
-        
-        print(f"Iteration {i}: Paper revised")
+
+        if revision_reasons:
+            print(f"Revising paper to address: {', '.join(revision_reasons)}")
+            revised = _revise_step(
+                current_tex,
+                sim_summary,
+                review,
+                latex_errors if not latex_success else "",
+                project_dir,
+                user_prompt,
+                model,
+                request_timeout,
+                config,
+                i,
+            )
+            paper_path.write_text(revised, encoding="utf-8")
+            print(f"Iteration {i}: Paper revised")
     
     # Final quality report
     print(f"\n📈 Quality progression: {[f'{q:.2f}' for q in quality_history]}")
@@ -2228,6 +2326,9 @@ if __name__ == "__main__":
         else:
             config = WorkflowConfig()
             print("📄 Using default configuration")
+
+        global ACTIVE_DEVICE
+        ACTIVE_DEVICE = config.device
         
         # Save configuration if requested
         if ns.save_config:

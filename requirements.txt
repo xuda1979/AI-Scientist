@@ -1,6 +1,8 @@
 # Core AI Libraries
 openai>=1.0.0
 google-generativeai>=0.3.0
+torch>=2.0.0
+torch-npu>=2.0.0; platform_system=="Linux"
 
 # Additional dependencies that might be needed
 requests>=2.25.0
