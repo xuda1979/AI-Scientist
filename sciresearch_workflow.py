@@ -33,11 +33,15 @@ except ImportError:
     print("WARNING: Google AI SDK not installed. Run: pip install google-generativeai")
 
 # Local helpers
-from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex, run_simulation_with_smart_fixing, summarize_simulation_outputs
+from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex
+
+# Workflow step modules
+from workflow_steps.initial_draft import generate_initial_draft
+from workflow_steps.simulation import run_simulation_step
+from workflow_steps.review_revision import run_review_revision_step
 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
 
-@dataclass
 @dataclass
 class WorkflowConfig:
     """Configuration class for workflow parameters."""
@@ -49,15 +53,12 @@ class WorkflowConfig:
     figure_validation: bool = True
     reference_validation: bool = True
     max_quality_history_size: int = 20
-    enable_pdf_review: bool = False  # Disable PDF sending by default
+    enable_pdf_review: bool = False  # Enable PDF file review during revisions (disabled by default)
     doi_rate_limit_delay: float = 0.1
     max_doi_cache_size: int = 1000
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
     output_diffs: bool = False  # Optional diff output for each review/revision cycle
-    
-    # PDF review functionality
-    enable_pdf_review: bool = False  # Send PDF files to AI models during review/revision
     
     # Test-time compute scaling parameters
     use_test_time_scaling: bool = False
@@ -121,9 +122,9 @@ def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = Non
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     
-    # Console handler (for warnings and errors only)
+    # Console handler (mirror file logging)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.WARNING)
+    console_handler.setLevel(log_level)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
@@ -176,7 +177,11 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     """
     logger.info(f"Making API call to {model} for {prompt_type}")
     print(f"[API] Making API call to {model} for {prompt_type}...")
-    
+
+    if os.getenv("OFFLINE_MODE") == "1":
+        print("OFFLINE_MODE enabled - returning stub response without contacting API")
+        return _offline_response(prompt_type)
+
     if pdf_path and pdf_path.exists():
         print(f"[PDF] Including PDF in request: {pdf_path.name}")
     
@@ -223,9 +228,16 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                 except Exception as fallback_error:
                     print(f"WARNING: Fallback model {fallback_model} also failed: {fallback_error}")
                     continue
-        
+
         # If all models failed, raise the original error
         raise APIError(f"All models failed. Primary error: {primary_error}")
+
+
+def _offline_response(prompt_type: str) -> str:
+    """Return minimal placeholder responses when OFFLINE_MODE is enabled."""
+    if prompt_type == "combined_review_edit_revise":
+        return "## REVIEW\nOffline review skipped\n## REVISION DIFFS\n"
+    return ""
 
 def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, request_timeout: int, prompt_type: str, pdf_path: Optional[Path] = None, max_retries: int = 3) -> str:
     """
@@ -265,11 +277,11 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                             processed_messages[i]["content"] = f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}, {pdf_path.stat().st_size // 1024} KB) has been generated and is available for reference. Please provide feedback as if you can see the rendered document layout, figure placement, and visual formatting.**"
                             break
                     
-                    print(f"� PDF reference added to request: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
+                    print(f" PDF reference added to request: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
                     
                 except Exception as pdf_error:
                     print(f"WARNING: Failed to process PDF reference: {pdf_error}")
-                    print("📝 Continuing with text-only request...")
+                    print("Continuing with text-only request...")
             
             elif pdf_path and pdf_path.exists() and not _model_supports_vision(model):
                 print(f"INFO: Model {model} does not support vision input. Adding PDF reference note...")
@@ -281,7 +293,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                         break
             
             # Use configured temperature based on prompt type
-            print(f"📡 Sending request with temperature={temp}, timeout={request_timeout}s (attempt {attempt + 1}/{max_retries})...")
+            print(f"Sending request with temperature={temp}, timeout={request_timeout}s (attempt {attempt + 1}/{max_retries})...")
             
             resp = client.chat.completions.create(
                 model=model, 
@@ -724,7 +736,7 @@ def _save_candidate_diff(old_content: str, new_content: str, candidate_num: int,
         
         if diff_lines:
             print(f"\n{'='*60}")
-            print(f"📝 CANDIDATE {candidate_num} DIFF")
+            print(f"CANDIDATE {candidate_num} DIFF")
             print(f"{'='*60}")
             
             # Count changes
@@ -788,7 +800,7 @@ def _save_iteration_diff(old_content: str, new_content: str, output_dir: Path, i
         
         if diff_lines:
             print(f"\n{'='*80}")
-            print(f"📝 GIT DIFF FOR ITERATION {iteration} - {filename}")
+            print(f"GIT DIFF FOR ITERATION {iteration} - {filename}")
             print(f"{'='*80}")
             
             # Add git diff header
@@ -809,9 +821,9 @@ def _save_iteration_diff(old_content: str, new_content: str, output_dir: Path, i
         else:
             # Even if no diff, show content length comparison
             if len(old_content) != len(new_content):
-                print(f"📝 Subtle changes detected in iteration {iteration}: {len(old_content)} -> {len(new_content)} chars")
+                print(f"Subtle changes detected in iteration {iteration}: {len(old_content)} -> {len(new_content)} chars")
             else:
-                print(f"📝 No changes detected in iteration {iteration}")
+                print(f"No changes detected in iteration {iteration}")
             
             # Show first 200 chars of both for manual comparison
             print(f"DEBUG: Content comparison (first 200 chars):")
@@ -862,7 +874,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     # Set proxy specifically for Google AI API (not needed for OpenAI)
     original_proxy = os.environ.get("HTTPS_PROXY")
     os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7078"
-    print(f"🌐 Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
+    print(f"Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
     
     if pdf_path and pdf_path.exists():
         print(f"INFO: Including PDF in Gemini request: {pdf_path.name}")
@@ -913,11 +925,11 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                     uploaded_file
                 ]
                 
-                print(f"📎 PDF uploaded to Gemini: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
+                print(f"PDF uploaded to Gemini: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
                 
             except Exception as pdf_error:
                 print(f"WARNING: Failed to upload PDF to Gemini: {pdf_error}")
-                print("📝 Continuing with text-only request...")
+                print("Continuing with text-only request...")
                 content_parts = [combined_prompt.strip()]
         else:
             content_parts = [combined_prompt.strip()]
@@ -925,7 +937,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         # Create model instance using the reference approach
         genai_model = genai.GenerativeModel(model)
         
-        print(f"📡 Sending Google AI request with timeout={request_timeout}s...")
+        print(f"Sending Google AI request with timeout={request_timeout}s...")
         
         # Generate content with multimodal support
         if len(content_parts) > 1:
@@ -944,7 +956,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         
         # Provide helpful proxy setup guidance
         if "503" in error_msg or "connect" in error_msg.lower() or "timeout" in error_msg.lower():
-            print("💡 Connection issue detected. Proxy is set for Gemini API.")
+            print("Connection issue detected. Proxy is set for Gemini API.")
             print("   Check your network connection to Google AI API")
         
         # Try fallback models if available
@@ -1055,14 +1067,14 @@ Format your response as:
 After listing all {num_ideas} ideas, provide:
 
 ## RANKING ANALYSIS
-Rank the top 5 ideas by overall potential (considering originality × impact × feasibility), and explain your ranking criteria.
+Rank the top 5 ideas by overall potential (considering originality  impact  feasibility), and explain your ranking criteria.
 
 ## RECOMMENDATION
 Select the single best idea and explain why it's optimal for development into a research paper.
 """
 
     try:
-        print("  📝 Sending ideation request to AI...")
+        print("  Sending ideation request to AI...")
         messages = [{"role": "user", "content": ideation_prompt}]
         
         response = _universal_chat(
@@ -1082,7 +1094,7 @@ Select the single best idea and explain why it's optimal for development into a 
         
         # Display summary
         print("INFO: Research Ideas Summary:")
-        print("━" * 60)
+        print("" * 60)
         
         for i, idea in enumerate(ideas[:5], 1):  # Show top 5
             originality = idea.get('originality', 0)
@@ -1283,7 +1295,7 @@ def test_time_compute_scaling(
         metrics['code_presence'] = min(code_count / 4, 1.0)
         
         # Mathematical notation (for algorithmic problems)
-        math_indicators = ['O(', 'θ(', 'Ω(', 'log', 'n²', 'n^2', 'exponential', 
+        math_indicators = ['O(', '(', '(', 'log', 'n', 'n^2', 'exponential', 
                           'polynomial', 'linear', 'quadratic', 'complexity']
         math_count = sum(1 for indicator in math_indicators 
                         if indicator.lower() in response.lower())
@@ -1334,7 +1346,7 @@ def test_time_compute_scaling(
         print(f"INFO: Generating {candidate_count} candidate responses...")
         
         for i in range(candidate_count):
-            print(f"    📝 Generating candidate {i + 1}/{candidate_count}...")
+            print(f"    Generating candidate {i + 1}/{candidate_count}...")
             
             start_time = time.time()
             
@@ -1364,10 +1376,10 @@ def test_time_compute_scaling(
                 candidates.append(response)
                 generation_times.append(generation_time)
                 
-                print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(response)} chars")
+                print(f"       Candidate {i + 1} generated: {generation_time:.2f}s, {len(response)} chars")
                 
             except Exception as e:
-                print(f"      ❌ Candidate {i + 1} failed: {e}")
+                print(f"       Candidate {i + 1} failed: {e}")
                 candidates.append("")
                 generation_times.append(None)
         
@@ -1375,7 +1387,7 @@ def test_time_compute_scaling(
         valid_candidates = [c for c in candidates if c.strip()]
         
         if valid_candidates:
-            print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
+            print(f"  Selecting best candidate from {len(valid_candidates)} valid responses...")
             
             best_candidate, best_metrics, best_index = _select_best_candidate(valid_candidates)
             
@@ -1404,9 +1416,9 @@ def test_time_compute_scaling(
                 "metrics": best_metrics
             }
             
-            print(f"    🎯 Best candidate quality: {best_metrics['overall_quality']:.3f}")
-            print(f"    📊 Average quality: {statistics.mean(all_metrics):.3f}")
-            print(f"    ⬆️  Quality improvement: {best_metrics['overall_quality'] - statistics.mean(all_metrics):.3f}")
+            print(f"    Best candidate quality: {best_metrics['overall_quality']:.3f}")
+            print(f"    Average quality: {statistics.mean(all_metrics):.3f}")
+            print(f"      Quality improvement: {best_metrics['overall_quality'] - statistics.mean(all_metrics):.3f}")
             
         else:
             results["candidate_results"][candidate_count] = {
@@ -1416,7 +1428,7 @@ def test_time_compute_scaling(
             }
     
     # Analyze quality scaling with compute
-    print(f"\n📈 Analyzing quality scaling with test-time compute...")
+    print(f"\nAnalyzing quality scaling with test-time compute...")
     
     successful_results = {k: v for k, v in results["candidate_results"].items() 
                          if isinstance(v, dict) and "best_quality_score" in v}
@@ -1476,8 +1488,8 @@ def test_time_compute_scaling(
         results["recommendations"] = {"error": "Cannot generate recommendations due to insufficient data"}
     
     # Print comprehensive summary
-    print(f"\n📋 Test-Time Compute Scaling Summary for {model}")
-    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"\nTest-Time Compute Scaling Summary for {model}")
+    print(f"")
     
     for candidate_count, result in results["candidate_results"].items():
         if "best_quality_score" in result:
@@ -1499,7 +1511,7 @@ def test_time_compute_scaling(
         print(f"\nRecommended candidates: {rec['recommended_candidate_count']}")
         print(f"Expected compute time: {rec['compute_budget_per_query']:.1f}s per query")
     
-    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"")
     
     return results
 
@@ -1538,14 +1550,14 @@ def _generate_best_revision_candidate(
     import time
     import hashlib
     
-    print(f"  🎯 Generating {candidate_count} revision candidates...")
+    print(f"  Generating {candidate_count} revision candidates...")
     
     candidates = []
     generation_times = []
     
     # Generate multiple revision candidates with aggressive variations
     for i in range(candidate_count):
-        print(f"    📝 Generating revision candidate {i + 1}/{candidate_count}...")
+        print(f"    Generating revision candidate {i + 1}/{candidate_count}...")
         
         start_time = time.time()
         
@@ -1588,20 +1600,20 @@ def _generate_best_revision_candidate(
             candidates.append(candidate)
             generation_times.append(generation_time)
             
-            print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
+            print(f"       Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
             
             # DEBUG: Show first 300 chars of each revision candidate
-            print(f"      🔍 DEBUG - Revision candidate {i + 1} preview:")
+            print(f"      DEBUG - Revision candidate {i + 1} preview:")
             print(f"      {candidate[:300]}...")
-            print(f"      {'─'*60}")
+            print(f"      {''*60}")
             
             # Show diff from original for each candidate
             if output_diffs:
-                print(f"      🔍 Comparing candidate {i + 1} to original...")
+                print(f"      Comparing candidate {i + 1} to original...")
                 _save_candidate_diff(current_tex, candidate, i + 1, "candidate")
             
         except Exception as e:
-            print(f"      ❌ Candidate {i + 1} failed: {e}")
+            print(f"       Candidate {i + 1} failed: {e}")
             candidates.append("")
             generation_times.append(None)
     
@@ -1609,33 +1621,33 @@ def _generate_best_revision_candidate(
     valid_candidates = [(i, c) for i, c in enumerate(candidates) if c.strip()]
     
     if not valid_candidates:
-        print("    ⚠️  All revision candidates failed, using empty response")
+        print("      All revision candidates failed, using empty response")
         return ""
     
-    print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
+    print(f"  Selecting best candidate from {len(valid_candidates)} valid responses...")
     
     # Use LLM to evaluate and select the best revision candidate
-    print(f"  🤖 Asking LLM to evaluate revision candidates...")
+    print(f"  Asking LLM to evaluate revision candidates...")
     
     # Prepare candidates for LLM evaluation (in-memory only)
     revision_candidates = [c for _, c in valid_candidates]
 
     # DEBUG: Show what we're sending to the LLM
-    print(f"  🔍 DEBUG - Sending {len(revision_candidates)} candidates to LLM for evaluation:")
+    print(f"  DEBUG - Sending {len(revision_candidates)} candidates to LLM for evaluation:")
     for i, candidate in enumerate(revision_candidates):
         print(f"  - Candidate {i+1}: {len(candidate)} chars")
     print(f"  Original content: {len(current_tex)} chars")
     print(f"  Review text: {len(review_text)} chars")
-    print(f"  {'─'*60}")
+    print(f"  {''*60}")
     
     best_candidate_response = _select_best_revision_candidate_with_llm(
         revision_candidates, current_tex, review_text, model, request_timeout, config, pdf_path=pdf_path, project_dir=project_dir
     )
     
     # DEBUG: Show full LLM evaluation response
-    print(f"  🔍 DEBUG - LLM Revision Evaluation Response:")
+    print(f"  DEBUG - LLM Revision Evaluation Response:")
     print(f"  {best_candidate_response}")
-    print(f"  {'═'*80}")
+    print(f"  {''*80}")
     
     # Parse the LLM selection response
     try:
@@ -1645,32 +1657,32 @@ def _generate_best_revision_candidate(
             selected_idx = int(selection_match.group(1)) - 1  # Convert to 0-based index
             if 0 <= selected_idx < len(valid_candidates):
                 orig_idx, best_candidate = valid_candidates[selected_idx]
-                print(f"  🎯 LLM selected candidate {selected_idx + 1} (original index {orig_idx + 1})")
+                print(f"  LLM selected candidate {selected_idx + 1} (original index {orig_idx + 1})")
                 
                 # Show why this candidate was selected
                 reasoning_match = re.search(r'REASONING:\s*(.*?)(?=SELECTED:|$)', best_candidate_response, re.DOTALL | re.IGNORECASE)
                 if reasoning_match:
                     reasoning = reasoning_match.group(1).strip()
-                    print(f"  � Selection reasoning: {reasoning[:200]}...")
+                    print(f"   Selection reasoning: {reasoning[:200]}...")
                 
                 # Show final selected candidate diff
                 if output_diffs:
-                    print(f"\n🎯 FINAL SELECTED CANDIDATE DIFF:")
+                    print(f"\nFINAL SELECTED CANDIDATE DIFF:")
                     _save_candidate_diff(current_tex, best_candidate, selected_idx + 1, "SELECTED")
                 
                 # Calculate compute time
                 total_time = sum(t for t in generation_times if t)
-                print(f"  ⏱️  Total compute time: {total_time:.1f}s")
+                print(f"    Total compute time: {total_time:.1f}s")
                 
                 return best_candidate
             else:
-                print(f"  ⚠️ Invalid selection index {selected_idx + 1}, using first candidate")
+                print(f"   Invalid selection index {selected_idx + 1}, using first candidate")
                 return valid_candidates[0][1]
         else:
-            print(f"  ⚠️ Could not parse LLM selection, using first candidate")
+            print(f"   Could not parse LLM selection, using first candidate")
             return valid_candidates[0][1]
     except Exception as e:
-        print(f"  ❌ Error parsing LLM selection: {e}, using first candidate")
+        print(f"   Error parsing LLM selection: {e}, using first candidate")
         return valid_candidates[0][1]
 
 def _evaluate_revision_quality(revised_text: str, review_text: str, latex_errors: str) -> Dict[str, float]:
@@ -1843,14 +1855,14 @@ def _generate_best_initial_draft_candidate(
     """
     import time
     
-    print(f"  🎯 Generating {candidate_count} initial draft candidates...")
+    print(f"  Generating {candidate_count} initial draft candidates...")
     
     candidates = []
     generation_times = []
     
     # Generate multiple initial draft candidates with slight variations
     for i in range(candidate_count):
-        print(f"    📝 Generating draft candidate {i + 1}/{candidate_count}...")
+        print(f"    Generating draft candidate {i + 1}/{candidate_count}...")
         
         start_time = time.time()
         
@@ -1889,10 +1901,10 @@ def _generate_best_initial_draft_candidate(
             candidates.append(candidate)
             generation_times.append(generation_time)
             
-            print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
+            print(f"       Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
             
         except Exception as e:
-            print(f"      ❌ Candidate {i + 1} failed: {e}")
+            print(f"       Candidate {i + 1} failed: {e}")
             candidates.append("")
             generation_times.append(None)
     
@@ -1900,10 +1912,10 @@ def _generate_best_initial_draft_candidate(
     valid_candidates = [(i, c) for i, c in enumerate(candidates) if c.strip()]
     
     if not valid_candidates:
-        print("    ⚠️  All draft candidates failed, using empty response")
+        print("      All draft candidates failed, using empty response")
         return ""
     
-    print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
+    print(f"  Selecting best candidate from {len(valid_candidates)} valid responses...")
     
     # Evaluate each candidate using quality metrics
     candidate_scores = []
@@ -1915,10 +1927,10 @@ def _generate_best_initial_draft_candidate(
             score = metrics['overall_quality']
             candidate_scores.append((orig_idx, candidate, score, metrics))
             
-            print(f"    📊 Candidate {orig_idx + 1}: Quality score {score:.3f}")
+            print(f"    Candidate {orig_idx + 1}: Quality score {score:.3f}")
             
         except Exception as e:
-            print(f"    ❌ Failed to evaluate candidate {orig_idx + 1}: {e}")
+            print(f"     Failed to evaluate candidate {orig_idx + 1}: {e}")
             candidate_scores.append((orig_idx, candidate, 0.0, {}))
     
     # Select the best candidate
@@ -1927,13 +1939,13 @@ def _generate_best_initial_draft_candidate(
         avg_score = sum(score for _, _, score, _ in candidate_scores) / len(candidate_scores)
         improvement = best_score - avg_score
         
-        print(f"  🎯 Selected candidate {best_idx + 1} with quality score {best_score:.3f}")
-        print(f"  📈 Quality improvement over average: +{improvement:.3f}")
-        print(f"  ⏱️  Total compute time: {sum(t for t in generation_times if t):.1f}s")
+        print(f"  Selected candidate {best_idx + 1} with quality score {best_score:.3f}")
+        print(f"  Quality improvement over average: +{improvement:.3f}")
+        print(f"    Total compute time: {sum(t for t in generation_times if t):.1f}s")
         
         return best_candidate
     else:
-        print("    ⚠️  No valid candidates scored, returning first valid candidate")
+        print("      No valid candidates scored, returning first valid candidate")
         return valid_candidates[0][1] if valid_candidates else ""
 
 def _evaluate_initial_draft_quality(draft_text: str, topic: str, field: str, question: str) -> Dict[str, float]:
@@ -2352,7 +2364,7 @@ def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str
     file_changes = {}
     
     if diffs_text:
-        print(f"🔍 DEBUG: Found revision section with {len(diffs_text)} characters")
+        print(f"DEBUG: Found revision section with {len(diffs_text)} characters")
         
         # Method 1: Look for complete file contents in code blocks with file comments
         file_blocks = re.findall(r'```(?:latex|tex|python|py|txt)?\s*\n# ?(?:File: ?|Filename: ?)?([^\n]+)\n(.*?)\n```', diffs_text, re.DOTALL)
@@ -2362,7 +2374,7 @@ def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str
                 if filename.endswith(':'):
                     filename = filename[:-1]  # Remove trailing colon
                 file_changes[filename] = content.strip()
-                print(f"🔍 DEBUG: Extracted {filename} ({len(content)} chars) from code block with file comment")
+                print(f"DEBUG: Extracted {filename} ({len(content)} chars) from code block with file comment")
         
         # Method 2: Look for code blocks without file comments but with language hints
         if not file_changes:
@@ -2370,12 +2382,12 @@ def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str
             tex_blocks = re.findall(r'```(?:latex|tex)\s*\n(.*?)\n```', diffs_text, re.DOTALL)
             if tex_blocks:
                 file_changes['paper.tex'] = tex_blocks[0].strip()
-                print(f"🔍 DEBUG: Extracted paper.tex ({len(tex_blocks[0])} chars) from tex code block")
+                print(f"DEBUG: Extracted paper.tex ({len(tex_blocks[0])} chars) from tex code block")
             
             py_blocks = re.findall(r'```(?:python|py)\s*\n(.*?)\n```', diffs_text, re.DOTALL)
             if py_blocks:
                 file_changes['simulation.py'] = py_blocks[0].strip()
-                print(f"🔍 DEBUG: Extracted simulation.py ({len(py_blocks[0])} chars) from python code block")
+                print(f"DEBUG: Extracted simulation.py ({len(py_blocks[0])} chars) from python code block")
         
         # Method 3: Look for explicit file sections (File: filename)
         file_sections = re.findall(r'(?:File: ?|Filename: ?)([^\n]+)\n```[^\n]*\n(.*?)\n```', diffs_text, re.DOTALL)
@@ -2385,18 +2397,18 @@ def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str
                 filename = filename[:-1]  # Remove trailing colon
             if filename not in file_changes:  # Don't override if already found
                 file_changes[filename] = content.strip()
-                print(f"🔍 DEBUG: Extracted {filename} ({len(content)} chars) from file section")
+                print(f"DEBUG: Extracted {filename} ({len(content)} chars) from file section")
         
         # Method 4: Look for files mentioned by name with content following
         file_mentions = re.findall(r'([a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z]+):\s*\n```[^\n]*\n(.*?)\n```', diffs_text, re.DOTALL)
         for filename, content in file_mentions:
             if filename not in file_changes:  # Don't override if already found
                 file_changes[filename] = content.strip()
-                print(f"🔍 DEBUG: Extracted {filename} ({len(content)} chars) from file mention")
+                print(f"DEBUG: Extracted {filename} ({len(content)} chars) from file mention")
         
-        print(f"🔍 DEBUG: Total files extracted: {list(file_changes.keys())}")
+        print(f"DEBUG: Total files extracted: {list(file_changes.keys())}")
     else:
-        print(f"🔍 DEBUG: No revision section found in response")
+        print(f"DEBUG: No revision section found in response")
     
     # Always return "REVISE" as the decision since we removed editorial logic
     return review_text, "REVISE", file_changes
@@ -2424,25 +2436,25 @@ def _apply_file_changes(file_changes: dict, project_dir: Path) -> None:
             
             # Debug: Check if content actually changed
             if original_content.strip() == content.strip():
-                print(f"⚠️ Updated {filename} - but content appears identical (no real changes)")
+                print(f" Updated {filename} - but content appears identical (no real changes)")
                 # DEBUG: Show first 500 chars of both for comparison
-                print(f"🔍 DEBUG - Original content (first 500 chars): {original_content[:500]}...")
-                print(f"🔍 DEBUG - New content (first 500 chars): {content[:500]}...")
-                print(f"🔍 DEBUG - Character-by-character comparison of first 100 chars:")
+                print(f"DEBUG - Original content (first 500 chars): {original_content[:500]}...")
+                print(f"DEBUG - New content (first 500 chars): {content[:500]}...")
+                print(f"DEBUG - Character-by-character comparison of first 100 chars:")
                 for i, (orig_char, new_char) in enumerate(zip(original_content[:100], str(content)[:100])):
                     if orig_char != new_char:
                         print(f"  Diff at position {i}: '{orig_char}' -> '{new_char}'")
             else:
-                print(f"✅ Updated {filename} - content changed: {len(original_content)} -> {len(content)} chars")
+                print(f" Updated {filename} - content changed: {len(original_content)} -> {len(content)} chars")
                 # DEBUG: Show what changed
-                print(f"🔍 DEBUG - Content change details:")
+                print(f"DEBUG - Content change details:")
                 if len(original_content) != len(str(content)):
                     print(f"  Length changed: {len(original_content)} -> {len(str(content))}")
                 else:
                     print(f"  Same length but different content")
             
         except Exception as e:
-            print(f"❌ Failed to update {filename}: {e}")
+            print(f" Failed to update {filename}: {e}")
 
 def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
@@ -2701,7 +2713,7 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
         Tuple of (success, pdf_path, error_message)
     """
     try:
-        print(f"📄 Generating PDF for AI review from {paper_path.name}...")
+        print(f"Generating PDF for AI review from {paper_path.name}...")
         
         # Run pdflatex with nonstopmode
         result = subprocess.run(
@@ -2716,7 +2728,7 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
         pdf_path = paper_path.with_suffix('.pdf')
         
         if pdf_path.exists():
-            print(f"✅ PDF generated successfully: {pdf_path.name}")
+            print(f" PDF generated successfully: {pdf_path.name}")
             return True, pdf_path, ""
         else:
             # Get error details from log
@@ -2730,20 +2742,20 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
                 except Exception:
                     error_msg += " Could not read log file."
             
-            print(f"❌ PDF generation failed: {error_msg}")
+            print(f" PDF generation failed: {error_msg}")
             return False, None, error_msg
         
     except subprocess.TimeoutExpired:
         error_msg = f"PDF generation timed out after {timeout} seconds"
-        print(f"❌ {error_msg}")
+        print(f" {error_msg}")
         return False, None, error_msg
     except FileNotFoundError:
         error_msg = "pdflatex command not found. Please install a LaTeX distribution."
-        print(f"❌ {error_msg}")
+        print(f" {error_msg}")
         return False, None, error_msg
     except Exception as e:
         error_msg = f"PDF generation error: {str(e)}"
-        print(f"❌ {error_msg}")
+        print(f" {error_msg}")
         return False, None, error_msg
 
 def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
@@ -3006,7 +3018,7 @@ def run_workflow(
     # Get custom user prompt if not provided as parameter
     if user_prompt is None:
         print("\n" + "="*60)
-        print("🎯 CUSTOM PROMPT INPUT")
+        print("CUSTOM PROMPT INPUT")
         print("="*60)
         print("You can provide a custom prompt that will be integrated into all AI interactions.")
         print("This prompt will take priority over standard requirements when conflicts arise.")
@@ -3022,20 +3034,20 @@ def run_workflow(
         if not user_prompt:
             user_prompt = None
         else:
-            print(f"\n✅ Custom prompt set: {user_prompt[:100]}{'...' if len(user_prompt) > 100 else ''}")
+            print(f"\n Custom prompt set: {user_prompt[:100]}{'...' if len(user_prompt) > 100 else ''}")
     
     # Store user prompt for use in all AI interactions
     if user_prompt:
-        print(f"\n🎯 Using custom user prompt throughout workflow")
+        print(f"\nUsing custom user prompt throughout workflow")
     
-    print(f"\n📁 Project directory: {project_dir}")
-    print(f"📄 Paper file: {paper_path}")
-    print(f"🐍 Simulation file: {sim_path}")
+    print(f"\nProject directory: {project_dir}")
+    print(f"Paper file: {paper_path}")
+    print(f"Simulation file: {sim_path}")
 
     # Check for separate refs.bib files and warn user
     refs_bib_files = list(project_dir.glob("*.bib"))
     if refs_bib_files:
-        print(f"⚠️ WARNING: Found separate bibliography files: {[f.name for f in refs_bib_files]}")
+        print(f" WARNING: Found separate bibliography files: {[f.name for f in refs_bib_files]}")
         print("   All references must be embedded in paper.tex using filecontents or thebibliography")
         print("   Separate .bib files will be ignored during compilation!")
 
@@ -3046,7 +3058,7 @@ def run_workflow(
     # If no real paper content yet (fresh), run ideation and then draft one.
     if is_minimal_template:
         if enable_ideation:
-            print("🧠 Starting Ideation Phase for new paper...")
+            print("Starting Ideation Phase for new paper...")
             
             # Generate and analyze multiple research ideas
             ideation_result = _generate_research_ideas(
@@ -3065,7 +3077,7 @@ def run_workflow(
                 refined_topic = selected_idea.get("title", topic)
                 refined_question = selected_idea.get("core_concept", question)
                 
-                print(f"\n⭐ Selected Research Idea:")
+                print(f"\n Selected Research Idea:")
                 print(f"   Title: {refined_topic}")
                 print(f"   Concept: {refined_question}")
                 print(f"   Scores: O={selected_idea.get('originality', 'N/A')}, "
@@ -3086,39 +3098,40 @@ def run_workflow(
                     f.write("-" * 30 + "\n")
                     f.write(ideation_result.get("raw_response", ""))
                 
-                print(f"💾 Ideation analysis saved to: {ideation_file}")
+                print(f"Ideation analysis saved to: {ideation_file}")
                 
                 # Use refined topic and question for paper generation
                 final_topic = refined_topic
                 final_question = refined_question
             else:
-                print("⚠️  No ideas selected, using original topic/question")
+                print("  No ideas selected, using original topic/question")
                 final_topic = topic
                 final_question = question
         else:
-            print("ℹ️  Ideation phase skipped (--skip-ideation flag used)")
+            print("  Ideation phase skipped (--skip-ideation flag used)")
             final_topic = topic
             final_question = question
         
-        print(f"\n📝 Creating paper draft for: {final_topic}")
+        print(f"\nCreating paper draft for: {final_topic}")
         
-        # Use test-time compute scaling for initial draft if enabled
-        if hasattr(config, 'use_test_time_scaling') and config.use_test_time_scaling and hasattr(config, 'initial_draft_candidates') and config.initial_draft_candidates > 1:
-            print(f"🧪 Using test-time compute scaling with {config.initial_draft_candidates} draft candidates...")
-            draft = _generate_best_initial_draft_candidate(
-                final_topic, field, final_question, user_prompt, model, request_timeout, config, config.initial_draft_candidates
-            )
-        else:
-            draft = _universal_chat(_initial_draft_prompt(final_topic, field, final_question, user_prompt), model=model, request_timeout=request_timeout, prompt_type="initial_draft", fallback_models=config.fallback_models)
+        draft = generate_initial_draft(
+            final_topic,
+            field,
+            final_question,
+            user_prompt,
+            model,
+            request_timeout,
+            config,
+        )
         paper_path.write_text(draft, encoding="utf-8")
         
         if enable_ideation:
-            print("✅ Initial draft created with ideation-selected concept")
+            print(" Initial draft created with ideation-selected concept")
         else:
-            print("✅ Initial draft created with original concept")
+            print(" Initial draft created with original concept")
     else:
         print(f"Using existing paper content ({len(paper_content)} characters)")
-        print("ℹ️  Skipping ideation phase for existing paper")
+        print("  Skipping ideation phase for existing paper")
 
     # Extract/refresh simulation.py from LaTeX initially
     extract_simulation_from_tex(paper_path, sim_path)
@@ -3130,22 +3143,14 @@ def run_workflow(
         # ALWAYS run simulation before each review to get current results
         print(f"Running simulation before review {i}...")
         
-        # Enhanced simulation extraction with validation
-        extract_success, extract_message = _extract_simulation_code_with_validation(paper_path, sim_path)
-        if not extract_success:
-            print(f"⚠️ Simulation extraction issues: {extract_message}")
-        
-        simulation_fixer = _create_simulation_fixer(model, request_timeout)
-        sim_out = run_simulation_with_smart_fixing(
-            sim_path, 
-            python_exec=python_exec, 
-            cwd=project_dir,
-            llm_fixer=simulation_fixer,
-            max_fix_attempts=2
+        sim_summary, _ = run_simulation_step(
+            paper_path,
+            sim_path,
+            project_dir,
+            model,
+            request_timeout,
+            python_exec,
         )
-        # Include both simulation code and outputs for LLM review
-        simulation_code = sim_path.read_text(encoding="utf-8", errors="ignore")
-        sim_summary = summarize_simulation_outputs(sim_out, simulation_code)
         
         # COMPILE LATEX WITH DYNAMIC TIMEOUT
         print(f"Compiling LaTeX file with pdflatex...")
@@ -3154,10 +3159,10 @@ def run_workflow(
         latex_success, latex_errors = _compile_latex_and_get_errors(paper_path, timeout=dynamic_timeout)
         
         if not latex_success:
-            print(f"⚠️ LaTeX compilation failed. Errors will be sent to LLM for fixing.")
+            print(f" LaTeX compilation failed. Errors will be sent to LLM for fixing.")
             print(f"Error log (last 20 lines):\n{latex_errors}")
         else:
-            print(f"✅ LaTeX compilation successful!")
+            print(f" LaTeX compilation successful!")
         
         # COMPREHENSIVE QUALITY VALIDATION
         quality_issues = _validate_research_quality(current_tex, sim_summary)
@@ -3184,10 +3189,10 @@ def run_workflow(
             keep_size = config.max_quality_history_size // 2
             quality_history = quality_history[-keep_size:]  # Keep recent entries
             logger.info(f"Quality history trimmed to {keep_size} entries")
-            print("🔧 Quality history trimmed for memory management")
+            print("Quality history trimmed for memory management")
         
         logger.info(f"Iteration {i} quality score: {quality_score:.2f}")
-        print(f"📊 Iteration {i} quality score: {quality_score:.2f}")
+        print(f"Iteration {i} quality score: {quality_score:.2f}")
         
         # Check for improvement
         if quality_score > best_quality_score:
@@ -3198,10 +3203,10 @@ def run_workflow(
         
         # Early stopping for stagnation
         if stagnation_count >= 2 and i > 1:
-            print(f"⚠️ Quality stagnation detected ({stagnation_count} iterations without improvement)")
+            print(f" Quality stagnation detected ({stagnation_count} iterations without improvement)")
         
         # COMBINED REVIEW AND REVISION IN ONE CALL
-        print(f"🔄 Running combined review/editorial/revision process...")
+        print(f"Running combined review/editorial/revision process...")
         
         # Generate PDF for AI review if LaTeX compilation was successful and PDF review is enabled
         pdf_path = None
@@ -3209,218 +3214,32 @@ def run_workflow(
             pdf_success, generated_pdf_path, pdf_error = _generate_pdf_for_review(paper_path, dynamic_timeout)
             if pdf_success and generated_pdf_path:
                 pdf_path = generated_pdf_path
-                print(f"📄 PDF generated for AI review: {pdf_path.name}")
+                print(f"PDF generated for AI review: {pdf_path.name}")
             else:
-                print(f"⚠️ PDF generation failed: {pdf_error}")
+                print(f" PDF generation failed: {pdf_error}")
         elif not config.enable_pdf_review:
-            print(f"ℹ️ PDF review disabled in configuration")
+            print(f" PDF review disabled in configuration")
         else:
-            print(f"⚠️ Skipping PDF generation due to LaTeX compilation failure")
+            print(f" Skipping PDF generation due to LaTeX compilation failure")
         
-        # Use test-time scaling for combined approach if enabled
-        tts_changes_applied = False  # Track if we've already applied TTS candidate changes
-        if hasattr(config, 'use_test_time_scaling') and config.use_test_time_scaling and hasattr(config, 'revision_candidates') and config.revision_candidates > 1:
-            import hashlib
-            print(f"🧪 Using test-time compute scaling with {config.revision_candidates} candidates for combined approach...")
-            
-            # Generate multiple combined responses and select the best one
-            candidates = []
-            for candidate_idx in range(config.revision_candidates):
-                print(f"    📝 Generating combined response candidate {candidate_idx + 1}/{config.revision_candidates}...")
-                try:
-                    # Add slight variation to encourage diverse responses
-                    base_prompt = _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i)
-                    
-                    if candidate_idx > 0:
-                        variation_instructions = [
-                            "\n\nIMPORTANT: You MUST make SUBSTANTIAL changes. Rewrite at least 30% of the content. Add new sections, expand existing ones, change technical approaches, improve mathematical rigor.",
-                            "\n\nCRITICAL: Focus on MAJOR restructuring. Reorganize sections, add missing methodology details, enhance experimental validation. Make this version significantly different from the original.",
-                            "\n\nESSENTIAL: Prioritize COMPREHENSIVE improvements. Add new theoretical foundations, expand results discussion, include additional related work. Transform the paper substantially.",
-                            "\n\nREQUIRED: Concentrate on FUNDAMENTAL enhancements. Strengthen mathematical formulations, add implementation details, improve practical applications. Create a markedly different version.",
-                            "\n\nMANDATORY: Focus on EXTENSIVE modifications. Rewrite abstract and conclusion, add new figures/tables concepts, enhance technical depth throughout. Generate a substantially revised paper."
-                        ]
-                        variation = variation_instructions[(candidate_idx - 1) % len(variation_instructions)]
-                        # Add variation to the system prompt
-                        varied_prompt = base_prompt.copy()
-                        varied_prompt[0]["content"] += variation
-                    else:
-                        varied_prompt = base_prompt
-                    
-                    candidate_response = _universal_chat(
-                        varied_prompt, 
-                        model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", 
-                        fallback_models=config.fallback_models, pdf_path=pdf_path
-                    )
-                    candidates.append(candidate_response)
-                    print(f"      ✅ Candidate {candidate_idx + 1} generated: {len(candidate_response)} chars")
-                    
-                    # DEBUG: Show first 300 chars of each candidate
-                    print(f"      🔍 DEBUG - Candidate {candidate_idx + 1} preview:")
-                    print(f"      {candidate_response[:300]}...")
-                    print(f"      {'─'*60}")
-                    
-                except Exception as e:
-                    print(f"      ❌ Candidate {candidate_idx + 1} failed: {e}")
-                    candidates.append("")
-            
-            # Evaluate and select the best candidate using LLM evaluation
-            valid_candidates = [c for c in candidates if c.strip()]
-            if valid_candidates:
-                print(f"    🏆 Evaluating {len(valid_candidates)} candidates using LLM...")
-                # Do not save candidates to disk; keep in memory only
-                # Use LLM to select the best candidate
-                print(f"    🤖 Asking LLM to select best candidate...")
-                best_candidate_response = _select_best_candidate_with_llm(
-                    valid_candidates, current_tex, sim_summary, model, request_timeout, config, pdf_path=pdf_path, project_dir=project_dir
-                )
-                
-                # DEBUG: Show full LLM evaluation response
-                print(f"    🔍 DEBUG - LLM Evaluation Response:")
-                print(f"    {best_candidate_response}")
-                print(f"    {'═'*80}")
-                
-                # Parse the LLM selection response
-                try:
-                    import re
-                    selection_match = re.search(r'SELECTED:\s*(\d+)', best_candidate_response, re.IGNORECASE)
-                    if selection_match:
-                        selected_idx = int(selection_match.group(1)) - 1  # Convert to 0-based index
-                        if 0 <= selected_idx < len(valid_candidates):
-                            combined_response = valid_candidates[selected_idx]
-                            print(f"    🎯 LLM selected candidate {selected_idx + 1}")
-                            
-                            # Show why this candidate was selected
-                            reasoning_match = re.search(r'REASONING:\s*(.*?)(?=SELECTED:|$)', best_candidate_response, re.DOTALL | re.IGNORECASE)
-                            if reasoning_match:
-                                reasoning = reasoning_match.group(1).strip()
-                                print(f"    💭 Selection reasoning: {reasoning[:200]}...")
-                            
-                            # IMPORTANT: Apply the selected candidate's changes immediately
-                            print(f"    📁 Applying selected candidate's changes...")
-                            selected_review, selected_decision, selected_file_changes = _parse_combined_response(combined_response, project_dir)
-                            
-                            if selected_file_changes:
-                                print(f"    🔄 Applying {len(selected_file_changes)} file changes from selected candidate...")
-                                _apply_file_changes(selected_file_changes, project_dir)
-                                print(f"    ✅ Selected candidate changes applied successfully")
-                                tts_changes_applied = True  # Mark that we've applied TTS changes
-                                
-                                # Show diff for the applied changes
-                                if output_diffs:
-                                    for file_path, content in selected_file_changes.items():
-                                        if file_path.endswith('paper.tex'):
-                                            print(f"    🎯 SELECTED CANDIDATE APPLIED DIFF:")
-                                            _save_candidate_diff(current_tex, content, selected_idx + 1, "APPLIED_SELECTED")
-                                            break
-                            else:
-                                print(f"    ⚠️ Selected candidate has no file changes to apply")
-                                
-                        else:
-                            print(f"    ⚠️ Invalid selection index {selected_idx + 1}, using first candidate")
-                            combined_response = valid_candidates[0]
-                            tts_changes_applied = False  # Fallback case, not applied yet
-                    else:
-                        print(f"    ⚠️ Could not parse LLM selection, using first candidate")
-                        combined_response = valid_candidates[0]
-                        tts_changes_applied = False  # Fallback case, not applied yet
-                except Exception as e:
-                    print(f"    ❌ Error parsing LLM selection: {e}, using first candidate")
-                    combined_response = valid_candidates[0]
-                    tts_changes_applied = False  # Error case, not applied yet
-            else:
-                print(f"    ⚠️ All candidates failed, using fallback...")
-                tts_changes_applied = False  # Fallback doesn't use TTS candidate application
-                combined_response = _universal_chat(
-                    _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i), 
-                    model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", 
-                    fallback_models=config.fallback_models, pdf_path=pdf_path
-                )
-        else:
-            # Standard combined approach without test-time scaling
-            tts_changes_applied = False
-            combined_response = _universal_chat(
-                _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i), 
-                model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", 
-                fallback_models=config.fallback_models, pdf_path=pdf_path
-            )
-        
-        # Parse the combined response
-        review, decision, file_changes = _parse_combined_response(combined_response, project_dir)
-        
-        print(f"📝 Review completed")
-        print(f"📋 Review complete, applying revisions...")
-        
-        # DEBUG: Show what the model actually returned
-        print(f"🔍 DEBUG: Model response length: {len(combined_response)} chars")
-        print(f"🔍 DEBUG: File changes detected: {list(file_changes.keys()) if file_changes else 'None'}")
-        if file_changes:
-            for filename, content in file_changes.items():
-                content_preview = str(content)[:200] if content else "Empty"
-                print(f"🔍 DEBUG: {filename} - {len(str(content))} chars: {content_preview}...")
-        
-        # DEBUG: Show a preview of the raw model response
-        print(f"🔍 DEBUG: Model response preview (first 500 chars):")
-        print(f"{'='*50}")
-        print(combined_response[:500] + "..." if len(combined_response) > 500 else combined_response)
-        print(f"{'='*50}")
-        
-        # Store original content for diff generation if enabled
-        original_content = current_tex if output_diffs else None
-        
-        # Apply file changes if any were provided (skip if TTS already applied changes)
-        if file_changes and not tts_changes_applied:
-            print(f"📁 Applying file changes to {len(file_changes)} files...")
-            _apply_file_changes(file_changes, project_dir)
-            print(f"✅ File changes applied successfully")
-            
-            # Generate and save diff if enabled
-            if output_diffs and original_content:
-                new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
-                
-                # Debug: Check if content actually changed
-                if original_content.strip() == new_content.strip():
-                    print(f"⚠️ DEBUG: Content appears identical after file changes - AI may have made no substantial changes")
-                else:
-                    print(f"✅ DEBUG: Content changed - {len(original_content)} -> {len(new_content)} chars")
-                
-                _save_iteration_diff(original_content, new_content, project_dir, i, "paper.tex")
-        elif tts_changes_applied:
-            print(f"ℹ️  Skipping duplicate file application - TTS candidate changes already applied")
-            
-            # Generate diff for TTS changes if enabled
-            if output_diffs and original_content:
-                new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
-                print(f"🎯 TTS ITERATION {i} FINAL DIFF:")
-                _save_iteration_diff(original_content, new_content, project_dir, i, "paper.tex")
-                
-        else:
-            print(f"⚠️ No file changes were provided in revision. Using fallback revision...")
-            
-            # Use test-time scaling for revisions if enabled
-            if hasattr(config, 'use_test_time_scaling') and config.use_test_time_scaling and hasattr(config, 'revision_candidates') and config.revision_candidates > 1:
-                print(f"🧪 Using test-time compute scaling with {config.revision_candidates} revision candidates...")
-                revised = _generate_best_revision_candidate(
-                    current_tex, sim_summary, review, latex_errors, project_dir, user_prompt, 
-                    model, request_timeout, config, config.revision_candidates, output_diffs, pdf_path
-                )
-            else:
-                # Fallback to traditional revision if test-time scaling not enabled
-                revised = _universal_chat(
-                    _revise_prompt(current_tex, sim_summary, review, latex_errors, project_dir, user_prompt), 
-                    model=model, request_timeout=request_timeout, prompt_type="revise", 
-                    fallback_models=config.fallback_models, pdf_path=pdf_path
-                )
-            
-            if revised.strip():  # Only write if we got a valid revision
-                paper_path.write_text(revised, encoding="utf-8")
-                
-                # Generate and save diff if enabled (for fallback revision)
-                if output_diffs and original_content:
-                    print(f"\n🎯 MAIN WORKFLOW RESULT - ITERATION {i} DIFF:")
-                    _save_iteration_diff(original_content, revised, project_dir, i, "paper.tex")
-            else:
-                print(f"⚠️ No valid revision generated, keeping original content")
-        
+        review, decision = run_review_revision_step(
+            current_tex,
+            sim_summary,
+            latex_errors,
+            project_dir,
+            user_prompt,
+            i,
+            model,
+            request_timeout,
+            config,
+            pdf_path,
+            output_diffs,
+            paper_path,
+        )
+
+        print(f"Review completed")
+        print(f"Review complete, applying revisions...")
+
         # SIMPLIFIED STOPPING LOGIC BASED ON QUALITY THRESHOLD
         meets_quality_threshold = quality_score >= config.quality_threshold
         
@@ -3436,8 +3255,8 @@ def run_workflow(
         print(f"Iteration {i}: Combined review and revision completed")
     
     # Final quality report
-    print(f"\n📈 Quality progression: {[f'{q:.2f}' for q in quality_history]}")
-    print(f"🏆 Best quality score achieved: {best_quality_score:.2f}")
+    print(f"\nQuality progression: {[f'{q:.2f}' for q in quality_history]}")
+    print(f"Best quality score achieved: {best_quality_score:.2f}")
 
     return project_dir
 
@@ -4199,7 +4018,7 @@ def _calculate_dynamic_timeout(paper_content: str, config: Optional[WorkflowConf
     )
     
     total_timeout = min(base_timeout + additional_time, 600)  # Cap at 10 minutes
-    print(f"📊 Dynamic timeout calculated: {total_timeout}s (TikZ:{tikz_count}, Tables:{table_count}, Figures:{figure_count}, Pages:{page_count})")
+    print(f"Dynamic timeout calculated: {total_timeout}s (TikZ:{tikz_count}, Tables:{table_count}, Figures:{figure_count}, Pages:{page_count})")
     
     return total_timeout
 
@@ -4354,7 +4173,7 @@ def _validate_bibliography(paper_content: str) -> List[str]:
     return issues
 
 if __name__ == "__main__":
-    print("🚀 Starting Enhanced SciResearch Workflow...")
+    print("Starting Enhanced SciResearch Workflow...")
     try:
         ns = parse_args()
         
@@ -4362,32 +4181,32 @@ if __name__ == "__main__":
         config = None
         if ns.config:
             config = WorkflowConfig.from_file(Path(ns.config))
-            print(f"📄 Configuration loaded from: {ns.config}")
+            print(f"Configuration loaded from: {ns.config}")
         else:
             config = WorkflowConfig()
-            print("📄 Using default configuration")
+            print("Using default configuration")
         
         # Save configuration if requested
         if ns.save_config:
             config.to_file(Path(ns.save_config))
-            print(f"✅ Configuration saved to: {ns.save_config}")
+            print(f" Configuration saved to: {ns.save_config}")
             sys.exit(0)
         
-        print(f"📁 Working with: {ns.output_dir}")
-        print(f"🤖 Using model: {ns.model}")
-        print(f"🔄 Max iterations: {ns.max_iterations}")
-        print(f"📊 Quality threshold: {ns.quality_threshold}")
-        print(f"🔍 Reference validation: {'enabled' if ns.check_references else 'disabled'}")
-        print(f"🖼️ Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
-        print(f"📄 PDF review: {'enabled' if ns.enable_pdf_review else 'disabled'}")
-        print(f"🧠 Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
+        print(f"Working with: {ns.output_dir}")
+        print(f"Using model: {ns.model}")
+        print(f"Max iterations: {ns.max_iterations}")
+        print(f"Quality threshold: {ns.quality_threshold}")
+        print(f"Reference validation: {'enabled' if ns.check_references else 'disabled'}")
+        print(f" Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
+        print(f"PDF review: {'enabled' if ns.enable_pdf_review else 'disabled'}")
+        print(f"Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
         
         # Set PDF review configuration
         config.enable_pdf_review = ns.enable_pdf_review
         
         # Handle test scaling mode
         if ns.test_scaling:
-            print("\n🔬 Starting Test-Time Compute Scaling Analysis...")
+            print("\nStarting Test-Time Compute Scaling Analysis...")
             # Convert comma-separated string to list of integers
             candidate_counts_list = [int(x.strip()) for x in ns.scaling_candidates.split(',')]
             result = test_time_compute_scaling(
@@ -4397,9 +4216,9 @@ if __name__ == "__main__":
                 timeout_base=ns.scaling_timeout
             )
             if result:
-                print("\n✅ Test-Time Compute Scaling Analysis Complete!")
+                print("\n Test-Time Compute Scaling Analysis Complete!")
             else:
-                print("\n❌ Test-Time Compute Scaling Analysis Failed!")
+                print("\n Test-Time Compute Scaling Analysis Failed!")
             sys.exit(0)
         
         # Apply test-time compute scaling configuration
@@ -4407,7 +4226,7 @@ if __name__ == "__main__":
             config.use_test_time_scaling = True
             config.revision_candidates = ns.revision_candidates
             config.initial_draft_candidates = ns.draft_candidates
-            print(f"🧪 Test-time compute scaling enabled: {config.revision_candidates} revision candidates")
+            print(f"Test-time compute scaling enabled: {config.revision_candidates} revision candidates")
         
         result_dir = run_workflow(
             topic=ns.topic,
@@ -4430,8 +4249,8 @@ if __name__ == "__main__":
             num_ideas=ns.num_ideas,
             output_diffs=ns.output_diffs
         )
-        print(f"✅ Workflow completed! Results in: {result_dir}")
+        print(f" Workflow completed! Results in: {result_dir}")
     except Exception as e:
-        print(f"❌ Workflow failed: {e}")
+        print(f" Workflow failed: {e}")
         import traceback
         traceback.print_exc()
