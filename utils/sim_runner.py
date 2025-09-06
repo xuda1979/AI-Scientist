@@ -188,7 +188,7 @@ def extract_simulation_from_tex(tex_path: Path, sim_path: Path) -> bool:
         # Perform intelligent compatibility analysis
         compatibility = evaluate_simulation_compatibility(existing_content, py)
         
-        print(f"📊 Simulation Compatibility Analysis:")
+        print(f"Simulation Compatibility Analysis:")
         print(f"   Existing quality: {compatibility['existing_quality']:.3f}")
         print(f"   Extracted quality: {compatibility['extracted_quality']:.3f}")
         print(f"   Recommendation: {compatibility['recommendation']}")
@@ -198,20 +198,20 @@ def extract_simulation_from_tex(tex_path: Path, sim_path: Path) -> bool:
             # Create backup of extracted content for reference
             backup_path = sim_path.parent / "simulation_extracted_backup.py"
             backup_path.write_text(py, encoding="utf-8")
-            print(f"💾 Saved extracted LaTeX code to {backup_path.name} for reference")
+            print(f"Saved extracted LaTeX code to {backup_path.name} for reference")
             return True
             
         elif compatibility['recommendation'] == 'merge_possible':
             # For now, preserve existing but suggest manual review
             backup_path = sim_path.parent / "simulation_extracted_candidate.py"
             backup_path.write_text(py, encoding="utf-8")
-            print(f"🔄 Saved extracted code as merge candidate to {backup_path.name}")
-            print("💡 Consider manually reviewing and merging the best features from both")
+            print(f"Saved extracted code as merge candidate to {backup_path.name}")
+            print("Consider manually reviewing and merging the best features from both")
             return True
     
     # Use extracted simulation if no existing file or extraction is better
     sim_path.write_text(py, encoding="utf-8")
-    print(f"✅ Used extracted simulation code")
+    print(f" Used extracted simulation code")
     return True
 
 def run_simulation_with_smart_fixing(
