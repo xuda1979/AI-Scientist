@@ -1,13 +1,13 @@
-Scenario: L=100.0 km, P_class=10.0 dBm, Delta_lambda=5.0 nm, rho=0.6
-HCF Noise Model (Baseline probabilities):
-  p_z_base ~= 8.98871e-03, p_x_base ~= 2.69661e-03
-Markov Model (Effective average probabilities):
-  p_z_eff  ~= 1.34831e-02, p_x_eff  ~= 4.04492e-03 (Total effective p ~= 0.0175)
-
-Running Monte Carlo simulation (50000 trials) with BDD assumption...
-
---- Results (seed=42) ---
-Estimated logical block error probability P_L ~= 1.020e-03
-Estimated entanglement fidelity F_e ~= 0.9990
-Runtime ~= 3.48 s
-Wrote C:\Users\Lenovo\software\simple-sciresearch-workflow\output\ag-qec\data\ag_qec_results.csv
+# cmdline: simulation.py
+# python: 3.13.5 | packaged by Anaconda, Inc. | (main, Jun 12 2025, 16:37:03) [MSC v.1929 64 bit (AMD64)]
+# platform: Windows-11-10.0.26100-SP0
+quantity,value,lower95,upper95,k,n,comment
+pz_base,9.13840998e-03,,,,,phase baseline (SpRS+FWM); kappa=0.100000000
+px_base,2.74152299e-03,,,,,amplitude baseline = eta_px*pz; kappa=0.100000000
+sprs_term,9.17915001e-03,,,,,distributed SpRS integral contribution
+fwm_term,1.27137543e-06,,,,,distributed FWM integral contribution
+alpha_nepers_per_km,2.50000000e-02,,,,,attenuation in nepers/km
+p_eff_sum,1.78198995e-02,,,,,state-averaged per-qubit error probability (diagnostic)
+P_L_BDD_rho=0.60,9.08000000e-04,8.50853371e-04,9.68981097e-04,908,1000000,BDD (n=255, t=10); trials=1000000; seed=42; kappa=0.100000000; beta=2.00
+runtime_sec_rho=0.60,73.559,,,,,wall-clock seconds for previous BDD run
+throughput_rho=0.60,13594.61,,,,,trials per second for previous BDD run

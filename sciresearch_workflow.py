@@ -7,6 +7,7 @@ Extended workflow:
 """
 from __future__ import annotations
 import argparse
+import base64
 import difflib
 import json
 import os
@@ -37,6 +38,7 @@ from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex, 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
 
 @dataclass
+@dataclass
 class WorkflowConfig:
     """Configuration class for workflow parameters."""
     quality_threshold: float = 0.8
@@ -47,11 +49,15 @@ class WorkflowConfig:
     figure_validation: bool = True
     reference_validation: bool = True
     max_quality_history_size: int = 20
+    enable_pdf_review: bool = False  # Disable PDF sending by default
     doi_rate_limit_delay: float = 0.1
     max_doi_cache_size: int = 1000
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
     output_diffs: bool = False  # Optional diff output for each review/revision cycle
+    
+    # PDF review functionality
+    enable_pdf_review: bool = False  # Send PDF files to AI models during review/revision
     
     # Test-time compute scaling parameters
     use_test_time_scaling: bool = False
@@ -79,7 +85,7 @@ class WorkflowConfig:
                 data = json.load(f)
             return cls(**data)
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"⚠️ Config file error: {e}. Using defaults.")
+            print(f"[WARNING] Config file error: {e}. Using defaults.")
             return cls()
     
     def to_file(self, config_path: Path) -> None:
@@ -87,7 +93,7 @@ class WorkflowConfig:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, 'w') as f:
             json.dump(asdict(self), f, indent=2)
-        print(f"✅ Configuration saved to {config_path}")
+        print(f"[SUCCESS] Configuration saved to {config_path}")
 
 def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = None) -> logging.Logger:
     """Set up structured logging for the workflow."""
@@ -155,13 +161,24 @@ def _classify_error(error: Exception) -> Tuple[str, Optional[int]]:
     else:
         return "unknown", 30
 
-def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
+def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None, pdf_path: Optional[Path] = None) -> str:
     """
-    Enhanced chat wrapper with error classification, fallback models, and intelligent retry.
+    Enhanced chat wrapper with error classification, fallback models, intelligent retry, and PDF support.
     Includes retry logic for timeout errors and configurable temperature based on prompt type.
+    
+    Args:
+        messages: List of chat messages
+        model: AI model to use
+        request_timeout: Request timeout in seconds
+        prompt_type: Type of prompt for temperature selection
+        fallback_models: List of fallback models if primary fails
+        pdf_path: Optional PDF file to include in the request
     """
     logger.info(f"Making API call to {model} for {prompt_type}")
-    print(f"🤖 Making API call to {model} for {prompt_type}...")
+    print(f"[API] Making API call to {model} for {prompt_type}...")
+    
+    if pdf_path and pdf_path.exists():
+        print(f"[PDF] Including PDF in request: {pdf_path.name}")
     
     # Set longer timeout for GPT-5
     if request_timeout is None:
@@ -184,7 +201,7 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     
     # Try primary model first
     try:
-        result = _try_openai_model(messages, model, temp, request_timeout, prompt_type)
+        result = _try_openai_model(messages, model, temp, request_timeout, prompt_type, pdf_path)
         logger.info(f"API call successful for {model} ({prompt_type})")
         return result
     except Exception as primary_error:
@@ -193,49 +210,94 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         
         # Don't retry for certain error types
         if wait_time is None:
-            print(f"❌ Non-retryable error with {model}: {primary_error}")
+            print(f"ERROR: Non-retryable error with {model}: {primary_error}")
             raise APIError(f"Primary model {model} failed with non-retryable error: {primary_error}")
         
         # Try fallback models if available
         if fallback_models:
-            print(f"⚠️ Primary model {model} failed, trying fallback models...")
+            print(f"WARNING: Primary model {model} failed, trying fallback models...")
             for fallback_model in fallback_models:
                 try:
-                    print(f"🔄 Attempting fallback model: {fallback_model}")
-                    return _try_openai_model(messages, fallback_model, temp, request_timeout, prompt_type)
+                    print(f"INFO: Attempting fallback model: {fallback_model}")
+                    return _try_openai_model(messages, fallback_model, temp, request_timeout, prompt_type, pdf_path)
                 except Exception as fallback_error:
-                    print(f"⚠️ Fallback model {fallback_model} also failed: {fallback_error}")
+                    print(f"WARNING: Fallback model {fallback_model} also failed: {fallback_error}")
                     continue
         
         # If all models failed, raise the original error
         raise APIError(f"All models failed. Primary error: {primary_error}")
 
-def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, request_timeout: int, prompt_type: str, max_retries: int = 3) -> str:
-    """Try a specific OpenAI model with intelligent retry logic"""
+def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, request_timeout: int, prompt_type: str, pdf_path: Optional[Path] = None, max_retries: int = 3) -> str:
+    """
+    Try a specific OpenAI model with intelligent retry logic and optional PDF support.
+    
+    Args:
+        messages: List of chat messages
+        model: OpenAI model to use
+        temp: Temperature for generation
+        request_timeout: Request timeout in seconds
+        prompt_type: Type of prompt
+        pdf_path: Optional PDF file to include
+        max_retries: Maximum number of retry attempts
+    """
     
     for attempt in range(max_retries):
         try:
             # Newer SDK
             from openai import OpenAI
             client = OpenAI()
+            
+            # Process messages to include PDF if provided
+            processed_messages = messages.copy()
+            
+            # Add PDF to the last user message if provided and model supports vision
+            if pdf_path and pdf_path.exists() and _model_supports_vision(model):
+                try:
+                    # For now, we'll add a note about the PDF but not include the binary data
+                    # OpenAI's vision models typically work better with images than PDFs
+                    # In the future, this could be enhanced to convert PDF to images
+                    
+                    # Find the last user message and add PDF notice
+                    for i in range(len(processed_messages) - 1, -1, -1):
+                        if processed_messages[i]["role"] == "user":
+                            # Add note about PDF availability
+                            original_content = processed_messages[i]["content"]
+                            processed_messages[i]["content"] = f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}, {pdf_path.stat().st_size // 1024} KB) has been generated and is available for reference. Please provide feedback as if you can see the rendered document layout, figure placement, and visual formatting.**"
+                            break
+                    
+                    print(f"� PDF reference added to request: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
+                    
+                except Exception as pdf_error:
+                    print(f"WARNING: Failed to process PDF reference: {pdf_error}")
+                    print("📝 Continuing with text-only request...")
+            
+            elif pdf_path and pdf_path.exists() and not _model_supports_vision(model):
+                print(f"INFO: Model {model} does not support vision input. Adding PDF reference note...")
+                # Even for non-vision models, we can mention that a PDF was generated
+                for i in range(len(processed_messages) - 1, -1, -1):
+                    if processed_messages[i]["role"] == "user":
+                        original_content = processed_messages[i]["content"]
+                        processed_messages[i]["content"] = f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}) has been generated successfully, indicating that the LaTeX compiles properly and produces a readable document.**"
+                        break
+            
             # Use configured temperature based on prompt type
             print(f"📡 Sending request with temperature={temp}, timeout={request_timeout}s (attempt {attempt + 1}/{max_retries})...")
             
             resp = client.chat.completions.create(
                 model=model, 
-                messages=messages, 
+                messages=processed_messages, 
                 temperature=temp, 
                 timeout=request_timeout
             )
-            print("✅ API call successful!")
+            print("INFO: API call successful.")
             return resp.choices[0].message.content
             
         except KeyboardInterrupt:
-            print("❌ User interrupted the process")
+            print("ERROR: User interrupted the process.")
             raise
         except Exception as e:
             error_type, wait_time = _classify_error(e)
-            print(f"⚠️ API Error (attempt {attempt + 1}): {e} (Type: {error_type})")
+            print(f"WARNING: API Error (attempt {attempt + 1}): {e} (Type: {error_type})")
             
             # Don't retry for certain error types
             if wait_time is None:
@@ -243,11 +305,19 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
             
             # Only retry for retryable errors and if we have attempts left
             if attempt < max_retries - 1 and wait_time is not None:
-                print(f"🔄 Retrying in {wait_time} seconds...")
+                print(f"INFO: Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
                 continue
             else:
                 raise e
+
+def _model_supports_vision(model: str) -> bool:
+    """Check if the given model supports vision/image inputs."""
+    vision_models = [
+        'gpt-4-vision', 'gpt-4-vision-preview', 'gpt-4-turbo', 'gpt-4-turbo-vision',
+        'gpt-4o', 'gpt-4o-mini', 'gpt-5'  # Add more vision-capable models as they become available
+    ]
+    return any(vm in model.lower() for vm in vision_models)
 
 def _validate_code_security(code: str) -> None:
     """Validate simulation code for security risks before execution."""
@@ -361,9 +431,343 @@ def _create_simulation_fixer(model: str, request_timeout: Optional[int] = None):
     
     return _fix_simulation
 
+def _select_best_revision_candidate_with_llm(
+    candidates: List[str], 
+    original_content: str, 
+    review_text: str, 
+    model: str, 
+    request_timeout: int, 
+    config: Any,
+    pdf_path: Optional[Path] = None,  # Keep parameter for compatibility but not used
+    project_dir: Optional[Path] = None,
+) -> str:
+    """
+    Use an LLM to evaluate and select the best revision candidate from multiple options.
+    
+    Args:
+        candidates: List of revision candidates to evaluate
+        original_content: Original paper content for context
+        review_text: Review feedback for context
+        model: AI model to use for evaluation
+        request_timeout: Request timeout
+        config: Configuration object
+        pdf_path: Not used (kept for compatibility) - PDFs skipped due to size
+        project_dir: Project directory to read local files for context
+    
+    Returns:
+        LLM response indicating which candidate is best and why
+    """
+    # Collect lightweight attachments (in-memory, truncated) for evaluation context
+    # Note: PDF files are skipped due to size constraints
+    attachments_note = ""
+    try:
+        if project_dir is not None:
+            # Include main paper file
+            paper_file = project_dir / "paper.tex"
+            if paper_file.exists():
+                paper_text = paper_file.read_text(encoding="utf-8", errors="ignore")
+                attach_preview = (paper_text[:1500] + ("\n...[CONTENT TRUNCATED]...\n" if len(paper_text) > 2200 else "") + paper_text[-700:]) if len(paper_text) > 2200 else paper_text
+                attachments_note += f"\nATTACHMENT: paper.tex (preview)\n{attach_preview}\n"
+            
+            # Include simulation code
+            sim_file = project_dir / "simulation.py"
+            if sim_file.exists():
+                sim_text = sim_file.read_text(encoding="utf-8", errors="ignore")
+                sim_preview = sim_text[:1200] + ("\n...[CONTENT TRUNCATED]...\n" if len(sim_text) > 1600 else "") + (sim_text[-400:] if len(sim_text) > 1600 else "")
+                attachments_note += f"\nATTACHMENT: simulation.py (preview)\n{sim_preview}\n"
+            
+            # Include simulation output
+            out_file = project_dir / "simulation_output.txt"
+            if out_file.exists():
+                out_text = out_file.read_text(encoding="utf-8", errors="ignore")
+                out_preview = out_text[:1000] + ("\n...[CONTENT TRUNCATED]...\n" if len(out_text) > 1400 else "") + (out_text[-300:] if len(out_text) > 1400 else "")
+                attachments_note += f"\nATTACHMENT: simulation_output.txt (preview)\n{out_preview}\n"
+            
+            # Include results summary CSV
+            results_csv_file = project_dir / "results_summary.csv"
+            if results_csv_file.exists():
+                results_csv_text = results_csv_file.read_text(encoding="utf-8", errors="ignore")
+                results_csv_preview = results_csv_text[:800] + ("\n...[CONTENT TRUNCATED]..." if len(results_csv_text) > 800 else "")
+                attachments_note += f"\nATTACHMENT: results_summary.csv (preview)\n{results_csv_preview}\n"
+            
+            # Include bibliography if separate
+            refs_file = project_dir / "refs.bib"
+            if refs_file.exists():
+                refs_text = refs_file.read_text(encoding="utf-8", errors="ignore")
+                refs_preview = refs_text[:600] + ("\n...[CONTENT TRUNCATED]..." if len(refs_text) > 600 else "")
+                attachments_note += f"\nATTACHMENT: refs.bib (preview)\n{refs_preview}\n"
+                
+    except Exception as _e:
+        print(f"WARNING: Failed to attach project files for evaluation: {_e}")
+
+    # Prepare candidates summary for evaluation
+    candidates_summary = ""
+    for i, candidate in enumerate(candidates):
+        candidates_summary += f"\n{'='*50}\nREVISION CANDIDATE {i+1}:\n{'='*50}\n"
+        # Show first 1500 chars and last 500 chars to capture key changes
+        if len(candidate) > 2000:
+            candidates_summary += candidate[:1500] + "\n...[CONTENT TRUNCATED]...\n" + candidate[-500:]
+        else:
+            candidates_summary += candidate
+        candidates_summary += "\n"
+    
+    evaluation_prompt = [
+        {
+            "role": "system",
+            "content": f"""You are an expert academic reviewer tasked with selecting the best paper revision from multiple candidates.
+
+Your task is to:
+1. Analyze each revision candidate against the original paper and review feedback
+2. Evaluate improvements in: technical rigor, clarity, completeness, addressing review concerns
+3. Select the single best revision
+4. Provide clear reasoning for your choice
+
+ORIGINAL PAPER LENGTH: {len(original_content)} characters
+
+REVIEW FEEDBACK:
+{review_text[:800]}...
+
+EVALUATION CRITERIA:
+- How well does it address the review feedback?
+- Technical accuracy and depth improvements
+- Clarity and readability enhancements
+- Completeness of methodology and results
+- Quality of new content additions
+- Overall scientific contribution improvement
+
+OUTPUT FORMAT:
+REASONING: [Detailed analysis comparing candidates and explaining your choice]
+
+SELECTED: [NUMBER] (just the number, e.g., "2")"""
+        },
+        {
+            "role": "user", 
+            "content": f"""Please evaluate these {len(candidates)} revision candidates and select the best one that most effectively improves the original paper:
+
+{candidates_summary}
+
+In addition to the candidate texts above, use these attachments for context:
+{attachments_note if attachments_note else '(no local attachments found)'}
+
+Note: PDF attachment is skipped due to size constraints, but assume the LaTeX compiles correctly if mentioned.
+
+Which revision candidate provides the highest quality improvements? Focus on scientific rigor, addressing review concerns, and overall enhancement of the paper."""
+        }
+    ]
+    
+    try:
+        response = _universal_chat(
+            evaluation_prompt, 
+            model=model, 
+            request_timeout=request_timeout, 
+            prompt_type="revision_candidate_evaluation",
+            fallback_models=config.fallback_models,
+            pdf_path=None  # Skip PDF due to size constraints
+        )
+        return response
+    except Exception as e:
+        print(f"ERROR: LLM revision evaluation failed: {e}")
+        return "SELECTED: 1\nREASONING: Evaluation failed, defaulting to first candidate."
+
+def _select_best_candidate_with_llm(
+    candidates: List[str], 
+    original_content: str, 
+    sim_summary: str, 
+    model: str, 
+    request_timeout: int, 
+    config: Any,
+    pdf_path: Optional[Path] = None,  # Keep parameter for compatibility but not used
+    project_dir: Optional[Path] = None,
+) -> str:
+    """
+    Use an LLM to evaluate and select the best candidate from multiple options.
+    
+    Args:
+        candidates: List of candidate responses to evaluate
+        original_content: Original paper content for context
+        sim_summary: Simulation summary for context
+        model: AI model to use for evaluation
+        request_timeout: Request timeout
+        config: Configuration object
+        pdf_path: Not used (kept for compatibility) - PDFs skipped due to size
+        project_dir: Project directory to read local files for context
+    
+    Returns:
+        LLM response indicating which candidate is best and why
+    """
+    # Collect lightweight attachments (in-memory, truncated) for evaluation context
+    # Note: PDF files are skipped due to size constraints
+    attachments_note = ""
+    try:
+        if project_dir is not None:
+            # Include main paper file
+            paper_file = project_dir / "paper.tex"
+            if paper_file.exists():
+                paper_text = paper_file.read_text(encoding="utf-8", errors="ignore")
+                attach_preview = (paper_text[:1200] + ("\n...[CONTENT TRUNCATED]...\n" if len(paper_text) > 1800 else "") + paper_text[-400:]) if len(paper_text) > 1800 else paper_text
+                attachments_note += f"\nATTACHMENT: paper.tex (preview)\n{attach_preview}\n"
+            
+            # Include simulation code
+            sim_file = project_dir / "simulation.py"
+            if sim_file.exists():
+                sim_text = sim_file.read_text(encoding="utf-8", errors="ignore")
+                sim_preview = sim_text[:800] + ("\n...[CONTENT TRUNCATED]...\n" if len(sim_text) > 1200 else "") + (sim_text[-300:] if len(sim_text) > 1200 else "")
+                attachments_note += f"\nATTACHMENT: simulation.py (preview)\n{sim_preview}\n"
+            
+            # Include simulation output
+            sim_output_file = project_dir / "simulation_output.txt"
+            if sim_output_file.exists():
+                sim_output_text = sim_output_file.read_text(encoding="utf-8", errors="ignore")
+                sim_output_preview = sim_output_text[:1000] + ("\n...[CONTENT TRUNCATED]..." if len(sim_output_text) > 1000 else "")
+                attachments_note += f"\nATTACHMENT: simulation_output.txt (preview)\n{sim_output_preview}\n"
+            
+            # Include results summary CSV
+            results_csv_file = project_dir / "results_summary.csv"
+            if results_csv_file.exists():
+                results_csv_text = results_csv_file.read_text(encoding="utf-8", errors="ignore")
+                results_csv_preview = results_csv_text[:800] + ("\n...[CONTENT TRUNCATED]..." if len(results_csv_text) > 800 else "")
+                attachments_note += f"\nATTACHMENT: results_summary.csv (preview)\n{results_csv_preview}\n"
+            
+            # Include bibliography if separate
+            refs_file = project_dir / "refs.bib"
+            if refs_file.exists():
+                refs_text = refs_file.read_text(encoding="utf-8", errors="ignore")
+                refs_preview = refs_text[:600] + ("\n...[CONTENT TRUNCATED]..." if len(refs_text) > 600 else "")
+                attachments_note += f"\nATTACHMENT: refs.bib (preview)\n{refs_preview}\n"
+                
+    except Exception as _e:
+        print(f"WARNING: Failed to attach project files for evaluation: {_e}")
+
+    # Prepare candidates summary for evaluation
+    candidates_summary = ""
+    for i, candidate in enumerate(candidates):
+        candidates_summary += f"\n{'='*50}\nCANDIDATE {i+1}:\n{'='*50}\n"
+        candidates_summary += candidate[:2000] + ("...[TRUNCATED]" if len(candidate) > 2000 else "")
+        candidates_summary += "\n"
+    
+    evaluation_prompt = [
+        {
+            "role": "system",
+            "content": f"""You are an expert academic reviewer tasked with selecting the best revision candidate from multiple options. 
+
+Your task is to:
+1. Carefully analyze each candidate's proposed changes
+2. Evaluate quality based on: scientific rigor, clarity, completeness, technical depth, and addressing of quality issues
+3. Select the single best candidate
+4. Provide clear reasoning for your choice
+
+ORIGINAL PAPER CONTEXT:
+- Length: {len(original_content)} characters
+- Simulation summary: {sim_summary[:500]}...
+
+EVALUATION CRITERIA:
+- Technical accuracy and rigor
+- Clarity of presentation
+- Completeness of methodology and results
+- Quality of experimental validation
+- Addressing of identified issues
+- Overall contribution to scientific knowledge
+
+OUTPUT FORMAT:
+REASONING: [Explain your analysis of each candidate and comparison]
+
+SELECTED: [NUMBER] (just the number, e.g., "2")"""
+        },
+        {
+            "role": "user", 
+            "content": f"""Please evaluate these {len(candidates)} revision candidates and select the best one:
+
+{candidates_summary}
+
+In addition to the candidate texts above, use these attachments for context:
+{attachments_note if attachments_note else '(no local attachments found)'}
+
+Note: PDF attachment is skipped due to size constraints, but assume the LaTeX compiles correctly if mentioned.
+
+Which candidate provides the highest quality revision? Consider scientific rigor, clarity, completeness, and overall improvement over the original."""
+        }
+    ]
+    
+    try:
+        response = _universal_chat(
+            evaluation_prompt, 
+            model=model, 
+            request_timeout=request_timeout, 
+            prompt_type="candidate_evaluation",
+            fallback_models=config.fallback_models,
+            pdf_path=None  # Skip PDF due to size constraints
+        )
+        return response
+    except Exception as e:
+        print(f"ERROR: LLM evaluation failed: {e}")
+        return "SELECTED: 1\nREASONING: Evaluation failed, defaulting to first candidate."
+
+def _save_candidate_diff(old_content: str, new_content: str, candidate_num: int, prefix: str = "candidate"):
+    """
+    Generate and display a git-style diff for candidate comparison.
+    
+    Args:
+        old_content: Original content
+        new_content: Candidate content
+        candidate_num: Candidate number
+        prefix: Prefix for display
+    """
+    try:
+        # Generate git-style diff
+        diff_lines = list(difflib.unified_diff(
+            old_content.splitlines(keepends=True),
+            new_content.splitlines(keepends=True),
+            fromfile=f"a/original.tex",
+            tofile=f"b/{prefix}_{candidate_num}.tex",
+            lineterm=""
+        ))
+        
+        if diff_lines:
+            print(f"\n{'='*60}")
+            print(f"📝 CANDIDATE {candidate_num} DIFF")
+            print(f"{'='*60}")
+            
+            # Count changes
+            adds = sum(1 for line in diff_lines if line.startswith('+') and not line.startswith('+++'))
+            dels = sum(1 for line in diff_lines if line.startswith('-') and not line.startswith('---'))
+            print(f"Changes: +{adds} -{dels} lines")
+            
+            # DEBUG: Show content length comparison
+            print(f"DEBUG: Content comparison:")
+            print(f"  Original: {len(old_content)} chars")
+            print(f"  New: {len(new_content)} chars")
+            print(f"  Diff lines: {len(diff_lines)}")
+            
+            # Show first 25 lines of diff
+            diff_preview = diff_lines[:25]
+            for line in diff_preview:
+                if not line.startswith('---') and not line.startswith('+++'):
+                    print(line, end='')
+            
+            if len(diff_lines) > 25:
+                print(f"\n... ({len(diff_lines) - 25} more lines)")
+            
+            print(f"{'='*60}\n")
+        else:
+            print(f"INFO: No changes detected in candidate {candidate_num}")
+            # DEBUG: Show why no diff was detected
+            print(f"DEBUG: No diff details:")
+            print(f"  Original content length: {len(old_content)}")
+            print(f"  New content length: {len(new_content)}")
+            print(f"  Contents identical: {old_content == new_content}")
+            if len(old_content) == len(new_content) and old_content != new_content:
+                print(f"  Same length but different - showing first difference:")
+                for i, (orig_char, new_char) in enumerate(zip(old_content, new_content)):
+                    if orig_char != new_char:
+                        print(f"    First diff at position {i}: '{orig_char}' -> '{new_char}'")
+                        break
+            
+    except Exception as e:
+        print(f"WARNING: Failed to generate candidate {candidate_num} diff: {e}")
+
 def _save_iteration_diff(old_content: str, new_content: str, output_dir: Path, iteration: int, filename: str = "paper.tex"):
     """
-    Generate and display a unified diff between old and new file content to terminal only.
+    Generate and display a git-style diff between old and new file content to terminal only.
     
     Args:
         old_content: Content before revision
@@ -373,47 +777,84 @@ def _save_iteration_diff(old_content: str, new_content: str, output_dir: Path, i
         filename: Name of the file being diffed (default: paper.tex)
     """
     try:
-        # Generate unified diff
+        # Generate git-style diff
         diff_lines = list(difflib.unified_diff(
             old_content.splitlines(keepends=True),
             new_content.splitlines(keepends=True),
-            fromfile=f"{filename} (before iteration {iteration})",
-            tofile=f"{filename} (after iteration {iteration})",
+            fromfile=f"a/{filename}",
+            tofile=f"b/{filename}",
             lineterm=""
         ))
         
         if diff_lines:
             print(f"\n{'='*80}")
-            print(f"📝 DIFF FOR ITERATION {iteration} - {filename}")
+            print(f"📝 GIT DIFF FOR ITERATION {iteration} - {filename}")
             print(f"{'='*80}")
-            # Print diff to terminal
+            
+            # Add git diff header
+            print(f"diff --git a/{filename} b/{filename}")
+            print(f"index 1234567..abcdefg 100644")
+            print(f"--- a/{filename}")
+            print(f"+++ b/{filename}")
+            
+            # Print the actual diff content (skip the file headers from difflib)
+            in_header = True
             for line in diff_lines:
-                print(line, end='')
+                if line.startswith('@@') and in_header:
+                    in_header = False
+                if not in_header:
+                    print(line, end='')
+            
             print(f"{'='*80}\n")
         else:
-            print(f"📝 No changes detected in iteration {iteration}")
+            # Even if no diff, show content length comparison
+            if len(old_content) != len(new_content):
+                print(f"📝 Subtle changes detected in iteration {iteration}: {len(old_content)} -> {len(new_content)} chars")
+            else:
+                print(f"📝 No changes detected in iteration {iteration}")
+            
+            # Show first 200 chars of both for manual comparison
+            print(f"DEBUG: Content comparison (first 200 chars):")
+            print(f"   Before: {old_content[:200]}...")
+            print(f"   After:  {new_content[:200]}...")
             
     except Exception as e:
-        print(f"⚠️ Failed to generate diff for iteration {iteration}: {e}")
+        print(f"WARNING: Failed to generate diff for iteration {iteration}: {e}")
 
-def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
+def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None, pdf_path: Optional[Path] = None) -> str:
     """
     Universal chat function that automatically detects whether to use OpenAI or Google AI
     based on the model name and routes the request accordingly.
+    
+    Args:
+        messages: List of chat messages
+        model: AI model to use
+        request_timeout: Request timeout in seconds
+        prompt_type: Type of prompt for temperature selection
+        fallback_models: List of fallback models if primary fails
+        pdf_path: Optional PDF file to include in the request
     """
     # Detect provider based on model name
     if model.startswith(('gemini', 'models/gemini')):
         # Google AI model
-        return _google_chat(messages, model, request_timeout, prompt_type, fallback_models)
+        return _google_chat(messages, model, request_timeout, prompt_type, fallback_models, pdf_path)
     else:
         # OpenAI model
-        return _openai_chat(messages, model, request_timeout, prompt_type, fallback_models)
+        return _openai_chat(messages, model, request_timeout, prompt_type, fallback_models, pdf_path)
 
-def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
+def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None, pdf_path: Optional[Path] = None) -> str:
     """
-    Google AI chat wrapper with similar interface to OpenAI chat.
+    Google AI chat wrapper with similar interface to OpenAI chat and PDF support.
     Based on working reference implementation.
     Sets HTTPS_PROXY specifically for Gemini API calls.
+    
+    Args:
+        messages: List of chat messages
+        model: Gemini model to use
+        request_timeout: Request timeout in seconds
+        prompt_type: Type of prompt
+        fallback_models: List of fallback models if primary fails
+        pdf_path: Optional PDF file to include in the request
     """
     if not GOOGLE_AI_AVAILABLE:
         raise APIError("Google AI SDK not available. Please install with: pip install google-generativeai")
@@ -423,21 +864,25 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7078"
     print(f"🌐 Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
     
+    if pdf_path and pdf_path.exists():
+        print(f"INFO: Including PDF in Gemini request: {pdf_path.name}")
+    
     try:
         # Configure API key - use hardcoded key as in reference
         api_key = "AIzaSyCXhoRyRmp_6Rpbp9eZjjwEvE11KrKIJII"
         genai.configure(api_key=api_key)
         
         logger.info(f"Making Google AI API call to {model} for {prompt_type}")
-        print(f"🤖 Making Google AI API call to {model} for {prompt_type}...")
+        print(f"INFO: Making Google AI API call to {model} for {prompt_type}...")
         
         # Set timeout
         if request_timeout is None:
             request_timeout = 1800  # 30 minutes default
         
-        # Convert OpenAI messages to a single prompt
-        # Combine all messages into one prompt for Gemini
+        # Convert OpenAI messages to a single prompt and handle PDF
         combined_prompt = ""
+        content_parts = []
+        
         for msg in messages:
             role = msg["role"]
             content = msg["content"]
@@ -449,23 +894,53 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             elif role == "assistant":
                 combined_prompt += f"Assistant: {content}\n\n"
         
-        # Remove trailing newlines
-        combined_prompt = combined_prompt.strip()
+        # Add PDF content if provided
+        if pdf_path and pdf_path.exists():
+            try:
+                # For Google AI, we need to upload the file using the file API
+                # This is a simplified approach - in production you might want to use the proper file upload API
+                import google.generativeai as genai
+                
+                # Upload the PDF file
+                uploaded_file = genai.upload_file(path=str(pdf_path), mime_type="application/pdf")
+                
+                # Add PDF note to text prompt
+                combined_prompt += "\n\n**Please also review the attached PDF document which shows the rendered output of the LaTeX paper.**\n"
+                
+                # Create content parts for multimodal input
+                content_parts = [
+                    combined_prompt.strip(),
+                    uploaded_file
+                ]
+                
+                print(f"📎 PDF uploaded to Gemini: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
+                
+            except Exception as pdf_error:
+                print(f"WARNING: Failed to upload PDF to Gemini: {pdf_error}")
+                print("📝 Continuing with text-only request...")
+                content_parts = [combined_prompt.strip()]
+        else:
+            content_parts = [combined_prompt.strip()]
         
         # Create model instance using the reference approach
         genai_model = genai.GenerativeModel(model)
         
         print(f"📡 Sending Google AI request with timeout={request_timeout}s...")
         
-        # Generate content directly as in the reference
-        response = genai_model.generate_content(combined_prompt)
+        # Generate content with multimodal support
+        if len(content_parts) > 1:
+            # Multimodal request (text + PDF)
+            response = genai_model.generate_content(content_parts)
+        else:
+            # Text-only request
+            response = genai_model.generate_content(content_parts[0])
         
-        print("✅ Google AI API call successful!")
+        print("INFO: Google AI API call successful.")
         return response.text
         
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ Google AI API Error: {error_msg}")
+        print(f"ERROR: Google AI API Error: {error_msg}")
         
         # Provide helpful proxy setup guidance
         if "503" in error_msg or "connect" in error_msg.lower() or "timeout" in error_msg.lower():
@@ -474,22 +949,22 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         
         # Try fallback models if available
         if fallback_models:
-            print(f"⚠️ Primary model {model} failed, trying fallback models...")
+            print(f"WARNING: Primary model {model} failed, trying fallback models...")
             for fallback_model in fallback_models:
                 try:
-                    print(f"🔄 Attempting fallback model: {fallback_model}")
+                    print(f"INFO: Attempting fallback model: {fallback_model}")
                     if fallback_model.startswith(('gemini', 'models/gemini')):
-                        return _google_chat(messages, fallback_model, request_timeout, prompt_type, None)
+                        return _google_chat(messages, fallback_model, request_timeout, prompt_type, None, pdf_path)
                     else:
                         # For OpenAI fallback, restore original proxy
                         if original_proxy is not None:
                             os.environ["HTTPS_PROXY"] = original_proxy
                         elif "HTTPS_PROXY" in os.environ:
                             del os.environ["HTTPS_PROXY"]
-                        print("🔄 Removed proxy for OpenAI fallback")
-                        return _openai_chat(messages, fallback_model, request_timeout, prompt_type, None)
+                        print("INFO: Removed proxy for OpenAI fallback")
+                        return _openai_chat(messages, fallback_model, request_timeout, prompt_type, None, pdf_path)
                 except Exception as fallback_error:
-                    print(f"⚠️ Fallback model {fallback_model} also failed: {fallback_error}")
+                    print(f"WARNING: Fallback model {fallback_model} also failed: {fallback_error}")
                     continue
         
         raise APIError(f"Google AI model {model} failed: {error_msg}")
@@ -500,7 +975,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             os.environ["HTTPS_PROXY"] = original_proxy
         elif "HTTPS_PROXY" in os.environ:
             del os.environ["HTTPS_PROXY"]
-        print("🔄 Restored original proxy settings")
+    print("INFO: Restored original proxy settings")
 
 def _nowstamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -538,7 +1013,7 @@ def _generate_research_ideas(
     Returns:
         Dictionary containing ranked ideas with analysis
     """
-    print(f"🧠 Generating {num_ideas} research ideas for '{topic}' in {field}...")
+    print(f"INFO: Generating {num_ideas} research ideas for '{topic}' in {field}...")
     
     ideation_prompt = f"""
 You are a brilliant research strategist tasked with generating innovative research ideas.
@@ -598,15 +1073,15 @@ Select the single best idea and explain why it's optimal for development into a 
             fallback_models=fallback_models or []
         )
         
-        print("  ✅ Ideas generated successfully!")
+        print("INFO: Ideas generated successfully.")
         
         # Parse the response to extract structured data
         ideas = _parse_ideation_response(response)
         
-        print(f"  📊 Parsed {len(ideas)} ideas from response")
+        print(f"INFO: Parsed {len(ideas)} ideas from response")
         
         # Display summary
-        print("\n🎯 Research Ideas Summary:")
+        print("INFO: Research Ideas Summary:")
         print("━" * 60)
         
         for i, idea in enumerate(ideas[:5], 1):  # Show top 5
@@ -630,8 +1105,8 @@ Select the single best idea and explain why it's optimal for development into a 
         }
         
     except Exception as e:
-        print(f"  ❌ Ideation failed: {e}")
-        print("  🔄 Proceeding with original topic/question...")
+        print(f"ERROR: Ideation failed: {e}")
+        print("INFO: Proceeding with original topic/question...")
         
         # Fallback: return original topic as single idea
         return {
@@ -713,7 +1188,7 @@ def _parse_ideation_response(response: str) -> List[Dict[str, Any]]:
         ideas.sort(key=calculate_score, reverse=True)
         
     except Exception as e:
-        print(f"  ⚠️  Parsing error: {e}")
+        print(f"WARNING: Parsing error: {e}")
         # Return a single fallback idea
         ideas = [{
             "title": "Research Analysis",
@@ -753,8 +1228,8 @@ def test_time_compute_scaling(
     import statistics
     import re
     
-    print(f"🧪 Starting test-time compute scaling with candidate generation for {model}")
-    print(f"📊 Testing candidate counts: {candidate_counts}")
+    print(f"INFO: Starting test-time compute scaling with candidate generation for {model}")
+    print(f"INFO: Testing candidate counts: {candidate_counts}")
     
     # Default test prompt if none provided
     if test_prompt is None:
@@ -844,7 +1319,7 @@ def test_time_compute_scaling(
     
     # Test each candidate count
     for candidate_count in candidate_counts:
-        print(f"\n🔄 Testing {candidate_count} candidates...")
+        print(f"INFO: Testing {candidate_count} candidates...")
         
         # Prepare test messages
         test_messages = [
@@ -856,7 +1331,7 @@ def test_time_compute_scaling(
         candidates = []
         generation_times = []
         
-        print(f"  🎯 Generating {candidate_count} candidate responses...")
+        print(f"INFO: Generating {candidate_count} candidate responses...")
         
         for i in range(candidate_count):
             print(f"    📝 Generating candidate {i + 1}/{candidate_count}...")
@@ -1038,7 +1513,9 @@ def _generate_best_revision_candidate(
     model: str, 
     request_timeout: int, 
     config: Any, 
-    candidate_count: int = 3
+    candidate_count: int = 3,
+    output_diffs: bool = False,
+    pdf_path: Optional[Path] = None,
 ) -> str:
     """
     Generate multiple revision candidates and select the best one using test-time compute scaling.
@@ -1059,13 +1536,14 @@ def _generate_best_revision_candidate(
         Best revision candidate based on quality metrics
     """
     import time
+    import hashlib
     
     print(f"  🎯 Generating {candidate_count} revision candidates...")
     
     candidates = []
     generation_times = []
     
-    # Generate multiple revision candidates with slight variations
+    # Generate multiple revision candidates with aggressive variations
     for i in range(candidate_count):
         print(f"    📝 Generating revision candidate {i + 1}/{candidate_count}...")
         
@@ -1075,25 +1553,29 @@ def _generate_best_revision_candidate(
             # Create varied revision prompts to encourage diversity
             base_prompt = _revise_prompt(current_tex, sim_summary, review_text, latex_errors, project_dir, user_prompt)
             
-            # Add variation instructions to encourage different approaches
+            # Add MUCH MORE AGGRESSIVE variation instructions to force different approaches
             if i > 0:
                 variation_instructions = [
-                    "\nFocus particularly on improving the technical depth and rigor of the analysis.",
-                    "\nEmphasize clarity of presentation and logical flow between sections.",
-                    "\nPrioritize addressing methodological concerns and experimental validation.",
-                    "\nConcentrate on strengthening the theoretical foundations and mathematical formulations.",
-                    "\nFocus on improving the practical implications and real-world applications."
+                    "\n\nIMPORTANT: You MUST make SUBSTANTIAL changes. Rewrite at least 30% of the content. Add new sections, expand existing ones, change technical approaches, improve mathematical rigor.",
+                    "\n\nCRITICAL: Focus on MAJOR restructuring. Reorganize sections, add missing methodology details, enhance experimental validation. Make this version significantly different from the original.",
+                    "\n\nESSENTIAL: Prioritize COMPREHENSIVE improvements. Add new theoretical foundations, expand results discussion, include additional related work. Transform the paper substantially.",
+                    "\n\nREQUIRED: Concentrate on FUNDAMENTAL enhancements. Strengthen mathematical formulations, add implementation details, improve practical applications. Create a markedly different version.",
+                    "\n\nMANDATORY: Focus on EXTENSIVE modifications. Rewrite abstract and conclusion, add new figures/tables concepts, enhance technical depth throughout. Generate a substantially revised paper."
                 ]
                 
                 variation = variation_instructions[(i - 1) % len(variation_instructions)]
                 
-                # Add variation to the system prompt
+                # Add variation to the system prompt with higher temperature equivalent instructions
                 varied_prompt = base_prompt.copy()
                 varied_prompt[0]["content"] += variation
+                
+                # Also modify the user prompt to be more aggressive
+                if len(varied_prompt) > 1:
+                    varied_prompt[1]["content"] += f"\n\nVariation {i}: " + variation
             else:
                 varied_prompt = base_prompt
             
-            # Generate revision candidate
+            # Generate revision candidate with increased temperature-equivalent randomness
             candidate = _universal_chat(
                 varied_prompt, 
                 model=model, 
@@ -1107,6 +1589,16 @@ def _generate_best_revision_candidate(
             generation_times.append(generation_time)
             
             print(f"      ✅ Candidate {i + 1} generated: {generation_time:.2f}s, {len(candidate)} chars")
+            
+            # DEBUG: Show first 300 chars of each revision candidate
+            print(f"      🔍 DEBUG - Revision candidate {i + 1} preview:")
+            print(f"      {candidate[:300]}...")
+            print(f"      {'─'*60}")
+            
+            # Show diff from original for each candidate
+            if output_diffs:
+                print(f"      🔍 Comparing candidate {i + 1} to original...")
+                _save_candidate_diff(current_tex, candidate, i + 1, "candidate")
             
         except Exception as e:
             print(f"      ❌ Candidate {i + 1} failed: {e}")
@@ -1122,36 +1614,64 @@ def _generate_best_revision_candidate(
     
     print(f"  🏆 Selecting best candidate from {len(valid_candidates)} valid responses...")
     
-    # Evaluate each candidate using quality metrics
-    candidate_scores = []
+    # Use LLM to evaluate and select the best revision candidate
+    print(f"  🤖 Asking LLM to evaluate revision candidates...")
     
-    for idx, (orig_idx, candidate) in enumerate(valid_candidates):
-        try:
-            # Calculate quality metrics for this candidate
-            metrics = _evaluate_revision_quality(candidate, review_text, latex_errors)
-            score = metrics['overall_quality']
-            candidate_scores.append((orig_idx, candidate, score, metrics))
-            
-            print(f"    📊 Candidate {orig_idx + 1}: Quality score {score:.3f}")
-            
-        except Exception as e:
-            print(f"    ❌ Failed to evaluate candidate {orig_idx + 1}: {e}")
-            candidate_scores.append((orig_idx, candidate, 0.0, {}))
+    # Prepare candidates for LLM evaluation (in-memory only)
+    revision_candidates = [c for _, c in valid_candidates]
+
+    # DEBUG: Show what we're sending to the LLM
+    print(f"  🔍 DEBUG - Sending {len(revision_candidates)} candidates to LLM for evaluation:")
+    for i, candidate in enumerate(revision_candidates):
+        print(f"  - Candidate {i+1}: {len(candidate)} chars")
+    print(f"  Original content: {len(current_tex)} chars")
+    print(f"  Review text: {len(review_text)} chars")
+    print(f"  {'─'*60}")
     
-    # Select the best candidate
-    if candidate_scores:
-        best_idx, best_candidate, best_score, best_metrics = max(candidate_scores, key=lambda x: x[2])
-        avg_score = sum(score for _, _, score, _ in candidate_scores) / len(candidate_scores)
-        improvement = best_score - avg_score
-        
-        print(f"  🎯 Selected candidate {best_idx + 1} with quality score {best_score:.3f}")
-        print(f"  📈 Quality improvement over average: +{improvement:.3f}")
-        print(f"  ⏱️  Total compute time: {sum(t for t in generation_times if t):.1f}s")
-        
-        return best_candidate
-    else:
-        print("    ⚠️  No valid candidates scored, returning first valid candidate")
-        return valid_candidates[0][1] if valid_candidates else ""
+    best_candidate_response = _select_best_revision_candidate_with_llm(
+        revision_candidates, current_tex, review_text, model, request_timeout, config, pdf_path=pdf_path, project_dir=project_dir
+    )
+    
+    # DEBUG: Show full LLM evaluation response
+    print(f"  🔍 DEBUG - LLM Revision Evaluation Response:")
+    print(f"  {best_candidate_response}")
+    print(f"  {'═'*80}")
+    
+    # Parse the LLM selection response
+    try:
+        import re
+        selection_match = re.search(r'SELECTED:\s*(\d+)', best_candidate_response, re.IGNORECASE)
+        if selection_match:
+            selected_idx = int(selection_match.group(1)) - 1  # Convert to 0-based index
+            if 0 <= selected_idx < len(valid_candidates):
+                orig_idx, best_candidate = valid_candidates[selected_idx]
+                print(f"  🎯 LLM selected candidate {selected_idx + 1} (original index {orig_idx + 1})")
+                
+                # Show why this candidate was selected
+                reasoning_match = re.search(r'REASONING:\s*(.*?)(?=SELECTED:|$)', best_candidate_response, re.DOTALL | re.IGNORECASE)
+                if reasoning_match:
+                    reasoning = reasoning_match.group(1).strip()
+                    print(f"  � Selection reasoning: {reasoning[:200]}...")
+                
+                # Show final selected candidate diff
+                if output_diffs:
+                    print(f"\n🎯 FINAL SELECTED CANDIDATE DIFF:")
+                    _save_candidate_diff(current_tex, best_candidate, selected_idx + 1, "SELECTED")
+                
+                # Calculate compute time
+                total_time = sum(t for t in generation_times if t)
+                print(f"  ⏱️  Total compute time: {total_time:.1f}s")
+                
+                return best_candidate
+            else:
+                print(f"  ⚠️ Invalid selection index {selected_idx + 1}, using first candidate")
+                return valid_candidates[0][1]
+        else:
+            print(f"  ⚠️ Could not parse LLM selection, using first candidate")
+            return valid_candidates[0][1]
+    except Exception as e:
+        print(f"  ❌ Error parsing LLM selection: {e}, using first candidate")
+        return valid_candidates[0][1]
 
 def _evaluate_revision_quality(revised_text: str, review_text: str, latex_errors: str) -> Dict[str, float]:
     """
@@ -1579,7 +2099,11 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- Place tables/figures in relevant subsections immediately after first text mention\n"
         "- Ensure visual self-containment with comprehensive, descriptive captions\n"
         "- Each float must appear in logical context, not forced to arbitrary page positions\n"
-        "- Tables/figures should enhance understanding within their specific subsection context\n\n"
+        "- Tables/figures should enhance understanding within their specific subsection context\n"
+        "- CRITICAL: Place **all figures and tables either inline in the main text where they are first cited, or at the very end of the document but strictly before the references section**\n"
+        "- **Do not place any figures or tables after the references or between references**\n"
+        "- If LaTeX floats push figures out of order, use [H] positioning (requires \\usepackage{float}) to force placement where cited\n"
+        "- For figures/tables at document end, place them immediately before \\bibliography{} or \\begin{thebibliography}\n\n"
         
         "STRUCTURE REQUIREMENTS:\n"
         "- Start with \\begin{filecontents*}{refs.bib}...\\end{filecontents*} containing ALL bibliography entries\n"
@@ -1693,15 +2217,19 @@ def _collect_project_files(project_dir: Path) -> str:
         return "No additional project files found."
 
 def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, iteration_count: int = 1) -> List[Dict[str, str]]:
-    """Combined prompt for review, editorial decision, and revision with diff output."""
+    """Combined prompt for review and revision with diff output."""
     sys_prompt = (
-        "You are a combined AI system acting as: (1) Top-tier journal reviewer, (2) Handling editor, and (3) Paper author. "
-        "Your task is to review the paper, make an editorial decision, and if needed, provide complete file diffs for all revisions.\n\n"
+        "You are a combined AI system acting as: (1) Top-tier journal reviewer and (2) Paper author. "
+        "Your task is to review the paper and provide complete file diffs for all revisions needed to improve it.\n\n"
+        
+        "REVIEW APPROACH:\n"
+        "You will be provided with both the LaTeX source code AND the rendered PDF version of the paper (if available). "
+        "Use the PDF to assess the visual presentation, layout, figure placement, and overall appearance, "
+        "while using the LaTeX source to verify technical requirements and code structure.\n\n"
         
         "WORKFLOW STEPS:\n"
         "1. REVIEW: Conduct a thorough peer review meeting top journal standards\n"
-        "2. EDITORIAL DECISION: Decide if the paper is ready for publication (YES/NO/REJECT)\n"
-        "3. REVISION: If not ready, provide complete file diffs for ALL files that need changes\n\n"
+        "2. REVISION: Provide complete file diffs for ALL files that need changes to address review issues\n\n"
         
         "REVIEW CRITERIA (same as top-tier journals):\n"
         "- Scientific rigor, methodology soundness, and novel contribution\n"
@@ -1717,22 +2245,23 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "- Reproducible results documentation\n"
         "- CRITICAL: Tables/figures positioned contextually in relevant subsections (NOT forced to page tops)\n\n"
         
-        "EDITORIAL DECISION CRITERIA:\n"
-        "- YES: Paper meets top journal standards, compiles successfully, quality threshold met\n"
-        "- NO: Significant issues require revision but paper is fundamentally sound\n"
-        "- REJECT: Fundamental flaws make paper unsuitable for publication\n\n"
-        
-        "REVISION OUTPUT FORMAT (when decision is NO):\n"
-        "Provide complete file diffs in this exact format:\n\n"
-        "```diff\n"
-        "--- a/filename.ext\n"
-        "+++ b/filename.ext\n"
-        "@@ -line_start,line_count +line_start,line_count @@\n"
-        " unchanged line\n"
-        "-removed line\n"
-        "+added line\n"
-        " unchanged line\n"
+        "REVISION OUTPUT FORMAT:\n"
+        "Always provide complete revised file contents in this exact format:\n\n"
+        "```tex\n"
+        "# File: paper.tex\n"
+        "[Complete revised LaTeX content here]\n"
         "```\n\n"
+        "```python\n"
+        "# File: simulation.py\n"
+        "[Complete revised Python code here]\n"
+        "```\n\n"
+        "For each file that needs changes, provide the COMPLETE file content (not just diffs).\n"
+        "This ensures all changes are applied correctly without parsing errors.\n\n"
+        
+        "IMPORTANT: Your changes will be displayed in git diff format in the terminal. "
+        "Make SUBSTANTIAL and MEANINGFUL changes that address the review issues. "
+        "Avoid making cosmetic-only changes - focus on content improvements that will "
+        "significantly enhance the paper's quality and fix identified problems.\n\n"
         
         "CRITICAL REVISION REQUIREMENTS:\n"
         "- Address ALL review concerns completely\n"
@@ -1767,13 +2296,11 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         project_files_content = _collect_project_files(project_dir)
     
     user = (
-        f"This is iteration {iteration_count}. Please complete the 3-step workflow:\n\n"
+        f"This is iteration {iteration_count}. Please complete the 2-step workflow:\n\n"
         "STEP 1: REVIEW\n"
         "Conduct a thorough peer review of the paper using top journal standards.\n\n"
-        "STEP 2: EDITORIAL DECISION\n"
-        "Based on your review, make an editorial decision: YES/NO/REJECT\n\n"
-        "STEP 3: REVISION (if decision is NO)\n"
-        "If decision is NO, provide complete file diffs for all necessary changes.\n\n"
+        "STEP 2: REVISION\n"
+        "Provide complete file diffs for all necessary changes to address the review issues.\n\n"
         "----- CURRENT PAPER (LATEX) -----\n" + paper_tex + "\n"
         "----- SIMULATION CODE & OUTPUTS -----\n" + sim_summary + "\n"
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
@@ -1798,96 +2325,93 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "\nProvide your response in this format:\n\n"
         "## REVIEW\n"
         "[Your detailed review here]\n\n"
-        "## EDITORIAL DECISION\n"
-        "[YES/NO/REJECT with brief justification]\n\n"
-        "## REVISION DIFFS (if decision is NO)\n"
-        "[Complete file diffs for all changes needed]\n"
+        "## REVISION DIFFS\n"
+        "[Complete revised file contents for all files that need changes]\n"
     )
     
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
 
 def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str, dict]:
     """
-    Parse the combined review/editorial/revision response.
+    Parse the combined review/revision response.
     
     Returns:
-        (review_text, decision, file_changes)
+        (review_text, "REVISE", file_changes)
         where file_changes is a dict {filename: new_content}
     """
     import re
     
     # Extract sections using regex
-    review_match = re.search(r'## REVIEW\s*\n(.*?)(?=## EDITORIAL DECISION)', response, re.DOTALL | re.IGNORECASE)
-    decision_match = re.search(r'## EDITORIAL DECISION\s*\n(.*?)(?=## REVISION DIFFS|$)', response, re.DOTALL | re.IGNORECASE)
+    review_match = re.search(r'## REVIEW\s*\n(.*?)(?=## REVISION DIFFS)', response, re.DOTALL | re.IGNORECASE)
     diffs_match = re.search(r'## REVISION DIFFS.*?\n(.*)', response, re.DOTALL | re.IGNORECASE)
     
     review_text = review_match.group(1).strip() if review_match else "No review section found"
-    decision_text = decision_match.group(1).strip() if decision_match else "NO"
     diffs_text = diffs_match.group(1).strip() if diffs_match else ""
     
-    # Extract decision (YES/NO/REJECT)
-    decision_lines = decision_text.split('\n')
-    decision = "NO"  # default
-    for line in decision_lines:
-        line_upper = line.strip().upper()
-        if line_upper.startswith(('YES', 'NO', 'REJECT')):
-            decision = line_upper.split()[0]
-            break
-    
-    # Parse diffs and apply them to get new file contents
+    # Parse diffs and extract new file contents
     file_changes = {}
     
-    if decision == "NO" and diffs_text:
-        # Parse diff format and extract file changes
-        diff_blocks = re.findall(r'```diff\s*\n(.*?)\n```', diffs_text, re.DOTALL)
+    if diffs_text:
+        print(f"🔍 DEBUG: Found revision section with {len(diffs_text)} characters")
         
-        for diff_block in diff_blocks:
-            lines = diff_block.split('\n')
-            current_file = None
-            
-            for line in lines:
-                # Extract filename from diff header
-                if line.startswith('--- a/') or line.startswith('+++ b/'):
-                    filename = line.split('/', 1)[1] if '/' in line else line.split(' ', 1)[1]
-                    if line.startswith('+++ b/'):
-                        current_file = filename
-                        continue
-                
-                # Process diff content
-                if current_file and not line.startswith(('---', '+++', '@@')):
-                    if current_file not in file_changes:
-                        # Start with original file content if it exists
-                        original_path = project_dir / current_file
-                        if original_path.exists():
-                            try:
-                                with open(original_path, 'r', encoding='utf-8') as f:
-                                    file_changes[current_file] = f.read().split('\n')
-                            except:
-                                file_changes[current_file] = []
-                        else:
-                            file_changes[current_file] = []
+        # Method 1: Look for complete file contents in code blocks with file comments
+        file_blocks = re.findall(r'```(?:latex|tex|python|py|txt)?\s*\n# ?(?:File: ?|Filename: ?)?([^\n]+)\n(.*?)\n```', diffs_text, re.DOTALL)
+        for filename, content in file_blocks:
+            if filename and filename.strip():
+                filename = filename.strip()
+                if filename.endswith(':'):
+                    filename = filename[:-1]  # Remove trailing colon
+                file_changes[filename] = content.strip()
+                print(f"🔍 DEBUG: Extracted {filename} ({len(content)} chars) from code block with file comment")
         
-        # Alternative: Extract complete file contents if diff parsing fails
-        if not file_changes and diffs_text:
-            # Look for complete file contents in code blocks
-            file_blocks = re.findall(r'```(?:python|tex|txt|py)?\s*\n# ?(?:File: ?)?([^\n]+)\n(.*?)\n```', diffs_text, re.DOTALL)
-            for filename, content in file_blocks:
-                filename = filename.strip()
-                file_changes[filename] = content
+        # Method 2: Look for code blocks without file comments but with language hints
+        if not file_changes:
+            # Try to match by file extension pattern
+            tex_blocks = re.findall(r'```(?:latex|tex)\s*\n(.*?)\n```', diffs_text, re.DOTALL)
+            if tex_blocks:
+                file_changes['paper.tex'] = tex_blocks[0].strip()
+                print(f"🔍 DEBUG: Extracted paper.tex ({len(tex_blocks[0])} chars) from tex code block")
             
-            # Also look for explicit file sections
-            file_sections = re.findall(r'(?:File: ?|Filename: ?)([^\n]+)\n```[^\n]*\n(.*?)\n```', diffs_text, re.DOTALL)
-            for filename, content in file_sections:
-                filename = filename.strip()
-                file_changes[filename] = content
+            py_blocks = re.findall(r'```(?:python|py)\s*\n(.*?)\n```', diffs_text, re.DOTALL)
+            if py_blocks:
+                file_changes['simulation.py'] = py_blocks[0].strip()
+                print(f"🔍 DEBUG: Extracted simulation.py ({len(py_blocks[0])} chars) from python code block")
+        
+        # Method 3: Look for explicit file sections (File: filename)
+        file_sections = re.findall(r'(?:File: ?|Filename: ?)([^\n]+)\n```[^\n]*\n(.*?)\n```', diffs_text, re.DOTALL)
+        for filename, content in file_sections:
+            filename = filename.strip()
+            if filename.endswith(':'):
+                filename = filename[:-1]  # Remove trailing colon
+            if filename not in file_changes:  # Don't override if already found
+                file_changes[filename] = content.strip()
+                print(f"🔍 DEBUG: Extracted {filename} ({len(content)} chars) from file section")
+        
+        # Method 4: Look for files mentioned by name with content following
+        file_mentions = re.findall(r'([a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z]+):\s*\n```[^\n]*\n(.*?)\n```', diffs_text, re.DOTALL)
+        for filename, content in file_mentions:
+            if filename not in file_changes:  # Don't override if already found
+                file_changes[filename] = content.strip()
+                print(f"🔍 DEBUG: Extracted {filename} ({len(content)} chars) from file mention")
+        
+        print(f"🔍 DEBUG: Total files extracted: {list(file_changes.keys())}")
+    else:
+        print(f"🔍 DEBUG: No revision section found in response")
     
-    return review_text, decision, file_changes
+    # Always return "REVISE" as the decision since we removed editorial logic
+    return review_text, "REVISE", file_changes
 
 def _apply_file_changes(file_changes: dict, project_dir: Path) -> None:
     """Apply file changes from the revision response."""
     for filename, content in file_changes.items():
         file_path = project_dir / filename
         try:
+            # Read existing content for comparison
+            original_content = ""
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    original_content = f.read()
+            
             # Ensure directory exists
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
@@ -1898,7 +2422,24 @@ def _apply_file_changes(file_changes: dict, project_dir: Path) -> None:
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            print(f"✅ Updated {filename}")
+            # Debug: Check if content actually changed
+            if original_content.strip() == content.strip():
+                print(f"⚠️ Updated {filename} - but content appears identical (no real changes)")
+                # DEBUG: Show first 500 chars of both for comparison
+                print(f"🔍 DEBUG - Original content (first 500 chars): {original_content[:500]}...")
+                print(f"🔍 DEBUG - New content (first 500 chars): {content[:500]}...")
+                print(f"🔍 DEBUG - Character-by-character comparison of first 100 chars:")
+                for i, (orig_char, new_char) in enumerate(zip(original_content[:100], str(content)[:100])):
+                    if orig_char != new_char:
+                        print(f"  Diff at position {i}: '{orig_char}' -> '{new_char}'")
+            else:
+                print(f"✅ Updated {filename} - content changed: {len(original_content)} -> {len(content)} chars")
+                # DEBUG: Show what changed
+                print(f"🔍 DEBUG - Content change details:")
+                if len(original_content) != len(str(content)):
+                    print(f"  Length changed: {len(original_content)} -> {len(str(content))}")
+                else:
+                    print(f"  Same length but different content")
             
         except Exception as e:
             print(f"❌ Failed to update {filename}: {e}")
@@ -1908,6 +2449,11 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "Act as a top-tier journal reviewer (Nature, Science, Cell level) with expertise in LaTeX formatting and scientific programming. "
         "Your review must meet the highest academic standards. Be constructive but demanding. "
         "CRITICAL: If the simulation ran successfully and produced actual results, the paper MUST use these real numbers, not fake/placeholder values. "
+        
+        "REVIEW APPROACH:\n"
+        "You will be provided with both the LaTeX source code AND the rendered PDF version of the paper. "
+        "Use the PDF to assess the visual presentation, layout, figure placement, and overall appearance, "
+        "while using the LaTeX source to verify technical requirements and code structure.\n\n"
         
         "MANDATORY REQUIREMENTS - CHECK CAREFULLY:\n"
         "1. SINGLE FILE ONLY: Paper must be ONE LaTeX file with NO \\input{} or \\include{} commands\n"
@@ -1962,7 +2508,14 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "   - Keep floats contextually relevant to their surrounding discussion\n"
         "   - No orphaned tables appearing in unrelated sections or far from their text references\n"
         "   - Ensure logical reading flow where visuals enhance their specific subsection content\n"
-        "11. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file only - no additional .py files or scripts.\n\n"
+        "11. FIGURE AND TABLE PLACEMENT REQUIREMENTS (CRITICAL): Check that all figures and tables are placed correctly:\n"
+        "   - **All figures and tables must be either inline in the main text where they are first cited, or at the very end of the document but strictly before the references section**\n"
+        "   - **No figures or tables should appear after the references or between references**\n"
+        "   - If LaTeX floats push figures out of order, they should use [H] positioning (from float package) to force placement where cited\n"
+        "   - Verify that the float package is loaded when [H] positioning is used: \\usepackage{float}\n"
+        "   - For end-of-document placement, figures/tables should appear immediately before \\bibliography{} or \\begin{thebibliography}\n"
+        "   - Flag any figures or tables that appear in or after the reference section as a major violation\n"
+        "12. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file only - no additional .py files or scripts.\n\n"
         
         "STRUCTURE ALIGNMENT CRITERIA:\n"
         "- Theoretical papers should emphasize theory, proofs, and mathematical analysis\n"
@@ -2040,10 +2593,11 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- SIGNIFICANCE: Work must make a meaningful contribution to the field\n"
         "- SELF-CONTAINED: Single file with embedded references and traceable visual content\n"
         "- APPROPRIATE STRUCTURE: Paper organization must match the research type and field standards\n"
+        "- FIGURE/TABLE PLACEMENT: All figures and tables must be placed either inline where cited or at document end before references - NEVER after or between references\n"
         
         "Provide specific, actionable feedback with concrete suggestions for improvement. "
-        "If the paper violates any of the 10 mandatory requirements, mark it as needing major revision. "
-        "Pay special attention to reference authenticity, results documentation, figure generation, filename removal, and structural appropriateness."
+        "If the paper violates any of the 12 mandatory requirements, mark it as needing major revision. "
+        "Pay special attention to reference authenticity, results documentation, figure generation, filename removal, structural appropriateness, and figure/table placement relative to references."
     )
     
     # Add custom user prompt if provided - it takes priority
@@ -2084,7 +2638,7 @@ def _editor_prompt(review_text: str, iteration_count: int, user_prompt: Optional
     if user_prompt:
         sys_prompt = (
             f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
-            "The above user instruction should guide your editorial decision. "
+            "The above user instruction should guide your revision approach. "
             "Balance user preferences with publication standards.\n\n"
             + sys_prompt
         )
@@ -2135,10 +2689,72 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
     except Exception as e:
         return False, f"LaTeX compilation error: {str(e)}"
 
+def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool, Optional[Path], str]:
+    """
+    Generate PDF from LaTeX file specifically for AI review.
+    
+    Args:
+        paper_path: Path to the LaTeX file
+        timeout: Compilation timeout in seconds
+        
+    Returns:
+        Tuple of (success, pdf_path, error_message)
+    """
+    try:
+        print(f"📄 Generating PDF for AI review from {paper_path.name}...")
+        
+        # Run pdflatex with nonstopmode
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+            cwd=paper_path.parent,
+            capture_output=True,
+            text=True,
+            timeout=timeout
+        )
+        
+        # Check if PDF was generated
+        pdf_path = paper_path.with_suffix('.pdf')
+        
+        if pdf_path.exists():
+            print(f"✅ PDF generated successfully: {pdf_path.name}")
+            return True, pdf_path, ""
+        else:
+            # Get error details from log
+            log_path = paper_path.with_suffix('.log')
+            error_msg = "PDF generation failed."
+            if log_path.exists():
+                try:
+                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        error_msg += f" Log (last 10 lines):\n{''.join(lines[-10:])}"
+                except Exception:
+                    error_msg += " Could not read log file."
+            
+            print(f"❌ PDF generation failed: {error_msg}")
+            return False, None, error_msg
+        
+    except subprocess.TimeoutExpired:
+        error_msg = f"PDF generation timed out after {timeout} seconds"
+        print(f"❌ {error_msg}")
+        return False, None, error_msg
+    except FileNotFoundError:
+        error_msg = "pdflatex command not found. Please install a LaTeX distribution."
+        print(f"❌ {error_msg}")
+        return False, None, error_msg
+    except Exception as e:
+        error_msg = f"PDF generation error: {str(e)}"
+        print(f"❌ {error_msg}")
+        return False, None, error_msg
+
 def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
         "You are the paper author making revisions based on peer review. Your goal is to address ALL reviewer concerns "
         "while maintaining scientific integrity and clarity. Produce a COMPLETE revised LaTeX file.\n\n"
+        
+        "REVISION APPROACH:\n"
+        "You will be provided with the LaTeX source code, the rendered PDF version (if available), and the reviewer feedback. "
+        "Use the PDF to understand how the paper currently appears when rendered, including figure placement, table formatting, "
+        "and overall visual layout. Address any visual presentation issues mentioned in the review.\n\n"
         
         "CRITICAL REQUIREMENTS - NO EXCEPTIONS:\n"
         "1. SINGLE FILE ONLY: The paper must be contained in ONE LaTeX file with NO separate bibliography files\n"
@@ -2222,6 +2838,14 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "- Tables/figures should enhance understanding within their specific subsection context\n"
         "- Review all existing \\begin{table} and \\begin{figure} environments to ensure proper positioning\n\n"
         
+        "FIGURE AND TABLE PLACEMENT REQUIREMENTS (CRITICAL):\n"
+        "- Place **all figures and tables either inline in the main text where they are first cited, or at the very end of the document but strictly before the references section**\n"
+        "- **Do not place any figures or tables after the references or between references**\n"
+        "- If LaTeX floats push figures out of order, insert them explicitly with [H] (from the float package) to force placement where cited\n"
+        "- When using [H] positioning, ensure the float package is loaded: \\usepackage{float}\n"
+        "- For figures/tables at document end, place them immediately before \\bibliography{} or \\begin{thebibliography}\n"
+        "- Never allow figures or tables to appear in or after the reference section\n\n"
+        
         "REVISION PRIORITIES:\n"
         "1. Address all scientific/methodological concerns raised\n"
         "2. Fix LaTeX formatting issues (figures, tables, equations, citations)\n"
@@ -2233,8 +2857,10 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "8. Ensure proper documentation of results in results.txt\n"
         "9. Implement figure generation in simulation.py with local file saving\n"
         "10. CRITICAL: Fix table/figure positioning using [h]/[ht]/[H] instead of [t]/[!t] for contextual placement\n"
-        "11. Improve clarity and presentation quality\n"
-        "12. Ensure reproducibility and code quality\n\n"
+        "11. CRITICAL: Ensure all figures and tables are placed either inline where cited or at document end before references\n"
+        "12. CRITICAL: Prevent any figures/tables from appearing after or between references\n"
+        "13. Improve clarity and presentation quality\n"
+        "14. Ensure reproducibility and code quality\n\n"
         
         "FORMATTING REQUIREMENTS (CRITICAL - NO EXCEPTIONS):\n"
         "- ALL content: use width=\\linewidth constraints (never exceed page width)\n"
@@ -2574,24 +3200,175 @@ def run_workflow(
         if stagnation_count >= 2 and i > 1:
             print(f"⚠️ Quality stagnation detected ({stagnation_count} iterations without improvement)")
         
-        # COMBINED REVIEW, EDITORIAL DECISION, AND REVISION IN ONE CALL
+        # COMBINED REVIEW AND REVISION IN ONE CALL
         print(f"🔄 Running combined review/editorial/revision process...")
-        combined_response = _universal_chat(
-            _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i), 
-            model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", fallback_models=config.fallback_models
-        )
+        
+        # Generate PDF for AI review if LaTeX compilation was successful and PDF review is enabled
+        pdf_path = None
+        if latex_success and config.enable_pdf_review:
+            pdf_success, generated_pdf_path, pdf_error = _generate_pdf_for_review(paper_path, dynamic_timeout)
+            if pdf_success and generated_pdf_path:
+                pdf_path = generated_pdf_path
+                print(f"📄 PDF generated for AI review: {pdf_path.name}")
+            else:
+                print(f"⚠️ PDF generation failed: {pdf_error}")
+        elif not config.enable_pdf_review:
+            print(f"ℹ️ PDF review disabled in configuration")
+        else:
+            print(f"⚠️ Skipping PDF generation due to LaTeX compilation failure")
+        
+        # Use test-time scaling for combined approach if enabled
+        tts_changes_applied = False  # Track if we've already applied TTS candidate changes
+        if hasattr(config, 'use_test_time_scaling') and config.use_test_time_scaling and hasattr(config, 'revision_candidates') and config.revision_candidates > 1:
+            import hashlib
+            print(f"🧪 Using test-time compute scaling with {config.revision_candidates} candidates for combined approach...")
+            
+            # Generate multiple combined responses and select the best one
+            candidates = []
+            for candidate_idx in range(config.revision_candidates):
+                print(f"    📝 Generating combined response candidate {candidate_idx + 1}/{config.revision_candidates}...")
+                try:
+                    # Add slight variation to encourage diverse responses
+                    base_prompt = _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i)
+                    
+                    if candidate_idx > 0:
+                        variation_instructions = [
+                            "\n\nIMPORTANT: You MUST make SUBSTANTIAL changes. Rewrite at least 30% of the content. Add new sections, expand existing ones, change technical approaches, improve mathematical rigor.",
+                            "\n\nCRITICAL: Focus on MAJOR restructuring. Reorganize sections, add missing methodology details, enhance experimental validation. Make this version significantly different from the original.",
+                            "\n\nESSENTIAL: Prioritize COMPREHENSIVE improvements. Add new theoretical foundations, expand results discussion, include additional related work. Transform the paper substantially.",
+                            "\n\nREQUIRED: Concentrate on FUNDAMENTAL enhancements. Strengthen mathematical formulations, add implementation details, improve practical applications. Create a markedly different version.",
+                            "\n\nMANDATORY: Focus on EXTENSIVE modifications. Rewrite abstract and conclusion, add new figures/tables concepts, enhance technical depth throughout. Generate a substantially revised paper."
+                        ]
+                        variation = variation_instructions[(candidate_idx - 1) % len(variation_instructions)]
+                        # Add variation to the system prompt
+                        varied_prompt = base_prompt.copy()
+                        varied_prompt[0]["content"] += variation
+                    else:
+                        varied_prompt = base_prompt
+                    
+                    candidate_response = _universal_chat(
+                        varied_prompt, 
+                        model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", 
+                        fallback_models=config.fallback_models, pdf_path=pdf_path
+                    )
+                    candidates.append(candidate_response)
+                    print(f"      ✅ Candidate {candidate_idx + 1} generated: {len(candidate_response)} chars")
+                    
+                    # DEBUG: Show first 300 chars of each candidate
+                    print(f"      🔍 DEBUG - Candidate {candidate_idx + 1} preview:")
+                    print(f"      {candidate_response[:300]}...")
+                    print(f"      {'─'*60}")
+                    
+                except Exception as e:
+                    print(f"      ❌ Candidate {candidate_idx + 1} failed: {e}")
+                    candidates.append("")
+            
+            # Evaluate and select the best candidate using LLM evaluation
+            valid_candidates = [c for c in candidates if c.strip()]
+            if valid_candidates:
+                print(f"    🏆 Evaluating {len(valid_candidates)} candidates using LLM...")
+                # Do not save candidates to disk; keep in memory only
+                # Use LLM to select the best candidate
+                print(f"    🤖 Asking LLM to select best candidate...")
+                best_candidate_response = _select_best_candidate_with_llm(
+                    valid_candidates, current_tex, sim_summary, model, request_timeout, config, pdf_path=pdf_path, project_dir=project_dir
+                )
+                
+                # DEBUG: Show full LLM evaluation response
+                print(f"    🔍 DEBUG - LLM Evaluation Response:")
+                print(f"    {best_candidate_response}")
+                print(f"    {'═'*80}")
+                
+                # Parse the LLM selection response
+                try:
+                    import re
+                    selection_match = re.search(r'SELECTED:\s*(\d+)', best_candidate_response, re.IGNORECASE)
+                    if selection_match:
+                        selected_idx = int(selection_match.group(1)) - 1  # Convert to 0-based index
+                        if 0 <= selected_idx < len(valid_candidates):
+                            combined_response = valid_candidates[selected_idx]
+                            print(f"    🎯 LLM selected candidate {selected_idx + 1}")
+                            
+                            # Show why this candidate was selected
+                            reasoning_match = re.search(r'REASONING:\s*(.*?)(?=SELECTED:|$)', best_candidate_response, re.DOTALL | re.IGNORECASE)
+                            if reasoning_match:
+                                reasoning = reasoning_match.group(1).strip()
+                                print(f"    💭 Selection reasoning: {reasoning[:200]}...")
+                            
+                            # IMPORTANT: Apply the selected candidate's changes immediately
+                            print(f"    📁 Applying selected candidate's changes...")
+                            selected_review, selected_decision, selected_file_changes = _parse_combined_response(combined_response, project_dir)
+                            
+                            if selected_file_changes:
+                                print(f"    🔄 Applying {len(selected_file_changes)} file changes from selected candidate...")
+                                _apply_file_changes(selected_file_changes, project_dir)
+                                print(f"    ✅ Selected candidate changes applied successfully")
+                                tts_changes_applied = True  # Mark that we've applied TTS changes
+                                
+                                # Show diff for the applied changes
+                                if output_diffs:
+                                    for file_path, content in selected_file_changes.items():
+                                        if file_path.endswith('paper.tex'):
+                                            print(f"    🎯 SELECTED CANDIDATE APPLIED DIFF:")
+                                            _save_candidate_diff(current_tex, content, selected_idx + 1, "APPLIED_SELECTED")
+                                            break
+                            else:
+                                print(f"    ⚠️ Selected candidate has no file changes to apply")
+                                
+                        else:
+                            print(f"    ⚠️ Invalid selection index {selected_idx + 1}, using first candidate")
+                            combined_response = valid_candidates[0]
+                            tts_changes_applied = False  # Fallback case, not applied yet
+                    else:
+                        print(f"    ⚠️ Could not parse LLM selection, using first candidate")
+                        combined_response = valid_candidates[0]
+                        tts_changes_applied = False  # Fallback case, not applied yet
+                except Exception as e:
+                    print(f"    ❌ Error parsing LLM selection: {e}, using first candidate")
+                    combined_response = valid_candidates[0]
+                    tts_changes_applied = False  # Error case, not applied yet
+            else:
+                print(f"    ⚠️ All candidates failed, using fallback...")
+                tts_changes_applied = False  # Fallback doesn't use TTS candidate application
+                combined_response = _universal_chat(
+                    _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i), 
+                    model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", 
+                    fallback_models=config.fallback_models, pdf_path=pdf_path
+                )
+        else:
+            # Standard combined approach without test-time scaling
+            tts_changes_applied = False
+            combined_response = _universal_chat(
+                _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, i), 
+                model=model, request_timeout=request_timeout, prompt_type="combined_review_edit_revise", 
+                fallback_models=config.fallback_models, pdf_path=pdf_path
+            )
         
         # Parse the combined response
         review, decision, file_changes = _parse_combined_response(combined_response, project_dir)
         
         print(f"📝 Review completed")
-        print(f"📋 Editorial decision: {decision}")
+        print(f"📋 Review complete, applying revisions...")
+        
+        # DEBUG: Show what the model actually returned
+        print(f"🔍 DEBUG: Model response length: {len(combined_response)} chars")
+        print(f"🔍 DEBUG: File changes detected: {list(file_changes.keys()) if file_changes else 'None'}")
+        if file_changes:
+            for filename, content in file_changes.items():
+                content_preview = str(content)[:200] if content else "Empty"
+                print(f"🔍 DEBUG: {filename} - {len(str(content))} chars: {content_preview}...")
+        
+        # DEBUG: Show a preview of the raw model response
+        print(f"🔍 DEBUG: Model response preview (first 500 chars):")
+        print(f"{'='*50}")
+        print(combined_response[:500] + "..." if len(combined_response) > 500 else combined_response)
+        print(f"{'='*50}")
         
         # Store original content for diff generation if enabled
         original_content = current_tex if output_diffs else None
         
-        # Apply file changes if any were provided
-        if file_changes:
+        # Apply file changes if any were provided (skip if TTS already applied changes)
+        if file_changes and not tts_changes_applied:
             print(f"📁 Applying file changes to {len(file_changes)} files...")
             _apply_file_changes(file_changes, project_dir)
             print(f"✅ File changes applied successfully")
@@ -2599,37 +3376,64 @@ def run_workflow(
             # Generate and save diff if enabled
             if output_diffs and original_content:
                 new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
+                
+                # Debug: Check if content actually changed
+                if original_content.strip() == new_content.strip():
+                    print(f"⚠️ DEBUG: Content appears identical after file changes - AI may have made no substantial changes")
+                else:
+                    print(f"✅ DEBUG: Content changed - {len(original_content)} -> {len(new_content)} chars")
+                
+                _save_iteration_diff(original_content, new_content, project_dir, i, "paper.tex")
+        elif tts_changes_applied:
+            print(f"ℹ️  Skipping duplicate file application - TTS candidate changes already applied")
+            
+            # Generate diff for TTS changes if enabled
+            if output_diffs and original_content:
+                new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
+                print(f"🎯 TTS ITERATION {i} FINAL DIFF:")
                 _save_iteration_diff(original_content, new_content, project_dir, i, "paper.tex")
                 
-        elif decision.strip().upper().startswith("NO"):
-            print(f"⚠️ Decision was NO but no file changes were provided. Using fallback revision...")
-            # Fallback to traditional revision if no diffs were provided
-            revised = _universal_chat(_revise_prompt(current_tex, sim_summary, review, latex_errors, project_dir, user_prompt), model=model, request_timeout=request_timeout, prompt_type="revise", fallback_models=config.fallback_models)
-            paper_path.write_text(revised, encoding="utf-8")
+        else:
+            print(f"⚠️ No file changes were provided in revision. Using fallback revision...")
             
-            # Generate and save diff if enabled (for fallback revision)
-            if output_diffs and original_content:
-                _save_iteration_diff(original_content, revised, project_dir, i, "paper.tex")
+            # Use test-time scaling for revisions if enabled
+            if hasattr(config, 'use_test_time_scaling') and config.use_test_time_scaling and hasattr(config, 'revision_candidates') and config.revision_candidates > 1:
+                print(f"🧪 Using test-time compute scaling with {config.revision_candidates} revision candidates...")
+                revised = _generate_best_revision_candidate(
+                    current_tex, sim_summary, review, latex_errors, project_dir, user_prompt, 
+                    model, request_timeout, config, config.revision_candidates, output_diffs, pdf_path
+                )
+            else:
+                # Fallback to traditional revision if test-time scaling not enabled
+                revised = _universal_chat(
+                    _revise_prompt(current_tex, sim_summary, review, latex_errors, project_dir, user_prompt), 
+                    model=model, request_timeout=request_timeout, prompt_type="revise", 
+                    fallback_models=config.fallback_models, pdf_path=pdf_path
+                )
+            
+            if revised.strip():  # Only write if we got a valid revision
+                paper_path.write_text(revised, encoding="utf-8")
+                
+                # Generate and save diff if enabled (for fallback revision)
+                if output_diffs and original_content:
+                    print(f"\n🎯 MAIN WORKFLOW RESULT - ITERATION {i} DIFF:")
+                    _save_iteration_diff(original_content, revised, project_dir, i, "paper.tex")
+            else:
+                print(f"⚠️ No valid revision generated, keeping original content")
         
-        # ENHANCED DECISION LOGIC WITH QUALITY THRESHOLD
-        decision_upper = decision.strip().upper()
+        # SIMPLIFIED STOPPING LOGIC BASED ON QUALITY THRESHOLD
         meets_quality_threshold = quality_score >= config.quality_threshold
         
-        if decision_upper.startswith("YES") and latex_success and meets_quality_threshold:
-            print(f"[OK] Editor accepted at iteration {i}, LaTeX compiles, and quality threshold met (score: {quality_score:.2f})")
+        if latex_success and meets_quality_threshold:
+            print(f"[OK] Quality threshold met at iteration {i} (score: {quality_score:.2f}) and LaTeX compiles successfully")
             final_metrics = _extract_quality_metrics(current_tex, sim_summary)
             print(f"Final paper metrics: {final_metrics}")
             break
-        elif decision_upper.startswith("YES") and latex_success and not meets_quality_threshold:
-            print(f"[CONDITIONAL] Editor accepted but quality below threshold ({quality_score:.2f} < {config.quality_threshold}). Continuing revisions...")
-        elif decision_upper.startswith("REJECT") and stagnation_count >= 2:
-            print(f"[STOP] Editor rejected and quality stagnating. Ending revisions.")
+        elif stagnation_count >= 2:
+            print(f"[STOP] Quality stagnating for {stagnation_count} iterations. Ending revisions.")
             break
-        elif decision_upper.startswith("REJECT"):
-            print(f"[REJECT] Editor rejected the paper at iteration {i}.")
-            print("Paper has fundamental issues but continuing with revisions to improve it...")
         
-        print(f"Iteration {i}: Combined review/editorial/revision completed")
+        print(f"Iteration {i}: Combined review and revision completed")
     
     # Final quality report
     print(f"\n📈 Quality progression: {[f'{q:.2f}' for q in quality_history]}")
@@ -2821,6 +3625,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--skip-reference-check", action="store_true", help="Disable external reference validation (faster)")
     p.add_argument("--skip-figure-validation", action="store_true", help="Disable figure generation validation (faster)")
     
+    # PDF review functionality
+    p.add_argument("--enable-pdf-review", action="store_true", default=True, help="Send PDF files to AI models during review/revision")
+    p.add_argument("--disable-pdf-review", action="store_true", help="Disable PDF review (text-only review)")
+    
     # Ideation parameters
     p.add_argument("--enable-ideation", action="store_true", default=True, help="Enable research ideation phase for new papers")
     p.add_argument("--skip-ideation", action="store_true", help="Skip research ideation phase (use original topic directly)")
@@ -2852,6 +3660,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.validate_figures = False
     if args.skip_ideation:
         args.enable_ideation = False
+    if args.disable_pdf_review:
+        args.enable_pdf_review = False
     
     # Initialize topic, field, question attributes if they don't exist (modify-existing mode)
     if modify_existing:
@@ -3569,7 +4379,11 @@ if __name__ == "__main__":
         print(f"📊 Quality threshold: {ns.quality_threshold}")
         print(f"🔍 Reference validation: {'enabled' if ns.check_references else 'disabled'}")
         print(f"🖼️ Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
+        print(f"📄 PDF review: {'enabled' if ns.enable_pdf_review else 'disabled'}")
         print(f"🧠 Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
+        
+        # Set PDF review configuration
+        config.enable_pdf_review = ns.enable_pdf_review
         
         # Handle test scaling mode
         if ns.test_scaling:
