@@ -1,4 +1,4 @@
-"""
+﻿"""
 Helpers to enforce single paper/simulation files, extract Python code, and run the simulation.
 """
 from __future__ import annotations
@@ -20,26 +20,37 @@ PY_BLOCKS = [
     re.compile(r"\\begin\{filecontents\*?\}\{simulation\.py\}(.*?)\\end\{filecontents\*?\}", re.DOTALL | re.IGNORECASE),
 ]
 
-def ensure_single_tex_py(project_dir: Path, strict: bool = True) -> Tuple[Path, Path]:
+def ensure_single_tex_py(project_dir: Path, strict: bool = True, preserve_original_filename: bool = False) -> Tuple[Path, Path]:
     """
     Keep exactly one paper.tex and one simulation.py in project_dir.
     Simply rename/delete others without archiving.
+    
+    Args:
+        project_dir: Directory to process
+        strict: If True, delete other .tex/.py files
+        preserve_original_filename: If True, use the original .tex filename instead of renaming to paper.tex
     """
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find existing .tex files and rename the first one to paper.tex
-    paper = project_dir / "paper.tex"
+    # Find existing .tex files
     existing_tex_files = list(project_dir.glob("*.tex"))
     
-    if not paper.exists() and existing_tex_files:
-        # Rename the first .tex file to paper.tex
-        first_tex = existing_tex_files[0]
-        if first_tex.name != "paper.tex":
-            first_tex.rename(paper)
-            existing_tex_files.remove(first_tex)
-    elif not paper.exists():
-        # create a minimal paper to be filled
-        paper.write_text("\\documentclass{article}\\begin{document}\\end{document}\n", encoding="utf-8")
+    if preserve_original_filename and existing_tex_files:
+        # Use the first existing .tex file as-is, without renaming to paper.tex
+        paper = existing_tex_files[0]
+        existing_tex_files.remove(paper)
+    else:
+        # Default behavior: ensure paper.tex exists
+        paper = project_dir / "paper.tex"
+        if not paper.exists() and existing_tex_files:
+            # Rename the first .tex file to paper.tex
+            first_tex = existing_tex_files[0]
+            if first_tex.name != "paper.tex":
+                first_tex.rename(paper)
+                existing_tex_files.remove(first_tex)
+        elif not paper.exists():
+            # create a minimal paper to be filled
+            paper.write_text("\\documentclass{article}\\begin{document}\\end{document}\n", encoding="utf-8")
     
     sim = project_dir / "simulation.py"
     if not sim.exists():
@@ -50,7 +61,7 @@ def ensure_single_tex_py(project_dir: Path, strict: bool = True) -> Tuple[Path, 
 
     # Delete other .tex files (no archiving)
     for p in existing_tex_files:
-        if p.exists() and p.name != "paper.tex":
+        if p.exists() and p.name != paper.name:
             p.unlink()
     
     # Delete other .py files except simulation.py (no archiving)
@@ -254,7 +265,7 @@ def run_simulation_with_smart_fixing(
                 pass
         
         # If successful or no LLM fixer, return results
-        if proc.returncode == 0 or llm_fixer is None:
+        if proc.returncode == 0 or (llm_fixer is None or not callable(llm_fixer)):
             break
             
         # If failed and we have attempts left, ask LLM for help
@@ -341,3 +352,4 @@ def summarize_simulation_outputs(outputs: Dict[str, str], simulation_code: str =
     if len(s) > max_chars:
         s = s[:max_chars] + "\n...[truncated]..."
     return s
+

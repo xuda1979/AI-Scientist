@@ -1,0 +1,5 @@
+Sample Results
+Mean: 0.189
+Std: 0.679
+Min: -1.119
+Max: 1.252
