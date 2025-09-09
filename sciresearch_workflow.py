@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Extended workflow:
  - Enforce single paper.tex and simulation.py per project
@@ -19,6 +19,8 @@ import urllib.request
 import urllib.parse
 import functools
 import logging
+import signal
+import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
@@ -35,17 +37,83 @@ except ImportError:
 # Local helpers
 from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex
 
+# Content protection system
+from utils.content_protection import ContentProtector
+
 # Workflow step modules
 from workflow_steps.initial_draft import generate_initial_draft
 from workflow_steps.simulation import run_simulation_step
 from workflow_steps.review_revision import run_review_revision_step
+
+def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
+    """
+    Get user input with a timeout. If no input is received within the timeout,
+    return the default value.
+    
+    Args:
+        prompt: The prompt to display to the user
+        timeout: Timeout in seconds (default: 30)
+        default: Default value to return if timeout occurs
+        
+    Returns:
+        User input or default value if timeout
+    """
+    import sys
+    import select
+    import os
+    
+    # On Windows, we need a different approach
+    if os.name == 'nt':  # Windows
+        import msvcrt
+        import time
+        
+        print(f"{prompt}", end="", flush=True)
+        if default:
+            print(f" [default: {default}]", end="", flush=True)
+        print(" ", end="", flush=True)
+        
+        start_time = time.time()
+        input_chars = []
+        
+        while time.time() - start_time < timeout:
+            if msvcrt.kbhit():
+                char = msvcrt.getch()
+                if char == b'\r':  # Enter key
+                    print()  # New line
+                    return ''.join(input_chars)
+                elif char == b'\x08':  # Backspace
+                    if input_chars:
+                        input_chars.pop()
+                        print('\b \b', end='', flush=True)
+                else:
+                    char_str = char.decode('utf-8', errors='ignore')
+                    if char_str.isprintable():
+                        input_chars.append(char_str)
+                        print(char_str, end='', flush=True)
+            time.sleep(0.1)
+        
+        print(f"\nTimeout reached. Using default: {default}")
+        return default
+    
+    else:  # Unix/Linux/Mac
+        print(f"{prompt}", end="", flush=True)
+        if default:
+            print(f" [default: {default}]", end="", flush=True)
+        print(" ", end="", flush=True)
+        
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        if ready:
+            return sys.stdin.readline().strip()
+        else:
+            print(f"\nTimeout reached. Using default: {default}")
+            return default
 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
 
 @dataclass
 class WorkflowConfig:
     """Configuration class for workflow parameters."""
-    quality_threshold: float = 0.8
+    quality_threshold: float = 1.0
     max_iterations: int = 10
     simulation_timeout: int = 300
     latex_timeout_base: int = 120
@@ -59,6 +127,12 @@ class WorkflowConfig:
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
     output_diffs: bool = False  # Optional diff output for each review/revision cycle
+    
+    # Content protection parameters
+    enable_content_protection: bool = True  # Enable content protection against accidental deletions
+    auto_approve_safe_changes: bool = False  # Automatically approve changes that pass safety checks
+    content_protection_threshold: float = 0.15  # Maximum allowed content reduction (15%)
+    require_approval_for_major_changes: bool = True  # Require user approval for major changes
     
     # Test-time compute scaling parameters
     use_test_time_scaling: bool = False
@@ -182,7 +256,7 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         print("OFFLINE_MODE enabled - returning stub response without contacting API")
         return _offline_response(prompt_type)
 
-    if pdf_path and pdf_path.exists():
+    if False and pdf_path and pdf_path.exists():  # PDF upload disabled
         print(f"[PDF] Including PDF in request: {pdf_path.name}")
     
     # Set longer timeout for GPT-5
@@ -207,7 +281,8 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     # Try primary model first
     try:
         result = _try_openai_model(messages, model, temp, request_timeout, prompt_type, pdf_path)
-        logger.info(f"API call successful for {model} ({prompt_type})")
+        logger.info(f"API call successful for {model} ({prompt_type}) - response: {len(result):,} chars")
+        print(f"✓ API call successful for {model} - response: {len(result):,} characters")
         return result
     except Exception as primary_error:
         error_type, wait_time = _classify_error(primary_error)
@@ -263,7 +338,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
             processed_messages = messages.copy()
             
             # Add PDF to the last user message if provided and model supports vision
-            if pdf_path and pdf_path.exists() and _model_supports_vision(model):
+            if False and pdf_path and pdf_path.exists() and _model_supports_vision(model):  # PDF upload disabled
                 try:
                     # For now, we'll add a note about the PDF but not include the binary data
                     # OpenAI's vision models typically work better with images than PDFs
@@ -283,7 +358,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     print(f"WARNING: Failed to process PDF reference: {pdf_error}")
                     print("Continuing with text-only request...")
             
-            elif pdf_path and pdf_path.exists() and not _model_supports_vision(model):
+            elif False and pdf_path and pdf_path.exists() and not _model_supports_vision(model):  # PDF upload disabled
                 print(f"INFO: Model {model} does not support vision input. Adding PDF reference note...")
                 # Even for non-vision models, we can mention that a PDF was generated
                 for i in range(len(processed_messages) - 1, -1, -1):
@@ -846,6 +921,47 @@ def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout:
         fallback_models: List of fallback models if primary fails
         pdf_path: Optional PDF file to include in the request
     """
+    # Log detailed information about what's being sent to the model
+    logger = logging.getLogger(__name__)
+    
+    # Log basic call information
+    logger.info(f"Making API call to {model} for {prompt_type}")
+    print(f"Making API call to {model} for {prompt_type}")
+    
+    # Log message information
+    total_chars = sum(len(msg.get('content', '')) for msg in messages)
+    logger.info(f"Messages: {len(messages)} total, {total_chars:,} characters")
+    print(f"Messages: {len(messages)} total, {total_chars:,} characters")
+    
+    # Log file information
+    files_info = []
+    if pdf_path and pdf_path.exists():
+        file_size = pdf_path.stat().st_size
+        files_info.append(f"PDF: {pdf_path.name} ({file_size:,} bytes)")
+        logger.info(f"PDF file attached: {pdf_path.name} ({file_size:,} bytes)")
+        print(f"PDF file attached: {pdf_path.name} ({file_size:,} bytes)")
+    else:
+        logger.info("No PDF file attached (PDF review disabled)")
+        print("No PDF file attached (PDF review disabled)")
+    
+    # Log prompt content summary
+    for i, msg in enumerate(messages):
+        content = msg.get('content', '')
+        role = msg.get('role', 'unknown')
+        logger.info(f"Message {i+1} ({role}): {len(content):,} chars")
+        
+        # Log key sections in the content
+        if 'CURRENT PAPER (LATEX)' in content:
+            print("  • LaTeX source code included")
+        if 'SIMULATION CODE & OUTPUTS' in content:
+            print("  • Simulation results included")
+        if 'DETECTED QUALITY ISSUES' in content:
+            print("  • Quality issues list included")
+        if 'LATEX COMPILATION ERRORS' in content:
+            print("  • LaTeX compilation errors included")
+        if 'ALL PROJECT FILES' in content:
+            print("  • Project context files included")
+    
     # Detect provider based on model name
     if model.startswith(('gemini', 'models/gemini')):
         # Google AI model
@@ -876,7 +992,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7078"
     print(f"Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
     
-    if pdf_path and pdf_path.exists():
+    if False and pdf_path and pdf_path.exists():  # PDF upload disabled
         print(f"INFO: Including PDF in Gemini request: {pdf_path.name}")
     
     try:
@@ -907,7 +1023,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                 combined_prompt += f"Assistant: {content}\n\n"
         
         # Add PDF content if provided
-        if pdf_path and pdf_path.exists():
+        if False and pdf_path and pdf_path.exists():  # PDF upload disabled
             try:
                 # For Google AI, we need to upload the file using the file API
                 # This is a simplified approach - in production you might want to use the proper file upload API
@@ -947,7 +1063,8 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             # Text-only request
             response = genai_model.generate_content(content_parts[0])
         
-        print("INFO: Google AI API call successful.")
+        print(f"✓ Google AI API call successful - response: {len(response.text):,} characters")
+        logger.info(f"Google AI API call successful for {model} ({prompt_type}) - response: {len(response.text):,} chars")
         return response.text
         
     except Exception as e:
@@ -2073,6 +2190,28 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- Ensure logical flow appropriate for the paper's contribution type\n"
         "- Include appropriate evaluation methodology for the paper type\n\n"
         
+        "📋 PROFESSIONAL LAYOUT AND STRUCTURE REQUIREMENTS:\n"
+        "Design the paper with professional academic layout standards:\n"
+        "- SECTION ORGANIZATION: Ensure logical section flow with appropriate subsection hierarchy\n"
+        "- GLOSSARY PLACEMENT: If terminology section needed, place before references or as appendix\n"
+        "- APPENDIX PLANNING: Reserve appendix for supplementary material like detailed proofs, large tables, or extended algorithms\n"
+        "- PSEUDOCODE PLACEMENT: Keep essential algorithms in main text, move detailed implementations to appendix\n"
+        "- BALANCED SECTIONS: Ensure no section is disproportionately long or short relative to its importance\n"
+        "- REFERENCE ORGANIZATION: Place references at document end with consistent formatting\n"
+        "- ACKNOWLEDGMENTS: Include acknowledgments section before references if applicable\n"
+        "- PAGE FLOW: Design content flow to minimize awkward page breaks and orphaned elements\n"
+        "- VISUAL HIERARCHY: Use consistent heading styles and proper sectioning commands\n\n"
+        
+        "📊 VISUAL QUALITY STANDARDS:\n"
+        "Ensure all visual elements meet professional standards:\n"
+        "- FIGURE SIZING: Design figures to fit properly within page margins without stretching\n"
+        "- TEXT LEGIBILITY: Ensure all figure text (labels, legends, annotations) is appropriately sized and positioned\n"
+        "- TABLE FORMATTING: Create tables that fit page width with readable font sizes\n"
+        "- CONSISTENT STYLING: Maintain uniform visual style across all figures and tables\n"
+        "- MARGIN COMPLIANCE: Ensure no content extends beyond standard page margins\n"
+        "- CAPTION QUALITY: Write informative captions that explain figures/tables completely\n"
+        "- REFERENCE INTEGRATION: Ensure smooth integration between text and visual elements\n\n"
+        
         "RESULTS DOCUMENTATION REQUIREMENTS:\n"
         "- Ensure simulation.py writes key numerical results to 'results.txt'\n"
         "- Include timestamps, parameter values, and computed metrics\n"
@@ -2115,7 +2254,14 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- CRITICAL: Place **all figures and tables either inline in the main text where they are first cited, or at the very end of the document but strictly before the references section**\n"
         "- **Do not place any figures or tables after the references or between references**\n"
         "- If LaTeX floats push figures out of order, use [H] positioning (requires \\usepackage{float}) to force placement where cited\n"
-        "- For figures/tables at document end, place them immediately before \\bibliography{} or \\begin{thebibliography}\n\n"
+        "- For figures/tables at document end, place them immediately before \\bibliography{} or \\begin{thebibliography}\n"
+        "- CRITICAL: Table formatting for large tables that exceed page borders:\n"
+        "  * Split long tables into multiple parts using \\begin{longtable} or manual splitting\n"
+        "  * Repeat table headers/keys in each part: 'Table X (continued)' or 'Table X (part 2 of 3)'\n"
+        "  * Add '(continued)' text between table parts to maintain continuity\n"
+        "  * Use \\multicolumn spanning for section breaks in large tables\n"
+        "  * Ensure each table part is self-explanatory with repeated column headers\n"
+        "  * Consider landscape orientation (\\begin{landscape}) for very wide tables\n\n"
         
         "STRUCTURE REQUIREMENTS:\n"
         "- Start with \\begin{filecontents*}{refs.bib}...\\end{filecontents*} containing ALL bibliography entries\n"
@@ -2126,8 +2272,9 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "FORMATTING REQUIREMENTS:\n"
         "- All content must use width=\\linewidth constraints\n"
         "- Wrap wide tables using adjustbox width=\\linewidth\n"
-        "- NO CODE BLOCKS: Do not include Python code or any programming code in the paper\n"
-        "- ALGORITHMS ALLOWED: Use algorithm2e or algorithmic environments for pseudocode when necessary\n"
+        "- NO CODE BLOCKS: NEVER use \\begin{lstlisting}, \\begin{verbatim}, \\begin{code}, or any code listing environments\n"
+        "- ALGORITHMS ONLY: Use \\begin{algorithm}, \\begin{algorithmic}, or algorithm2e environments for pseudocode/algorithms\n"
+        "- Replace any existing code blocks with proper algorithm pseudocode descriptions\n"
         "- NO PROMPT REPETITION: Do not repeat or reference the instructions/prompts given to you directly in the paper content\n"
         "- SINGLE CODE FILE: Consolidate ALL computational code into simulation.py only\n"
         "- Ensure all mathematical notation is properly formatted\n\n"
@@ -2228,16 +2375,50 @@ def _collect_project_files(project_dir: Path) -> str:
     else:
         return "No additional project files found."
 
-def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, iteration_count: int = 1) -> List[Dict[str, str]]:
+def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, iteration_count: int = 1, quality_issues: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Combined prompt for review and revision with diff output."""
     sys_prompt = (
         "You are a combined AI system acting as: (1) Top-tier journal reviewer and (2) Paper author. "
         "Your task is to review the paper and provide complete file diffs for all revisions needed to improve it.\n\n"
         
+        "🔒 CRITICAL CONTENT PRESERVATION REQUIREMENTS:\n"
+        "- NEVER delete entire sections, subsections, or substantial content blocks\n"
+        "- PRESERVE the paper's core content, findings, and methodology\n"
+        "- MAINTAIN or INCREASE the paper's word count and substance\n"
+        "- When fixing issues, ADD content rather than DELETE existing content\n"
+        "- If content needs restructuring, REARRANGE rather than REMOVE\n"
+        "- PRESERVE all figures, tables, equations, and references\n"
+        "- ONLY delete content if it's clearly redundant, incorrect, or harmful\n"
+        "- When in doubt, preserve existing content and add improvements around it\n\n"
+        
         "REVIEW APPROACH:\n"
         "You will be provided with both the LaTeX source code AND the rendered PDF version of the paper (if available). "
         "Use the PDF to assess the visual presentation, layout, figure placement, and overall appearance, "
         "while using the LaTeX source to verify technical requirements and code structure.\n\n"
+        
+        "📊 CRITICAL PDF VISUAL INSPECTION REQUIREMENTS:\n"
+        "If a PDF is provided, perform THOROUGH visual analysis of the rendered document:\n"
+        "- GRAPH/FIGURE SIZING: Check if graphs, charts, plots are properly sized and not stretching beyond page margins\n"
+        "- TEXT POSITIONING: Verify all text elements (axis labels, legends, captions, annotations) are in correct positions\n"
+        "- TABLE FORMATTING: Ensure tables fit within page width, text is readable, no content is cut off\n"
+        "- FONT CONSISTENCY: Check that font sizes are appropriate and consistent throughout figures\n"
+        "- VISUAL CLARITY: Verify graphs are not pixelated, blurry, or distorted\n"
+        "- MARGIN COMPLIANCE: Ensure no content extends beyond page margins or overlaps with other elements\n"
+        "- FIGURE REFERENCES: Confirm all figures are properly numbered and referenced in text\n"
+        "- CAPTION ALIGNMENT: Check that captions are properly aligned and positioned relative to their figures/tables\n\n"
+        
+        "📋 PAPER STRUCTURE AND LAYOUT ANALYSIS:\n"
+        "Perform comprehensive structural review of the paper organization:\n"
+        "- SECTION ORDERING: Verify logical flow - Abstract, Introduction, Methods, Results, Discussion, Conclusion\n"
+        "- GLOSSARY PLACEMENT: If present, glossary should be positioned appropriately (typically before references or as appendix)\n"
+        "- APPENDIX ORGANIZATION: Consider moving large tables, detailed algorithms, or pseudocode to appendix for better readability\n"
+        "- PSEUDOCODE PLACEMENT: Evaluate if complex algorithms should be moved to appendix while keeping simplified versions in main text\n"
+        "- REFERENCE POSITIONING: Ensure references section is at the very end, properly formatted\n"
+        "- SUBSECTION BALANCE: Check that sections are well-balanced in length and content depth\n"
+        "- FLOATING ELEMENTS: Verify figures/tables appear near their first mention, not orphaned on separate pages\n"
+        "- PAGE BREAKS: Ensure logical page breaks that don't split related content inappropriately\n"
+        "- HEADER/FOOTER: Check for consistent and appropriate header/footer formatting\n"
+        "- ACKNOWLEDGMENTS: Verify acknowledgments section is properly placed (typically before references)\n\n"
         
         "WORKFLOW STEPS:\n"
         "1. REVIEW: Conduct a thorough peer review meeting top journal standards\n"
@@ -2284,13 +2465,23 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "- Remove filename references from paper text\n"
         "- Use only real simulation data\n"
         "- Maintain paper structure appropriate for field\n"
+        "- NO CODE BLOCKS: NEVER use \\begin{lstlisting}, \\begin{verbatim}, \\begin{code}, or any code listing environments\n"
+        "- ALGORITHMS ONLY: Use \\begin{algorithm}, \\begin{algorithmic}, or algorithm2e environments for pseudocode/algorithms\n"
+        "- Replace any existing code blocks with proper algorithm pseudocode descriptions\n"
         "- Include all necessary files in diffs (paper.tex, simulation.py, etc.)\n"
         "- ESSENTIAL: Fix table/figure positioning using contextual placement:\n"
         "  * Use [h] (here if possible), [ht] (here or top of section), or [H] (force here) for contextual positioning\n"
         "  * AVOID [t] and [!t] positioning which forces floats to page tops regardless of context\n"
         "  * Place tables/figures in relevant subsections after first text mention\n"
         "  * Ensure visual self-containment with descriptive captions\n"
-        "  * Verify each float appears in logical context, not forced to random page positions\n\n"
+        "  * Verify each float appears in logical context, not forced to random page positions\n"
+        "- CRITICAL: Table formatting for large tables that exceed page borders:\n"
+        "  * Split long tables into multiple parts using \\begin{longtable} or manual splitting\n"
+        "  * Repeat table headers/keys in each part: 'Table X (continued)' or 'Table X (part 2 of 3)'\n"
+        "  * Add '(continued)' text between table parts to maintain continuity\n"
+        "  * Use \\multicolumn spanning for section breaks in large tables\n"
+        "  * Ensure each table part is self-explanatory with repeated column headers\n"
+        "  * Consider landscape orientation (\\begin{landscape}) for very wide tables\n\n"
     )
     
     # Add custom user prompt if provided
@@ -2317,6 +2508,20 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "----- SIMULATION CODE & OUTPUTS -----\n" + sim_summary + "\n"
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
     )
+    
+    # Add quality issues if detected
+    if quality_issues:
+        user += (
+            "\n----- DETECTED QUALITY ISSUES -----\n"
+            "The following specific quality issues have been automatically detected and MUST be addressed:\n\n"
+        )
+        for issue in quality_issues:
+            user += f"• {issue}\n"
+        user += (
+            "\n----- END QUALITY ISSUES -----\n\n"
+            "CRITICAL: Your revision MUST specifically address ALL of the above quality issues. "
+            "These are not suggestions - they are required fixes that must be implemented.\n"
+        )
     
     # Add LaTeX compilation information
     if latex_errors:
@@ -2413,48 +2618,93 @@ def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str
     # Always return "REVISE" as the decision since we removed editorial logic
     return review_text, "REVISE", file_changes
 
-def _apply_file_changes(file_changes: dict, project_dir: Path) -> None:
-    """Apply file changes from the revision response."""
+def _apply_file_changes(file_changes: dict, project_dir: Path, config=None) -> bool:
+    """
+    Apply file changes from the revision response with content protection.
+    
+    Returns:
+        bool: True if changes were applied, False if rejected by content protection
+    """
+    # Initialize content protector
+    protector = ContentProtector(project_dir)
+    
+    # Get content protection settings from config
+    enable_protection = getattr(config, 'enable_content_protection', True) if config else True
+    auto_approve = getattr(config, 'auto_approve_safe_changes', False) if config else False
+    
     for filename, content in file_changes.items():
         file_path = project_dir / filename
-        try:
-            # Read existing content for comparison
-            original_content = ""
-            if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    original_content = f.read()
-            
-            # Ensure directory exists
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Write the new content
-            if isinstance(content, list):
-                content = '\n'.join(content)
-            
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            # Debug: Check if content actually changed
-            if original_content.strip() == content.strip():
-                print(f" Updated {filename} - but content appears identical (no real changes)")
-                # DEBUG: Show first 500 chars of both for comparison
-                print(f"DEBUG - Original content (first 500 chars): {original_content[:500]}...")
-                print(f"DEBUG - New content (first 500 chars): {content[:500]}...")
-                print(f"DEBUG - Character-by-character comparison of first 100 chars:")
-                for i, (orig_char, new_char) in enumerate(zip(original_content[:100], str(content)[:100])):
-                    if orig_char != new_char:
-                        print(f"  Diff at position {i}: '{orig_char}' -> '{new_char}'")
-            else:
-                print(f" Updated {filename} - content changed: {len(original_content)} -> {len(content)} chars")
-                # DEBUG: Show what changed
-                print(f"DEBUG - Content change details:")
-                if len(original_content) != len(str(content)):
-                    print(f"  Length changed: {len(original_content)} -> {len(str(content))}")
-                else:
-                    print(f"  Same length but different content")
-            
-        except Exception as e:
-            print(f" Failed to update {filename}: {e}")
+        
+        # Only apply content protection to LaTeX files if enabled
+        if filename.endswith('.tex') and enable_protection:
+            try:
+                # Read existing content for comparison
+                original_content = ""
+                if file_path.exists():
+                    original_content = file_path.read_text(encoding='utf-8', errors='ignore')
+                
+                # Create backup before making changes
+                if original_content:
+                    backup_path = protector.create_backup(file_path, f"{filename}_pre_revision_{datetime.now().strftime('%H%M%S')}")
+                
+                # Validate the revision using content protection
+                if isinstance(content, list):
+                    content = '\n'.join(content)
+                
+                approved, analysis = protector.validate_revision(original_content, content, auto_approve)
+                
+                if not approved:
+                    print(f"❌ Revision rejected by content protection for {filename}")
+                    print("   Changes not applied. Original content preserved.")
+                    return False
+                
+                # Apply the changes
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content, encoding='utf-8')
+                
+                # Log the successful change
+                change_percent = analysis.word_count_change_percent
+                print(f"✓ Updated {filename}: {analysis.old_metrics.word_count:,} → {analysis.new_metrics.word_count:,} words ({change_percent:+.1f}%)")
+                
+                if analysis.warnings:
+                    print(f"  Warnings (approved): {'; '.join(analysis.warnings[:2])}")
+                
+            except Exception as e:
+                print(f"❌ Failed to update {filename}: {e}")
+                return False
+        elif filename.endswith('.tex'):
+            # LaTeX file with content protection DISABLED
+            try:
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                if isinstance(content, list):
+                    content = '\n'.join(content)
+                
+                # Show warning about disabled protection
+                print(f"⚠ Updating {filename} WITHOUT content protection (DANGEROUS)")
+                
+                file_path.write_text(content, encoding='utf-8')
+                print(f"✓ Updated {filename} (content protection disabled)")
+                
+            except Exception as e:
+                print(f"❌ Failed to update {filename}: {e}")
+                return False
+        else:
+            # For non-LaTeX files, apply changes directly (no content protection needed)
+            try:
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                if isinstance(content, list):
+                    content = '\n'.join(content)
+                
+                file_path.write_text(content, encoding='utf-8')
+                print(f"✓ Updated {filename} (no content protection applied)")
+                
+            except Exception as e:
+                print(f"❌ Failed to update {filename}: {e}")
+                return False
+    
+    return True
 
 def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
     sys_prompt = (
@@ -2466,6 +2716,30 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "You will be provided with both the LaTeX source code AND the rendered PDF version of the paper. "
         "Use the PDF to assess the visual presentation, layout, figure placement, and overall appearance, "
         "while using the LaTeX source to verify technical requirements and code structure.\n\n"
+        
+        "📊 CRITICAL PDF VISUAL INSPECTION REQUIREMENTS:\n"
+        "If a PDF is provided, perform THOROUGH visual analysis of the rendered document:\n"
+        "- GRAPH/FIGURE SIZING: Check if graphs, charts, plots are properly sized and not stretching beyond page margins\n"
+        "- TEXT POSITIONING: Verify all text elements (axis labels, legends, captions, annotations) are in correct positions\n"
+        "- TABLE FORMATTING: Ensure tables fit within page width, text is readable, no content is cut off\n"
+        "- FONT CONSISTENCY: Check that font sizes are appropriate and consistent throughout figures\n"
+        "- VISUAL CLARITY: Verify graphs are not pixelated, blurry, or distorted\n"
+        "- MARGIN COMPLIANCE: Ensure no content extends beyond page margins or overlaps with other elements\n"
+        "- FIGURE REFERENCES: Confirm all figures are properly numbered and referenced in text\n"
+        "- CAPTION ALIGNMENT: Check that captions are properly aligned and positioned relative to their figures/tables\n\n"
+        
+        "📋 PAPER STRUCTURE AND LAYOUT ANALYSIS:\n"
+        "Perform comprehensive structural review of the paper organization:\n"
+        "- SECTION ORDERING: Verify logical flow - Abstract, Introduction, Methods, Results, Discussion, Conclusion\n"
+        "- GLOSSARY PLACEMENT: If present, glossary should be positioned appropriately (typically before references or as appendix)\n"
+        "- APPENDIX ORGANIZATION: Consider if large tables, detailed algorithms, or pseudocode should be moved to appendix for better readability\n"
+        "- PSEUDOCODE PLACEMENT: Evaluate if complex algorithms should be moved to appendix while keeping simplified versions in main text\n"
+        "- REFERENCE POSITIONING: Ensure references section is at the very end, properly formatted\n"
+        "- SUBSECTION BALANCE: Check that sections are well-balanced in length and content depth\n"
+        "- FLOATING ELEMENTS: Verify figures/tables appear near their first mention, not orphaned on separate pages\n"
+        "- PAGE BREAKS: Ensure logical page breaks that don't split related content inappropriately\n"
+        "- HEADER/FOOTER: Check for consistent and appropriate header/footer formatting\n"
+        "- ACKNOWLEDGMENTS: Verify acknowledgments section is properly placed (typically before references)\n\n"
         
         "MANDATORY REQUIREMENTS - CHECK CAREFULLY:\n"
         "1. SINGLE FILE ONLY: Paper must be ONE LaTeX file with NO \\input{} or \\include{} commands\n"
@@ -2577,8 +2851,9 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- Table formatting (ALL wide tables MUST use adjustbox with width=\\linewidth)\n"
         "- TikZ diagrams MUST be constrained (use adjustbox or scale to fit page width)\n"
         "- Mathematical notation and equation formatting\n"
-        "- NO CODE BLOCKS: Do not include Python code or any programming code in the paper\n"
-        "- ALGORITHMS ALLOWED: Use algorithm2e or algorithmic environments for pseudocode when necessary\n"
+        "- NO CODE BLOCKS: NEVER use \\begin{lstlisting}, \\begin{verbatim}, \\begin{code}, or any code listing environments\n"
+        "- ALGORITHMS ONLY: Use \\begin{algorithm}, \\begin{algorithmic}, or algorithm2e environments for pseudocode/algorithms\n"
+        "- Replace any existing code blocks with proper algorithm pseudocode descriptions\n"
         "- NO PROMPT REPETITION: Do not repeat or reference the instructions/prompts given to you directly in the paper content\n"
         "- SINGLE CODE FILE: ALL computational code must be consolidated into simulation.py only\n"
         "- Citation style and bibliography completeness\n"
@@ -2758,15 +3033,51 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
         print(f" {error_msg}")
         return False, None, error_msg
 
-def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
+def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None) -> List[Dict[str, str]]:
     sys_prompt = (
         "You are the paper author making revisions based on peer review. Your goal is to address ALL reviewer concerns "
         "while maintaining scientific integrity and clarity. Produce a COMPLETE revised LaTeX file.\n\n"
+        
+        "🔒 CRITICAL CONTENT PRESERVATION REQUIREMENTS:\n"
+        "- NEVER delete entire sections, subsections, or substantial content blocks\n"
+        "- PRESERVE the paper's core content, findings, and methodology\n"
+        "- MAINTAIN or INCREASE the paper's word count and substance\n"
+        "- When fixing issues, ADD content rather than DELETE existing content\n"
+        "- If content needs restructuring, REARRANGE rather than REMOVE\n"
+        "- PRESERVE all figures, tables, equations, and references\n"
+        "- ONLY delete content if it's clearly redundant, incorrect, or harmful\n"
+        "- When addressing reviewer concerns, ADD explanations rather than REMOVE existing content\n"
+        "- If sections need improvement, ENHANCE them rather than DELETE them\n"
+        "- MAINTAIN the paper's comprehensive nature and academic depth\n\n"
         
         "REVISION APPROACH:\n"
         "You will be provided with the LaTeX source code, the rendered PDF version (if available), and the reviewer feedback. "
         "Use the PDF to understand how the paper currently appears when rendered, including figure placement, table formatting, "
         "and overall visual layout. Address any visual presentation issues mentioned in the review.\n\n"
+        
+        "📊 CRITICAL PDF VISUAL INSPECTION REQUIREMENTS:\n"
+        "If a PDF is provided, perform THOROUGH visual analysis of the rendered document:\n"
+        "- GRAPH/FIGURE SIZING: Check if graphs, charts, plots are properly sized and not stretching beyond page margins\n"
+        "- TEXT POSITIONING: Verify all text elements (axis labels, legends, captions, annotations) are in correct positions\n"
+        "- TABLE FORMATTING: Ensure tables fit within page width, text is readable, no content is cut off\n"
+        "- FONT CONSISTENCY: Check that font sizes are appropriate and consistent throughout figures\n"
+        "- VISUAL CLARITY: Verify graphs are not pixelated, blurry, or distorted\n"
+        "- MARGIN COMPLIANCE: Ensure no content extends beyond page margins or overlaps with other elements\n"
+        "- FIGURE REFERENCES: Confirm all figures are properly numbered and referenced in text\n"
+        "- CAPTION ALIGNMENT: Check that captions are properly aligned and positioned relative to their figures/tables\n\n"
+        
+        "📋 PAPER STRUCTURE AND LAYOUT ANALYSIS:\n"
+        "Perform comprehensive structural review of the paper organization:\n"
+        "- SECTION ORDERING: Verify logical flow - Abstract, Introduction, Methods, Results, Discussion, Conclusion\n"
+        "- GLOSSARY PLACEMENT: If present, glossary should be positioned appropriately (typically before references or as appendix)\n"
+        "- APPENDIX ORGANIZATION: Consider moving large tables, detailed algorithms, or pseudocode to appendix for better readability\n"
+        "- PSEUDOCODE PLACEMENT: Evaluate if complex algorithms should be moved to appendix while keeping simplified versions in main text\n"
+        "- REFERENCE POSITIONING: Ensure references section is at the very end, properly formatted\n"
+        "- SUBSECTION BALANCE: Check that sections are well-balanced in length and content depth\n"
+        "- FLOATING ELEMENTS: Verify figures/tables appear near their first mention, not orphaned on separate pages\n"
+        "- PAGE BREAKS: Ensure logical page breaks that don't split related content inappropriately\n"
+        "- HEADER/FOOTER: Check for consistent and appropriate header/footer formatting\n"
+        "- ACKNOWLEDGMENTS: Verify acknowledgments section is properly placed (typically before references)\n\n"
         
         "CRITICAL REQUIREMENTS - NO EXCEPTIONS:\n"
         "1. SINGLE FILE ONLY: The paper must be contained in ONE LaTeX file with NO separate bibliography files\n"
@@ -2848,7 +3159,14 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "- Ensure visual self-containment with comprehensive, descriptive captions\n"
         "- Each float must appear in logical context within its subsection, not forced to arbitrary page positions\n"
         "- Tables/figures should enhance understanding within their specific subsection context\n"
-        "- Review all existing \\begin{table} and \\begin{figure} environments to ensure proper positioning\n\n"
+        "- Review all existing \\begin{table} and \\begin{figure} environments to ensure proper positioning\n"
+        "- CRITICAL: Table formatting for large tables that exceed page borders:\n"
+        "  * Split long tables into multiple parts using \\begin{longtable} or manual splitting\n"
+        "  * Repeat table headers/keys in each part: 'Table X (continued)' or 'Table X (part 2 of 3)'\n"
+        "  * Add '(continued)' text between table parts to maintain continuity\n"
+        "  * Use \\multicolumn spanning for section breaks in large tables\n"
+        "  * Ensure each table part is self-explanatory with repeated column headers\n"
+        "  * Consider landscape orientation (\\begin{landscape}) for very wide tables\n\n"
         
         "FIGURE AND TABLE PLACEMENT REQUIREMENTS (CRITICAL):\n"
         "- Place **all figures and tables either inline in the main text where they are first cited, or at the very end of the document but strictly before the references section**\n"
@@ -2879,6 +3197,9 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "- ALL wide tables: \\begin{adjustbox}{width=\\linewidth}...\\end{adjustbox}\n"
         "- ALL TikZ diagrams: wrap in \\begin{adjustbox}{width=\\linewidth}...\\end{adjustbox}\n"
         "- ALL content must fit within vertical page margins\n"
+        "- NO CODE BLOCKS: NEVER use \\begin{lstlisting}, \\begin{verbatim}, \\begin{code}, or any code listing environments\n"
+        "- ALGORITHMS ONLY: Use \\begin{algorithm}, \\begin{algorithmic}, or algorithm2e environments for pseudocode/algorithms\n"
+        "- Replace any existing code blocks with proper algorithm pseudocode descriptions\n"
         "- NO PROMPT REPETITION: Do not repeat or reference the instructions/prompts given to you directly in the paper content\n"
         "- Proper math environments and symbol usage\n"
         "- Consistent citation style and complete bibliography\n"
@@ -2946,6 +3267,20 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
     )
     
+    # Add quality issues if detected
+    if quality_issues:
+        user += (
+            "\n----- DETECTED QUALITY ISSUES -----\n"
+            "The following specific quality issues have been automatically detected and MUST be addressed:\n\n"
+        )
+        for issue in quality_issues:
+            user += f"• {issue}\n"
+        user += (
+            "\n----- END QUALITY ISSUES -----\n\n"
+            "CRITICAL: Your revision MUST specifically address ALL of the above quality issues. "
+            "These are not suggestions - they are required fixes that must be implemented.\n"
+        )
+    
     # Always include LaTeX compilation information
     if latex_errors:
         user += (
@@ -2980,7 +3315,7 @@ def run_workflow(
     modify_existing: bool = False,
     strict_singletons: bool = True,
     python_exec: Optional[str] = None,
-    quality_threshold: float = 0.8,  # New parameter
+    quality_threshold: float = 1.0,  # New parameter
     check_references: bool = True,    # New parameter
     validate_figures: bool = True,    # New parameter
     user_prompt: Optional[str] = None,  # New parameter for custom user prompt
@@ -2996,7 +3331,7 @@ def run_workflow(
         config = WorkflowConfig()
     
     # Override config values with explicit parameters if provided
-    if quality_threshold != 0.8:  # Only override if explicitly set
+    if quality_threshold != 1.0:  # Only override if explicitly set
         config.quality_threshold = quality_threshold
     if max_iterations != 4:
         config.max_iterations = max_iterations
@@ -3030,7 +3365,7 @@ def run_workflow(
         print("\nLeave empty to use standard prompts only.")
         print("-" * 60)
         
-        user_prompt = input("Enter your custom prompt (or press Enter to skip): ").strip()
+        user_prompt = timeout_input("Enter your custom prompt (or press Enter to skip):", timeout=30, default="").strip()
         if not user_prompt:
             user_prompt = None
         else:
@@ -3177,7 +3512,15 @@ def run_workflow(
             quality_issues.extend(fig_issues)
         
         if quality_issues:
-            print(f"Quality issues detected: {', '.join(quality_issues[:5])}{'...' if len(quality_issues) > 5 else ''}")
+            print(f"⚠ Quality issues detected ({len(quality_issues)} total):")
+            for i, issue in enumerate(quality_issues[:10], 1):  # Show first 10 issues
+                print(f"   {i}. {issue}")
+            if len(quality_issues) > 10:
+                print(f"   ... and {len(quality_issues) - 10} more issues")
+            logger.info(f"Quality issues detected: {len(quality_issues)} issues found")
+        else:
+            print("✓ No quality issues detected")
+            logger.info("No quality issues detected")
         
         # CALCULATE QUALITY METRICS AND TRACK PROGRESS
         current_metrics = _extract_quality_metrics(current_tex, sim_summary)
@@ -3214,13 +3557,18 @@ def run_workflow(
             pdf_success, generated_pdf_path, pdf_error = _generate_pdf_for_review(paper_path, dynamic_timeout)
             if pdf_success and generated_pdf_path:
                 pdf_path = generated_pdf_path
-                print(f"PDF generated for AI review: {pdf_path.name}")
+                file_size = pdf_path.stat().st_size
+                print(f"✓ PDF generated for AI review: {pdf_path.name} ({file_size:,} bytes)")
+                logger.info(f"PDF generated for AI review: {pdf_path.name} ({file_size:,} bytes)")
             else:
-                print(f" PDF generation failed: {pdf_error}")
+                print(f"✗ PDF generation failed: {pdf_error}")
+                logger.warning(f"PDF generation failed: {pdf_error}")
         elif not config.enable_pdf_review:
-            print(f" PDF review disabled in configuration")
+            print(f"ℹ PDF review disabled in configuration - sending text-only content to AI model")
+            logger.info("PDF review disabled - text-only review mode")
         else:
-            print(f" Skipping PDF generation due to LaTeX compilation failure")
+            print(f"⚠ Skipping PDF generation due to LaTeX compilation failure")
+            logger.warning("PDF generation skipped due to LaTeX compilation failure")
         
         review, decision = run_review_revision_step(
             current_tex,
@@ -3235,6 +3583,7 @@ def run_workflow(
             pdf_path,
             output_diffs,
             paper_path,
+            quality_issues,
         )
 
         print(f"Review completed")
@@ -3438,14 +3787,13 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--save-config", type=str, default=None, help="Save current configuration to JSON file")
     
     # New quality control parameters
-    p.add_argument("--quality-threshold", type=float, default=0.8, help="Minimum quality score required for acceptance (0.0-1.0)")
+    p.add_argument("--quality-threshold", type=float, default=1.0, help="Minimum quality score required for acceptance (0.0-1.0)")
     p.add_argument("--check-references", action="store_true", default=True, help="Enable external reference validation")
     p.add_argument("--validate-figures", action="store_true", default=True, help="Enable figure generation validation")
     p.add_argument("--skip-reference-check", action="store_true", help="Disable external reference validation (faster)")
     p.add_argument("--skip-figure-validation", action="store_true", help="Disable figure generation validation (faster)")
     
-    # PDF review functionality
-    p.add_argument("--enable-pdf-review", action="store_true", default=True, help="Send PDF files to AI models during review/revision")
+    p.add_argument("--enable-pdf-review", action="store_true", default=False, help="Send PDF files to AI models during review/revision")
     p.add_argument("--disable-pdf-review", action="store_true", help="Disable PDF review (text-only review)")
     
     # Ideation parameters
@@ -3456,8 +3804,14 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # Custom prompt parameter
     p.add_argument("--user-prompt", type=str, default=None, help="Custom prompt that takes priority over standard requirements")
     
-    # Diff output parameter
-    p.add_argument("--output-diffs", action="store_true", help="Save diff files for each review/revision cycle to track changes")
+    # Diff output parameter - now enabled by default
+    p.add_argument("--no-output-diffs", action="store_true", help="Disable diff file saving for each review/revision cycle")
+    p.add_argument("--output-diffs", action="store_true", default=True, help="Save diff files for each review/revision cycle to track changes (default: enabled)")
+    
+    # Content protection parameters
+    p.add_argument("--disable-content-protection", action="store_true", help="Disable content protection against accidental deletions (DANGEROUS)")
+    p.add_argument("--auto-approve-changes", action="store_true", help="Automatically approve content changes that pass safety checks")
+    p.add_argument("--content-protection-threshold", type=float, default=0.15, help="Maximum allowed content reduction as fraction (default: 0.15 = 15%%)")
     
     # Test-time compute scaling parameters
     p.add_argument("--test-scaling", action="store_true", help="Run test-time compute scaling analysis instead of normal workflow")
@@ -3481,6 +3835,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.enable_ideation = False
     if args.disable_pdf_review:
         args.enable_pdf_review = False
+    if args.no_output_diffs:
+        args.output_diffs = False
+    if args.disable_content_protection:
+        args.enable_content_protection = False
+    else:
+        args.enable_content_protection = True
     
     # Initialize topic, field, question attributes if they don't exist (modify-existing mode)
     if modify_existing:
@@ -3523,11 +3883,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     elif not args.modify_existing:
         # Interactive prompts if missing and no existing paper (but NOT when modifying existing)
         if not getattr(args, 'topic', None):
-            args.topic = input("Topic: ").strip()
+            args.topic = timeout_input("Topic:", timeout=30, default="Large Language Models").strip()
         if not getattr(args, 'field', None):
-            args.field = input("Field: ").strip()
+            args.field = timeout_input("Field:", timeout=30, default="Computer Science").strip()
         if not getattr(args, 'question', None):
-            args.question = input("Research question: ").strip()
+            args.question = timeout_input("Research question:", timeout=30, default="Find revolutionary, impactful, and practical methods?").strip()
     # If modify_existing is True but no existing metadata found, we'll use whatever args were provided
     
     return args
@@ -4200,9 +4560,17 @@ if __name__ == "__main__":
         print(f" Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
         print(f"PDF review: {'enabled' if ns.enable_pdf_review else 'disabled'}")
         print(f"Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
+        print(f"Diff output tracking: {'enabled' if ns.output_diffs else 'disabled'}")
+        print(f"Content protection: {'enabled' if ns.enable_content_protection else 'DISABLED (DANGEROUS)'}")
+        if hasattr(ns, 'auto_approve_changes') and ns.auto_approve_changes:
+            print(f"Auto-approve changes: enabled")
+        print(f"Content protection threshold: {ns.content_protection_threshold:.1%}")
         
-        # Set PDF review configuration
+        # Set configuration options
         config.enable_pdf_review = ns.enable_pdf_review
+        config.enable_content_protection = ns.enable_content_protection
+        config.auto_approve_safe_changes = getattr(ns, 'auto_approve_changes', False)
+        config.content_protection_threshold = ns.content_protection_threshold
         
         # Handle test scaling mode
         if ns.test_scaling:

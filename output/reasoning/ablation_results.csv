@@ -1,0 +1,3 @@
+setting,B,Delta,empirical_illegal_mass,analytic_bound,ratio
+baseline,20,0.2,2.110803e-09,1.181271e-08,5.596312
+ablated,20,0.1,2.180142553695e-09,1.305506245332e-08,5.988169

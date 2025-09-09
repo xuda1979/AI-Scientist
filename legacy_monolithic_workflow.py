@@ -191,7 +191,7 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         print("OFFLINE_MODE enabled - returning stub response without contacting API")
         return _offline_response(prompt_type)
 
-    if pdf_path and pdf_path.exists():
+    if False and pdf_path and pdf_path.exists():  # PDF upload disabled
         print(f"[PDF] Including PDF in request: {pdf_path.name}")
     
     # Set longer timeout for GPT-5
@@ -272,7 +272,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
             processed_messages = messages.copy()
             
             # Add PDF to the last user message if provided and model supports vision
-            if pdf_path and pdf_path.exists() and _model_supports_vision(model):
+            if False and pdf_path and pdf_path.exists() and _model_supports_vision(model):  # PDF upload disabled
                 try:
                     # For now, we'll add a note about the PDF but not include the binary data
                     # OpenAI's vision models typically work better with images than PDFs
@@ -292,7 +292,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     print(f"WARNING: Failed to process PDF reference: {pdf_error}")
                     print("Continuing with text-only request...")
             
-            elif pdf_path and pdf_path.exists() and not _model_supports_vision(model):
+            elif False and pdf_path and pdf_path.exists() and not _model_supports_vision(model):  # PDF upload disabled
                 print(f"INFO: Model {model} does not support vision input. Adding PDF reference note...")
                 # Even for non-vision models, we can mention that a PDF was generated
                 for i in range(len(processed_messages) - 1, -1, -1):
@@ -910,7 +910,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         os.environ["HTTPS_PROXY"] = gemini_proxy
         print(f"Set proxy for Gemini API: {gemini_proxy}")
     
-    if pdf_path and pdf_path.exists():
+    if False and pdf_path and pdf_path.exists():  # PDF upload disabled
         print(f"INFO: Including PDF in Gemini request: {pdf_path.name}")
     
     try:
@@ -944,7 +944,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                 combined_prompt += f"Assistant: {content}\n\n"
         
         # Add PDF content if provided
-        if pdf_path and pdf_path.exists():
+        if False and pdf_path and pdf_path.exists():  # PDF upload disabled
             try:
                 # For Google AI, we need to upload the file using the file API
                 # This is a simplified approach - in production you might want to use the proper file upload API

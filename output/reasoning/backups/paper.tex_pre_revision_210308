@@ -22,12 +22,12 @@
 \usepackage{pgfplots}
 \usepackage{siunitx}
 \usepackage{algorithm}
-\usepackage{algpseudocode} % robust pseudocode
+\usepackage{algpseudocode} % switched to algpseudocode for robust pseudocode
 \usepackage{adjustbox} % constrain wide tables/figures to text width
 \pgfplotsset{compat=1.18}
 
 % Reduce overfull boxes in narrow columns with long identifiers/urls
-\setlength{\emergencystretch}{12em}
+\setlength{\emergencystretch}{12em} % increased to mitigate overfull hboxes further
 
 \hypersetup{
     colorlinks=true,
@@ -286,39 +286,6 @@ We codify the manifest and guards in an explicit, auditable self-test executed a
 \subsection{Detector, horizons, and complexity}\label{sec:detector}
 We construct a Merge-DAG $G_\tau$ whose nodes are byte strings concatenated from up to $L$ tokens; edges apply a single ranked merge valid under some greedy schedule. Safety requires $b$ to be a sink and non-creating node under all contexts and normalizations. Complexity scales with the number of distinct byte strings $V_L$ and merges $M$; precise build times depend on the tokenizer and horizon $L$.
 
-\subsection{Merge-DAG construction pseudocode}\label{sec:mergedag}
-To aid implementation of the detector and self-test, we provide a high-level pseudocode for building $G_\tau$ up to horizon $L$ and checking safety for a boundary set $\mathcal{R}$.
-
-\begin{algorithm}[ht]
-\caption{BuildMergeDAGAndCheckSafety: horizon-$L$ Merge-DAG and boundary checks}
-\label{alg:mergedag}
-\begin{algorithmic}[1]
-\Require tokenizer $\tau$ (with version/flags), horizon $L\in\{3,4\}$, protected boundaries $\mathcal{R}$, normalization $\mathcal{N}$
-\Ensure verdict: map $b\mapsto$ safe/unsafe with reasons; DAG summary stats
-\State Initialize node set $V\gets \emptyset$, edge multimap $E\gets \emptyset$
-\State Enumerate base tokens $\Sigma$ with byte realizations under $\mathcal{N}$; add each token's bytes as a node in $V$
-\For{$\ell=2$ to $L$}
-  \ForAll{concatenations of $\ell$ base tokens (with deduplication)}
-     \State Add concatenated byte string $x$ to $V$
-  \EndFor
-\EndFor
-\ForAll{$x\in V$}
-  \ForAll{adjacent token-boundary pairs inside $x$}
-    \If{pair is mergeable under $\tau$'s total order and flags}
-      \State Let $y$ be the merged byte string; add edge $(x\to y)$ to $E$
-    \EndIf
-  \EndFor
-\EndFor
-\State verdict $\gets$ empty map
-\ForAll{$b\in\mathcal{R}$}
-  \State Check atomicity: if $b$ appears split across tokens in any $x\in V$ where a path in $E$ can destroy contiguity of an already-contiguous $b$, mark atomicity violation
-  \State Check non-creation: if there exists a path in $E$ that creates a contiguous $b$ from a context without $b$ in raw bytes, mark creation violation
-  \If{no violations} \State verdict[$b$]$\gets$ safe \Else \State verdict[$b$]$\gets$ unsafe \EndIf
-\EndFor
-\State \Return (verdict, $|V|$, $|E|$)
-\end{algorithmic}
-\end{algorithm}
-
 \subsection{Unicode, normalization, and cross-lingual stress}
 We recommend evaluating under $\mathcal{N}\in\{\mathrm{NFC,NFD,NFKC,NFKD}\}$ with adversarial contexts (ZWJ/VS16, ZWS/NBSP, bidi controls, viramas, Thai vowel/consonant orders, multi-codepoint emoji). Ambiguities should trigger byte-level guarded spans via the policy in Table~\ref{tab:manifest}.
 
@@ -352,7 +319,7 @@ Let $(x_t,y_t)\sim p^\star(y_t\mid x_t)$ supported on $\mathcal{S}_t$, and let $
 \end{theorem}
 
 \begin{proof}[Proof sketch]
-As $B\to\infty$, the masked softmax has zero mass on $I=\Sigma\setminus\mathcal{S}_t$. The loss reduces to cross-entropy on the legal simplex. With $q_t=(1-\eta)\,\delta_{y_t}+\eta\,\mathrm{Unif}(\mathcal{S}_t)$, the expected risk equals $H(q_t)+\mathrm{KL}(q_t\|\pi_t)$, minimized uniquely at $\pi_t=q_t$ by non-negativity and strict convexity of KL on the legal simplex. Taking expectation over $(x_t,y_t)$ yields the claim. A full derivation is provided in Appendix~\ref{app:proper}.
+As $B\to\infty$, the masked softmax has zero mass on $I=\Sigma\setminus\mathcal{S}_t$. The loss reduces to cross-entropy on the legal simplex. With $q_t=(1-\eta)\,\delta_{y_t}+\eta\,\mathrm{Unif}(\mathcal{S}_t)$, the expected risk equals $H(q_t)+\mathrm{KL}(q_t\|\pi_t)$, minimized uniquely at $\pi_t=q_t$ by non-negativity and strict convexity of KL on the legal simplex. Taking expectation over $(x_t,y_t)$ yields the claim.
 \end{proof}
 
 \subsection{Finite-$B$ leakage bounds and sensitivity}
@@ -368,7 +335,7 @@ With $m_{t,u}=-\alpha B$ for $u\in I$ and $m_{t,v}=0$ for $v\in L$, define $\Del
 \begin{proof}[Proof]
 Write $Z=\sum_{w\in L}\exp((\ell_w)/T)+\sum_{u\in I}\exp((\ell_u-\alpha B)/T)$. Let $v^\star=\arg\max_{v\in L}\ell_v$ and $u^\star=\arg\max_{u\in I}\ell_u$. Then
 $\sum_{u\in I}\pi(u)=\frac{\sum_{u\in I}e^{(\ell_u-\alpha B)/T}}{Z} \le \frac{(K-k)e^{(\ell_{u^\star}-\alpha B)/T}}{e^{\ell_{v^\star}/T}}=(K-k)e^{-(\alpha B+\Delta)/T}$, proving (i).
-For (ii), let $\tilde{\pi}$ be $\pi$ renormalized on $L$. Then $\|\pi-\tilde{\pi}\|_1=2\sum_{u\in I}\pi(u)$, yielding the bound. For (iii), the cross-entropy gradient for class $u$ is $\partial\mathcal{L}/\partial \ell_u = \pi(u)/T$ in magnitude, hence bounded by the bound from (i) divided by $T$. A longer derivation appears in Appendix~\ref{app:finiteB}.
+For (ii), let $\tilde{\pi}$ be $\pi$ renormalized on $L$. Then $\|\pi-\tilde{\pi}\|_1=2\sum_{u\in I}\pi(u)$, yielding the bound. For (iii), the cross-entropy gradient for class $u$ is $\partial\mathcal{L}/\partial \ell_u = \pi(u)/T$ in magnitude, hence bounded by the bound from (i) divided by $T$.
 \end{proof}
 
 \begin{corollary}[Mask budget to meet target illegal mass]\label{cor:budget}
@@ -486,17 +453,11 @@ $\Delta=0.1$ (ablated)  & $\approx 2.181\times 10^{-9}$ & $\approx 1.306\times 1
 \label{tab:ablation}
 \end{table}
 
-\subsection{Additional sanity checks: budget selection and trust region}\label{sec:extrasanity}
-We include two minor, deterministic extensions in the released script:
-- Budget selection check (Cor.~\ref{cor:budget}): For several targets $\eta\in\{10^{-4},10^{-6},10^{-8}\}$, we compute the required $B$ using $(K{-}k,\Delta,\alpha,T)$ from the toy setup and verify empirically that the illegal mass under the masked softmax does not exceed $\eta$.
-- Trust-region (PRM) check (Thm.~\ref{thm:prm}): For a deterministic logit perturbation $b$ scaled to satisfy $\mathrm{KL}(\pi(z)\,\|\,\pi(z{+}b))\le \rho$ (e.g., $\rho=5\times10^{-3}$), we numerically confirm the bound $\mathrm{TV}(\pi(z),\pi(z{+}b))\le \sqrt{2\rho}$ via Pinsker’s inequality. These checks are fully reproducible and run in milliseconds.
-
 \section{Results and Analysis}\label{sec:results-main}
 - Exponential decay and slope: On a log scale (Figure~\ref{fig:leakage_plot}), the empirical illegal mass is approximately linear in $B$, consistent with Theorem~\ref{thm:finiteB}. Each increment of $B$ by 5 multiplies the illegal mass by about $6.74\times 10^{-3}\approx e^{-5}$ (e.g., $4.649136\times 10^{-5} / 6.852963\times 10^{-3}\approx 6.79\times 10^{-3}$), matching $\exp(-\alpha B/T)$ with $\alpha=T=1$.
 - Tightness of the analytic bound: The ratio between the analytic bound and the exact mass stabilizes at $\approx 5.596$ for moderate/large $B$ (Table~\ref{tab:microbench}), implying a predictable multiplicative slack governed by the logit margin $\Delta$ and partition function terms.
 - Margin sensitivity: The ablation in Table~\ref{tab:ablation} shows that decreasing $\Delta$ (by increasing the best illegal logit) raises the illegal mass and increases the slack factor, in line with Theorem~\ref{thm:finiteB}'s dependence on $\Delta$.
 - Practical selection of $B$: Corollary~\ref{cor:budget} provides a direct back-of-the-envelope calculation for meeting a target illegal mass budget $\eta$. The micro-benchmark validates that the realized mass tracks the prescribed exponential law, supporting robust budget selection in practice.
-- Extended sanity checks: The script-level budget-selection and trust-region validations (Section~\ref{sec:extrasanity}) provide additional practical assurances for deployment knobs without expanding the scope of this artifact-light report.
 
 \subsection{Sanity checks: $L_1$ gap and gradient leakage}
 To make the consequences of Theorem~\ref{thm:finiteB}(ii, iii) visible without running code, Table~\ref{tab:sanity} reports representative values (two budgets). The $L_1$ gap closely matches twice the illegal mass (analytical identity), and the maximum illegal gradient magnitude is safely below the analytic bound.
@@ -558,19 +519,23 @@ We run a bounded-depth shadow search in byte space to emit guarded bytes that re
 \Require model; tokenizer $\tau$ with guard; product $\mathcal{P}$; beams as a list of tuples $(s, \mathrm{seq}, \mathrm{score})$; maxByteSteps; minResyncK
 \Ensure A set $R$ of promoted beams that have resynchronized to a state with at least minResyncK legal tokens, or $\emptyset$ if unsuccessful within the byte budget
 \State Initialize a priority queue $Q$ with entries $(s, \mathrm{seq}, \mathrm{score}, \mathrm{budget})$ for each input beam and set $\mathrm{budget}\gets$ maxByteSteps
-\State $R \gets \emptyset$
+\State $R \gets \emptyset$ \Comment{resynchronized beams}
 \While{$Q$ not empty}
   \State Pop $(s, \mathrm{seq}, \mathrm{score}, b)$ with highest score
-  \If{$b = 0$} \State \textbf{continue} \EndIf
+  \If{$b = 0$}
+    \State \textbf{continue}
+  \EndIf
   \ForAll{bytes $u$ in legalBytesUnderGuard($\tau$)}
     \State $\mathrm{seq}' \gets \mathrm{seq}$
     \If{\text{tokenizer has a byte token for } u}
       \State $\mathrm{seq}' \gets \mathrm{seq} \,\|\, [\tau.\mathrm{byte\_to\_token}(u)]$
       \If{$b-1<0$} \State \textbf{continue} \EndIf
-      \If{$b>0$} \State $b \gets b-1$ \EndIf
+    \If{$b>0$} \State $b \gets b-1$ \EndIf
     \EndIf
     \State $s' \gets \mathcal{P}.\mathrm{transition\_bytes}(s, u)$
-    \If{$s'$ is invalid} \State \textbf{continue} \EndIf
+    \If{$s'$ is invalid}
+      \State \textbf{continue}
+    \EndIf
     \State $k_{\mathrm{legal}} \gets \mathrm{count\_legal\_tokens}(\mathcal{P}, s')$
     \State $\mathrm{score}' \gets \mathrm{score} + \log p_{\mathrm{byte}}(u)$
     \If{$k_{\mathrm{legal}} \ge \text{minResyncK}$}
@@ -655,7 +620,7 @@ Let $z$ be pre-mask logits and $b$ be PRM bonuses constrained by a KL trust regi
 Masking after adding $b$ zeroes out probability for illegal tokens regardless of PRM bonuses, ensuring support inclusion. The KL trust region bounds $\mathrm{TV}(\pi(z),\pi(z{+}b))\le \sqrt{2\rho}$ by Pinsker, limiting PRM-induced drift on legal probabilities.
 \end{proof}
 
-\paragraph{Practical choice of $\rho$.} In practice, choose $\rho$ so that $\sqrt{2\rho}$ matches a tolerable total-variation change on legal probabilities (e.g., $\rho=5\times10^{-3}$ yields $\mathrm{TV}\le 0.1$). We monitor $\mathrm{KL}$ online and clip bonuses if the trust region would be exceeded. A deterministic trust-region sanity check is included in the script (Section~\ref{sec:extrasanity}).
+\paragraph{Practical choice of $\rho$.} In practice, choose $\rho$ so that $\sqrt{2\rho}$ matches a tolerable total-variation change on legal probabilities (e.g., $\rho=5\times10^{-3}$ yields $\mathrm{TV}\le 0.1$). We monitor $\mathrm{KL}$ online and clip bonuses if the trust region would be exceeded.
 
 \section{Complexity and Performance Analysis}\label{sec:complexity}
 - Tokenizer safety detector: Let $V_L$ be the number of distinct byte strings from concatenations of up to $L$ tokens, $M$ the number of merges. Constructing $G_\tau$ and checking safety of boundaries $b\in\mathcal{R}$ scales as $O(V_L + M\,V_L)$ in the worst case; in practice, $L\in\{3,4\}$ and deduplicated caching reduce constants.
@@ -675,9 +640,16 @@ While our artifact-light scope precludes large-scale task suites, the end-to-end
 - Run: execute the included Python script in this repository.
 - Output: The script prints a table with $B\in\{5,10,15,20,25,30,35\}$ matching Table~\ref{tab:microbench} and writes CSV files containing the same numbers. It additionally prints the analytic bound values given $K=10$, $k=3$, $\Delta=0.2$, $T=1$, $\alpha=1$.
 - Ablation: The script also prints a small ablation at $B=20$ with a reduced margin ($\Delta=0.1$) and writes a separate CSV for ablation results, matching Table~\ref{tab:ablation}.
-- Extended checks: The script computes the $L_1$ gap $\|\pi-\tilde{\pi}\|_1$ and verifies that it approaches twice the illegal mass (Theorem~\ref{thm:finiteB}(ii)); checks the gradient-leakage bound (Theorem~\ref{thm:finiteB}(iii)); runs budget-selection checks against Corollary~\ref{cor:budget}; and verifies Pinsker’s inequality in a deterministic trust-region test for PRM.
+- Extended checks: The script computes the $L_1$ gap $\|\pi-\tilde{\pi}\|_1$ and verifies that it approaches twice the illegal mass (Theorem~\ref{thm:finiteB}(ii)), and checks the gradient-leakage bound by comparing $\max_{u\in I}\pi(u)/T$ against the analytic upper bound $T^{-1}\exp(-(\alpha B+\Delta)/T)$ (Theorem~\ref{thm:finiteB}(iii)).
 - Determinism: All numbers are closed-form or exact evaluations of exponentials; no randomness is used.
 - Practical pinning (optional): We recommend pinning Python to a recent 3.9–3.12 release and recording the exact version in logs for auditability.
+
+\paragraph{Reproducibility checklist (practical guidance).}
+- Record tokenizer library and version (e.g., HF tokenizers 0.13.3; tiktoken 0.5.2) and normalization mode (e.g., NFC).
+- Persist the self-test verdict cache: version string, flags (\path{byte_fallback}, \path{strip_accents}, \path{added_prefix_space}), unsafe boundary set, and hash over settings (Alg.~\ref{alg:selftest}).
+- Pin core Python version and math library (to ensure consistent floating-point prints).
+- Store raw CSV outputs for tables/figures and the exact plotting seed (not used here).
+- Archive the Merge-DAG horizon $L$ and policy switches used during detector runs.
 
 \section*{Acknowledgments}
 We thank colleagues and maintainers of open-source tokenizer libraries (HuggingFace tokenizers, tiktoken, SentencePiece) for documentation and discussions that informed our assumption manifest and self-tests. Any errors remain our own.
@@ -723,9 +695,4 @@ Limitations: Large-scale evaluations on diverse structured tasks are out of scop
 \section{Tokenizer Locality Proof Sketch}\label{app:locality}
 We formalize greedy BPE as a rewrite system over adjacent pairs with a total order $\preceq$ on pairs. Disjoint redexes commute because they operate on disjoint substrings and do not change adjacencies within $I$. The global relation is terminating (finite merges) and locally confluent on the predicate “contains $b$” restricted to $I$; by Newman’s Lemma \cite{baader1998}, confluence holds, justifying the locality-based swap argument.
 
-\section{Strict Properness: Detailed Derivation}\label{app:proper}
-We provide a detailed derivation that $\mathbb{E}[\mathcal{L}_{\mathrm{mCE}}]=H(q)+\mathrm{KL}(q\|\pi)$ on the legal simplex in the limit $B\to\infty$, and show strict convexity of the risk in $\pi$ entails uniqueness at $\pi=q$ for any $T>0$ and $\eta\in[0,1)$ under Assumption~\ref{assump:bounded}. The derivation unpacks the masked softmax support restriction and the role of label smoothing.
-
-\section{Finite-$B$ Leakage: Expanded Proof}\label{app:finiteB}
-We expand Theorem~\ref{thm:finiteB}'s proof by bounding the partition function $Z$ and providing alternative bounds that trade $(K{-}k)$ prefactors for tighter constants when a larger legal margin set is known. We also give a perturbation result: small logit changes $\delta \ell$ in illegal indices shift the illegal mass bound multiplicatively by $\exp(\|\delta \ell\|_\infty/T)$.
 \end{document}

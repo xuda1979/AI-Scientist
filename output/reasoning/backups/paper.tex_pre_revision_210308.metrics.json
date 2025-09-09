@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-08T21:03:08.556204",
+  "file": "output\\reasoning\\paper.tex",
+  "backup": "output\\reasoning\\backups\\paper.tex_pre_revision_210308",
+  "metrics": {
+    "word_count": 6230,
+    "char_count": 54674,
+    "section_count": 17,
+    "subsection_count": 20,
+    "figure_count": 2,
+    "table_count": 5,
+    "equation_count": 1,
+    "citation_count": 16,
+    "paragraph_count": 88,
+    "page_estimate": 24.92
+  }
+}
