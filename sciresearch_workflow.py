@@ -45,6 +45,10 @@ from workflow_steps.initial_draft import generate_initial_draft
 from workflow_steps.simulation import run_simulation_step
 from workflow_steps.review_revision import run_review_revision_step
 
+# Document type system
+from document_types import DocumentType, get_document_template, infer_document_type, get_available_document_types
+from document_prompts import DocumentPromptGenerator
+
 def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
     """
     Get user input with a timeout. If no input is received within the timeout,
@@ -127,6 +131,7 @@ class WorkflowConfig:
     default_model: str = DEFAULT_MODEL
     fallback_models: List[str] = None
     output_diffs: bool = False  # Optional diff output for each review/revision cycle
+    no_early_stopping: bool = False  # Disable early stopping for quality stagnation
     
     # Content protection parameters
     enable_content_protection: bool = True  # Enable content protection against accidental deletions
@@ -1123,6 +1128,8 @@ def _generate_research_ideas(
     field: str, 
     question: str, 
     model: str,
+    prompt_generator: DocumentPromptGenerator,
+    doc_type: DocumentType,
     num_ideas: int = 15,
     request_timeout: Optional[int] = 3600,
     fallback_models: Optional[List[str]] = None
@@ -1144,52 +1151,13 @@ def _generate_research_ideas(
     """
     print(f"INFO: Generating {num_ideas} research ideas for '{topic}' in {field}...")
     
-    ideation_prompt = f"""
-You are a brilliant research strategist tasked with generating innovative research ideas.
-
-TOPIC: {topic}
-FIELD: {field}
-RESEARCH QUESTION: {question}
-
-Your task is to generate {num_ideas} distinct, high-quality research ideas that address this topic/question in the field of {field}. For each idea, provide:
-
-1. **Title**: A concise, descriptive title
-2. **Core Concept**: 2-3 sentences describing the main research direction
-3. **Originality Score**: 1-10 (10 = highly novel, never done before)
-4. **Impact Score**: 1-10 (10 = revolutionary potential, broad applications)
-5. **Feasibility Score**: 1-10 (10 = very feasible with current technology/methods)
-6. **Pros**: 2-3 key advantages of this approach
-7. **Cons**: 2-3 potential challenges or limitations
-
-Please ensure ideas span different approaches: theoretical, experimental, algorithmic, systems-based, survey/analysis, etc.
-
-Format your response as:
-
-## Research Idea #1
-**Title**: [Title]
-**Core Concept**: [Description]
-**Originality**: [1-10] - [Brief justification]
-**Impact**: [1-10] - [Brief justification]  
-**Feasibility**: [1-10] - [Brief justification]
-**Pros**: 
-- [Pro 1]
-- [Pro 2]
-**Cons**:
-- [Con 1] 
-- [Con 2]
-
-## Research Idea #2
-[Continue same format...]
-
-After listing all {num_ideas} ideas, provide:
-
-## RANKING ANALYSIS
-Rank the top 5 ideas by overall potential (considering originality  impact  feasibility), and explain your ranking criteria.
-
-## RECOMMENDATION
-Select the single best idea and explain why it's optimal for development into a research paper.
-"""
-
+    ideation_prompt = prompt_generator.get_ideation_prompt(
+        doc_type=doc_type,
+        topic=topic,
+        field=field,
+        question=question,
+        num_ideas=num_ideas
+    )
     try:
         print("  Sending ideation request to AI...")
         messages = [{"role": "user", "content": ideation_prompt}]
@@ -2202,6 +2170,19 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         "- PAGE FLOW: Design content flow to minimize awkward page breaks and orphaned elements\n"
         "- VISUAL HIERARCHY: Use consistent heading styles and proper sectioning commands\n\n"
         
+        "🎯 LATEX FLOAT POSITIONING REQUIREMENTS:\n"
+        "Use proper LaTeX positioning for all tables and figures from the start:\n"
+        "- USE [htbp] POSITIONING: Always use \\begin{figure}[htbp] and \\begin{table}[htbp] for optimal placement\n"
+        "  * NEVER use [H] which forces exact placement and creates poor page flow\n"
+        "  * [htbp] allows LaTeX to optimize: h=here, t=top, b=bottom, p=page\n"
+        "- PROPER SPACING: Add appropriate spacing around figures/tables using \\vspace{0.5em} if needed\n"
+        "- CAPTION POSITIONING: Place captions ABOVE tables and BELOW figures (academic standard)\n"
+        "- REFERENCE IN TEXT: Reference every figure/table in text using \\ref{} before it appears\n"
+        "- CENTERED CONTENT: Use \\centering inside figure/table environments (not \\begin{center})\n"
+        "- LOGICAL ORDERING: Ensure figures/tables appear in same order as referenced in text\n"
+        "- SIZE OPTIMIZATION: Design tables to fit page width using \\small or \\footnotesize if needed\n"
+        "- LABEL CONSISTENCY: Use consistent labeling scheme (fig:name, tab:name) for all floats\n\n"
+        
         "📊 VISUAL QUALITY STANDARDS:\n"
         "Ensure all visual elements meet professional standards:\n"
         "- FIGURE SIZING: Design figures to fit properly within page margins without stretching\n"
@@ -2419,6 +2400,20 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "- PAGE BREAKS: Ensure logical page breaks that don't split related content inappropriately\n"
         "- HEADER/FOOTER: Check for consistent and appropriate header/footer formatting\n"
         "- ACKNOWLEDGMENTS: Verify acknowledgments section is properly placed (typically before references)\n\n"
+        
+        "🎯 CRITICAL LATEX FLOAT POSITIONING REQUIREMENTS:\n"
+        "MANDATORY LaTeX float positioning rules to ensure proper table/figure placement:\n"
+        "- USE [htbp] POSITIONING: Replace ALL \\begin{figure}[H] and \\begin{table}[H] with [htbp] for better flow\n"
+        "  * [H] forces exact placement and often creates poor page breaks and large white spaces\n"
+        "  * [htbp] allows LaTeX to optimize placement: h=here, t=top, b=bottom, p=page\n"
+        "- PROPER SPACING: Add \\vspace{0.5em} before and after tables/figures if needed for visual separation\n"
+        "- CAPTION POSITIONING: Ensure captions are ABOVE tables and BELOW figures (standard convention)\n"
+        "- REFERENCE IN TEXT: Every figure/table MUST be referenced in text using \\ref{} before it appears\n"
+        "- CENTERED CONTENT: Use \\centering (not \\begin{center}) inside figure/table environments\n"
+        "- AVOID FORCED POSITIONING: Never use [!h] or multiple [H] in sequence - let LaTeX optimize\n"
+        "- LOGICAL ORDERING: Figures/tables should appear in the same order as referenced in text\n"
+        "- SIZE OPTIMIZATION: Ensure tables fit page width using \\small, \\footnotesize, or \\resizebox if needed\n"
+        "- BREAK WIDE TABLES: For tables wider than page, consider splitting or rotating (\\rotatebox{90})\n\n"
         
         "WORKFLOW STEPS:\n"
         "1. REVIEW: Conduct a thorough peer review meeting top journal standards\n"
@@ -2740,6 +2735,20 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- PAGE BREAKS: Ensure logical page breaks that don't split related content inappropriately\n"
         "- HEADER/FOOTER: Check for consistent and appropriate header/footer formatting\n"
         "- ACKNOWLEDGMENTS: Verify acknowledgments section is properly placed (typically before references)\n\n"
+        
+        "🎯 CRITICAL LATEX FLOAT POSITIONING REQUIREMENTS:\n"
+        "MANDATORY LaTeX float positioning rules to ensure proper table/figure placement:\n"
+        "- USE [htbp] POSITIONING: Replace ALL \\begin{figure}[H] and \\begin{table}[H] with [htbp] for better flow\n"
+        "  * [H] forces exact placement and often creates poor page breaks and large white spaces\n"
+        "  * [htbp] allows LaTeX to optimize placement: h=here, t=top, b=bottom, p=page\n"
+        "- PROPER SPACING: Add \\vspace{0.5em} before and after tables/figures if needed for visual separation\n"
+        "- CAPTION POSITIONING: Ensure captions are ABOVE tables and BELOW figures (standard convention)\n"
+        "- REFERENCE IN TEXT: Every figure/table MUST be referenced in text using \\ref{} before it appears\n"
+        "- CENTERED CONTENT: Use \\centering (not \\begin{center}) inside figure/table environments\n"
+        "- AVOID FORCED POSITIONING: Never use [!h] or multiple [H] in sequence - let LaTeX optimize\n"
+        "- LOGICAL ORDERING: Figures/tables should appear in the same order as referenced in text\n"
+        "- SIZE OPTIMIZATION: Ensure tables fit page width using \\small, \\footnotesize, or \\resizebox if needed\n"
+        "- BREAK WIDE TABLES: For tables wider than page, consider splitting or rotating (\\rotatebox{90})\n\n"
         
         "MANDATORY REQUIREMENTS - CHECK CAREFULLY:\n"
         "1. SINGLE FILE ONLY: Paper must be ONE LaTeX file with NO \\input{} or \\include{} commands\n"
@@ -3079,6 +3088,20 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "- HEADER/FOOTER: Check for consistent and appropriate header/footer formatting\n"
         "- ACKNOWLEDGMENTS: Verify acknowledgments section is properly placed (typically before references)\n\n"
         
+        "🎯 CRITICAL LATEX FLOAT POSITIONING REQUIREMENTS:\n"
+        "MANDATORY LaTeX float positioning rules to ensure proper table/figure placement:\n"
+        "- USE [htbp] POSITIONING: Replace ALL \\begin{figure}[H] and \\begin{table}[H] with [htbp] for better flow\n"
+        "  * [H] forces exact placement and often creates poor page breaks and large white spaces\n"
+        "  * [htbp] allows LaTeX to optimize placement: h=here, t=top, b=bottom, p=page\n"
+        "- PROPER SPACING: Add \\vspace{0.5em} before and after tables/figures if needed for visual separation\n"
+        "- CAPTION POSITIONING: Ensure captions are ABOVE tables and BELOW figures (standard convention)\n"
+        "- REFERENCE IN TEXT: Every figure/table MUST be referenced in text using \\ref{} before it appears\n"
+        "- CENTERED CONTENT: Use \\centering (not \\begin{center}) inside figure/table environments\n"
+        "- AVOID FORCED POSITIONING: Never use [!h] or multiple [H] in sequence - let LaTeX optimize\n"
+        "- LOGICAL ORDERING: Figures/tables should appear in the same order as referenced in text\n"
+        "- SIZE OPTIMIZATION: Ensure tables fit page width using \\small, \\footnotesize, or \\resizebox if needed\n"
+        "- BREAK WIDE TABLES: For tables wider than page, consider splitting or rotating (\\rotatebox{90})\n\n"
+        
         "CRITICAL REQUIREMENTS - NO EXCEPTIONS:\n"
         "1. SINGLE FILE ONLY: The paper must be contained in ONE LaTeX file with NO separate bibliography files\n"
         "2. EMBEDDED REFERENCES MANDATORY: All references MUST be embedded directly in the paper.tex file using EITHER:\n"
@@ -3321,8 +3344,10 @@ def run_workflow(
     user_prompt: Optional[str] = None,  # New parameter for custom user prompt
     config: Optional[WorkflowConfig] = None,  # Configuration parameter
     enable_ideation: bool = True,     # Enable ideation phase for new papers
+    specify_idea: Optional[str] = None,  # Specify a research idea to use directly
     num_ideas: int = 15,             # Number of ideas to generate
-    output_diffs: bool = False       # Optional diff output for each review/revision cycle
+    output_diffs: bool = False,       # Optional diff output for each review/revision cycle
+    document_type: str = "auto"      # Document type to generate
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
     
@@ -3341,6 +3366,21 @@ def run_workflow(
         config.figure_validation = validate_figures
     
     logger.info(f"Starting workflow with config: quality_threshold={config.quality_threshold}, max_iterations={config.max_iterations}")
+    
+    # Initialize document type and prompt generator
+    if document_type == "auto":
+        detected_type = infer_document_type(topic=topic, field=field, question=question)
+        print(f"Auto-detected document type: {detected_type.value}")
+    else:
+        try:
+            detected_type = DocumentType(document_type)
+            print(f"Using specified document type: {detected_type.value}")
+        except ValueError:
+            available_types = [t.value for t in DocumentType]
+            raise ValueError(f"Invalid document type '{document_type}'. Available types: {available_types}")
+    
+    prompt_generator = DocumentPromptGenerator
+    logger.info(f"Document type: {detected_type.value}")
     
     project_dir = _prepare_project_dir(output_dir, modify_existing)
     paper_path, sim_path = ensure_single_tex_py(project_dir, strict=strict_singletons)
@@ -3392,7 +3432,27 @@ def run_workflow(
     
     # If no real paper content yet (fresh), run ideation and then draft one.
     if is_minimal_template:
-        if enable_ideation:
+        if specify_idea:
+            print(f"Using specified research idea: {specify_idea}")
+            
+            # Use the specified idea directly
+            final_topic = specify_idea
+            final_question = specify_idea
+            
+            # Save specified idea to project directory
+            ideation_file = project_dir / "ideation_analysis.txt"
+            with open(ideation_file, 'w', encoding='utf-8') as f:
+                f.write("RESEARCH IDEATION ANALYSIS\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(f"Original Topic: {topic}\n")
+                f.write(f"Original Question: {question}\n")
+                f.write(f"Field: {field}\n\n")
+                f.write(f"Specified Idea: {specify_idea}\n")
+                f.write("Note: Ideation phase was skipped because a specific idea was provided.\n")
+            
+            print(f"Specified idea saved to: {ideation_file}")
+            
+        elif enable_ideation:
             print("Starting Ideation Phase for new paper...")
             
             # Generate and analyze multiple research ideas
@@ -3401,6 +3461,8 @@ def run_workflow(
                 field=field,
                 question=question,
                 model=model,
+                prompt_generator=prompt_generator,
+                doc_type=detected_type,
                 num_ideas=num_ideas,
                 request_timeout=request_timeout,
                 fallback_models=config.fallback_models
@@ -3513,8 +3575,8 @@ def run_workflow(
         
         if quality_issues:
             print(f"⚠ Quality issues detected ({len(quality_issues)} total):")
-            for i, issue in enumerate(quality_issues[:10], 1):  # Show first 10 issues
-                print(f"   {i}. {issue}")
+            for idx, issue in enumerate(quality_issues[:10], 1):  # Show first 10 issues
+                print(f"   {idx}. {issue}")
             if len(quality_issues) > 10:
                 print(f"   ... and {len(quality_issues) - 10} more issues")
             logger.info(f"Quality issues detected: {len(quality_issues)} issues found")
@@ -3597,9 +3659,11 @@ def run_workflow(
             final_metrics = _extract_quality_metrics(current_tex, sim_summary)
             print(f"Final paper metrics: {final_metrics}")
             break
-        elif stagnation_count >= 2:
+        elif stagnation_count >= 2 and not config.no_early_stopping:
             print(f"[STOP] Quality stagnating for {stagnation_count} iterations. Ending revisions.")
             break
+        elif stagnation_count >= 2 and config.no_early_stopping:
+            print(f"[INFO] Quality stagnating for {stagnation_count} iterations, but early stopping is disabled. Continuing...")
         
         print(f"Iteration {i}: Combined review and revision completed")
     
@@ -3772,12 +3836,17 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         p.add_argument("--topic", required=False, help="Research topic")
         p.add_argument("--field", required=False, help="Research field")
         p.add_argument("--question", required=False, help="Research question")
+        p.add_argument("--document-type", choices=["research_paper", "engineering_paper", "finance_research", 
+                      "equity_research", "survey_paper", "presentation_slides", "technical_report", 
+                      "white_paper", "conference_paper", "journal_article", "auto"], 
+                      default="auto", help="Type of document to generate (auto-detect if not specified)")
     
     p.add_argument("--output-dir", default="output", help="Output directory root (contains project subfolder)")
     p.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use (default: gpt-5)")
     p.add_argument("--request-timeout", type=int, default=3600, help="Per-request timeout seconds (0 means no timeout)")
     p.add_argument("--max-retries", type=int, default=3, help="Max OpenAI retries")
     p.add_argument("--max-iterations", type=int, default=4, help="Max review->revise iterations")
+    p.add_argument("--no-early-stopping", action="store_true", help="Disable early stopping for quality stagnation (run all max iterations)")
     p.add_argument("--modify-existing", action="store_true", help="If output dir already has paper.tex, modify in place")
     p.add_argument("--strict-singletons", action="store_true", default=True, help="Keep only paper.tex & simulation.py (others archived)")
     p.add_argument("--python-exec", default=None, help="Python interpreter for running simulation.py")
@@ -3799,6 +3868,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # Ideation parameters
     p.add_argument("--enable-ideation", action="store_true", default=True, help="Enable research ideation phase for new papers")
     p.add_argument("--skip-ideation", action="store_true", help="Skip research ideation phase (use original topic directly)")
+    p.add_argument("--specify-idea", type=str, default=None, help="Specify a research idea to use directly (skips ideation phase)")
     p.add_argument("--num-ideas", type=int, default=15, help="Number of research ideas to generate (10-20)")
     
     # Custom prompt parameter
@@ -3833,6 +3903,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.validate_figures = False
     if args.skip_ideation:
         args.enable_ideation = False
+    if args.specify_idea:
+        args.enable_ideation = False  # Disable ideation if idea is specified
     if args.disable_pdf_review:
         args.enable_pdf_review = False
     if args.no_output_diffs:
@@ -3842,7 +3914,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     else:
         args.enable_content_protection = True
     
-    # Initialize topic, field, question attributes if they don't exist (modify-existing mode)
+    # Initialize topic, field, question, document_type attributes if they don't exist (modify-existing mode)
     if modify_existing:
         if not hasattr(args, 'topic'):
             args.topic = None
@@ -3850,6 +3922,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
             args.field = None
         if not hasattr(args, 'question'):
             args.question = None
+        if not hasattr(args, 'document_type'):
+            args.document_type = "auto"
     
     # Check if there's an existing paper first
     output_path = Path(args.output_dir)
@@ -4556,10 +4630,14 @@ if __name__ == "__main__":
         print(f"Using model: {ns.model}")
         print(f"Max iterations: {ns.max_iterations}")
         print(f"Quality threshold: {ns.quality_threshold}")
+        print(f"Early stopping: {'disabled' if ns.no_early_stopping else 'enabled'}")
         print(f"Reference validation: {'enabled' if ns.check_references else 'disabled'}")
         print(f" Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
         print(f"PDF review: {'enabled' if ns.enable_pdf_review else 'disabled'}")
-        print(f"Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
+        if ns.specify_idea:
+            print(f"Research ideation: disabled (using specified idea: '{ns.specify_idea}')")
+        else:
+            print(f"Research ideation: {'enabled' if ns.enable_ideation else 'disabled'}")
         print(f"Diff output tracking: {'enabled' if ns.output_diffs else 'disabled'}")
         print(f"Content protection: {'enabled' if ns.enable_content_protection else 'DISABLED (DANGEROUS)'}")
         if hasattr(ns, 'auto_approve_changes') and ns.auto_approve_changes:
@@ -4571,6 +4649,7 @@ if __name__ == "__main__":
         config.enable_content_protection = ns.enable_content_protection
         config.auto_approve_safe_changes = getattr(ns, 'auto_approve_changes', False)
         config.content_protection_threshold = ns.content_protection_threshold
+        config.no_early_stopping = ns.no_early_stopping
         
         # Handle test scaling mode
         if ns.test_scaling:
@@ -4614,8 +4693,10 @@ if __name__ == "__main__":
             user_prompt=ns.user_prompt,
             config=config,
             enable_ideation=ns.enable_ideation,
+            specify_idea=ns.specify_idea,
             num_ideas=ns.num_ideas,
-            output_diffs=ns.output_diffs
+            output_diffs=ns.output_diffs,
+            document_type=ns.document_type
         )
         print(f" Workflow completed! Results in: {result_dir}")
     except Exception as e:
