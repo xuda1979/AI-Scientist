@@ -56,6 +56,7 @@ Thumbs.db
 
 # Project specific temporary files
 test_*.py
+!tests/**/test_*.py
 simulation_output.txt
 error_correction_results.png
 *.tmp
