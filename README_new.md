@@ -14,17 +14,17 @@ A streamlined, modular research paper generation workflow with AI assistance.
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install the workflow as a package (run from the repository root)
+pip install .
 
 # Generate a new research paper
-python main.py "Neural Networks" "AI" "How to improve training efficiency?" --output-dir out/neural_nets
+sciresearch-workflow "Neural Networks" "AI" "How to improve training efficiency?" --output-dir out/neural_nets
 
 # Use GPT-5 with single iteration
-python main.py "Quantum Computing" "Physics" "Quantum advantage?" --model gpt-5 --max-iterations 1 --output-dir out/quantum
+sciresearch-workflow "Quantum Computing" "Physics" "Quantum advantage?" --model gpt-5 --max-iterations 1 --output-dir out/quantum
 
 # Modify existing paper
-python main.py --modify-existing --output-dir out/existing_paper --max-iterations 2
+sciresearch-workflow --modify-existing --output-dir out/existing_paper --max-iterations 2
 ```
 
 ## Project Structure
@@ -40,7 +40,8 @@ python main.py --modify-existing --output-dir out/existing_paper --max-iteration
 ├── out/                      # Generated output papers
 ├── docs/                     # Documentation
 ├── utils/                    # Legacy utilities
-└── requirements.txt          # Dependencies
+├── pyproject.toml            # Project metadata and dependencies
+└── requirements.txt          # Legacy dependency list
 ```
 
 ## Command Line Options
