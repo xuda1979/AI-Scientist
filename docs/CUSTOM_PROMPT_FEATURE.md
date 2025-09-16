@@ -120,12 +120,16 @@ python sciresearch_workflow.py \
 
 ### 1. Prompt Collection
 ```python
+import logging
+
+logger = logging.getLogger(__name__)
+
 if user_prompt is None:
     # Interactive prompt collection with examples
     user_prompt = input("Enter your custom prompt: ").strip()
 
 if user_prompt:
-    print(f"✅ Custom prompt set: {user_prompt[:100]}...")
+    logger.info("✅ Custom prompt set: %s...", user_prompt[:100])
 ```
 
 ### 2. Prompt Integration
