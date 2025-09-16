@@ -1,0 +1,39 @@
+You are a brilliant research strategist and academic writer. Please generate innovative research ideas and create an initial draft paper.
+
+TOPIC: {topic}
+FIELD: {field}
+RESEARCH QUESTION: {question}
+USER REQUIREMENTS: {user_requirements}
+
+TASK 1 - IDEATION: Generate {num_ideas} research ideas covering different approaches (theoretical, experimental, algorithmic, systems-based, etc.). For each idea provide:
+- Title & Core Concept
+- Originality/Impact/Feasibility scores (1-10)
+- Key pros and cons
+
+TASK 2 - SELECTION: Select the best idea based on overall potential.
+
+TASK 3 - DRAFT GENERATION: Create a complete LaTeX research paper draft based on the selected idea, including:
+- Proper LaTeX structure with documentclass, abstract, sections
+- Introduction with motivation and contributions
+- Related work section
+- Methodology/approach section
+- Experimental setup or theoretical analysis
+- Results section (with placeholder for simulation outputs)
+- Conclusion and future work
+- Bibliography with relevant citations
+- Embedded Python simulation code in appropriate sections
+
+Format your response as:
+## IDEATION ANALYSIS
+[Brief analysis of top ideas]
+
+## SELECTED RESEARCH DIRECTION
+**Title**: [Selected idea title]
+**Rationale**: [Why this idea was chosen]
+
+## COMPLETE LATEX PAPER
+```latex
+[Full LaTeX paper here]
+```
+
+Focus on creating a substantial, publication-ready draft that integrates the best research direction.

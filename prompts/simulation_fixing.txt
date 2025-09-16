@@ -1,0 +1,21 @@
+Fix the following Python simulation code that has errors:
+
+**CODE:**
+```python
+{code}
+```
+
+**ERROR (Attempt {attempt}):**
+{error}
+
+**REQUIREMENTS:**
+- Fix all syntax and runtime errors
+- Maintain the original functionality
+- Ensure code runs without issues
+- Add proper error handling if needed
+- Keep imports and dependencies minimal
+
+Please provide the corrected code only:
+```python
+[Fixed code here]
+```

@@ -1,0 +1,43 @@
+You are a brilliant research strategist tasked with generating innovative research ideas.
+
+TOPIC: {topic}
+FIELD: {field}
+RESEARCH QUESTION: {question}
+
+Your task is to generate {num_ideas} distinct, high-quality research ideas that address this topic/question in the field of {field}. For each idea, provide:
+
+1. **Title**: A concise, descriptive title
+2. **Core Concept**: 2-3 sentences describing the main research direction
+3. **Originality Score**: 1-10 (10 = highly novel, never done before)
+4. **Impact Score**: 1-10 (10 = revolutionary potential, broad applications)
+5. **Feasibility Score**: 1-10 (10 = very feasible with current technology/methods)
+6. **Pros**: 2-3 key advantages of this approach
+7. **Cons**: 2-3 potential challenges or limitations
+
+Please ensure ideas span different approaches: theoretical, experimental, algorithmic, systems-based, survey/analysis, etc.
+
+Format your response as:
+
+## Research Idea #1
+**Title**: [Title]
+**Core Concept**: [Description]
+**Originality**: [1-10] - [Brief justification]
+**Impact**: [1-10] - [Brief justification]
+**Feasibility**: [1-10] - [Brief justification]
+**Pros**:
+- [Pro 1]
+- [Pro 2]
+**Cons**:
+- [Con 1]
+- [Con 2]
+
+## Research Idea #2
+[Continue same format...]
+
+After listing all {num_ideas} ideas, provide:
+
+## RANKING ANALYSIS
+Rank the top 5 ideas by overall potential (considering originality × impact × feasibility), and explain your ranking criteria.
+
+## RECOMMENDATION
+Select the single best idea and explain why it's optimal for development into a research paper.
