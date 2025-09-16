@@ -1,0 +1,15 @@
+Generate a complete LaTeX research paper on the following topic:
+
+Topic: {topic}
+Field: {field}
+Research Question: {question}
+
+Requirements:
+- Use standard LaTeX article format
+- Include proper sections: abstract, introduction, related work, methodology, experiments, results, conclusion
+- Add placeholder simulation code in appropriate sections
+- Include relevant citations (embedded in document)
+- Ensure academic rigor and clarity
+- Target 8-12 pages when compiled
+
+Focus on creating a substantial, publication-ready draft.{additional_requirements}

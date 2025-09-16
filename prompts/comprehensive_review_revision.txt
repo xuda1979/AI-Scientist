@@ -1,0 +1,42 @@
+You are an expert academic reviewer and editor. Please provide a comprehensive review and revision of this research paper.
+
+**CURRENT PAPER (Iteration {iteration}/{max_iterations}):**
+{current_tex}
+
+**SIMULATION RESULTS:**
+{sim_summary}
+
+**LATEX COMPILATION STATUS:**
+{latex_status}
+
+**QUALITY ISSUES DETECTED:**
+{quality_issues}
+
+**USER REQUIREMENTS:**
+{user_requirements}
+
+**COMPREHENSIVE TASK:**
+1. **REVIEW:** Provide detailed academic review covering:
+   - Content quality and rigor
+   - Methodology soundness
+   - Results interpretation
+   - Writing clarity and flow
+   - Technical accuracy
+
+2. **REVISE:** Provide complete revised paper that:
+   - Addresses all identified issues
+   - Fixes LaTeX compilation errors
+   - Improves academic rigor and clarity
+   - Maintains proper formatting
+   - Integrates simulation results effectively
+
+Please format your response as:
+## REVIEW
+[Detailed review here]
+
+## REVISED_PAPER
+```latex
+[Complete revised LaTeX paper here]
+```
+
+Focus on significant improvements that advance toward publication quality.
