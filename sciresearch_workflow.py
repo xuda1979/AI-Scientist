@@ -21,7 +21,6 @@ import functools
 import logging
 import signal
 import threading
-from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
@@ -39,6 +38,9 @@ from utils.sim_runner import ensure_single_tex_py, extract_simulation_from_tex
 
 # Content protection system
 from utils.content_protection import ContentProtector
+
+# Shared workflow configuration
+from core.config import WorkflowConfig
 
 # Workflow step modules
 from workflow_steps.initial_draft import generate_initial_draft
@@ -113,67 +115,6 @@ def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
             return default
 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
-
-@dataclass
-class WorkflowConfig:
-    """Configuration class for workflow parameters."""
-    quality_threshold: float = 1.0
-    max_iterations: int = 10
-    simulation_timeout: int = 300
-    latex_timeout_base: int = 120
-    api_retry_attempts: int = 3
-    figure_validation: bool = True
-    reference_validation: bool = True
-    max_quality_history_size: int = 20
-    enable_pdf_review: bool = False  # Enable PDF file review during revisions (disabled by default)
-    doi_rate_limit_delay: float = 0.1
-    max_doi_cache_size: int = 1000
-    default_model: str = DEFAULT_MODEL
-    fallback_models: List[str] = None
-    output_diffs: bool = False  # Optional diff output for each review/revision cycle
-    no_early_stopping: bool = False  # Disable early stopping for quality stagnation
-    
-    # Content protection parameters
-    enable_content_protection: bool = True  # Enable content protection against accidental deletions
-    auto_approve_safe_changes: bool = False  # Automatically approve changes that pass safety checks
-    content_protection_threshold: float = 0.15  # Maximum allowed content reduction (15%)
-    require_approval_for_major_changes: bool = True  # Require user approval for major changes
-    
-    # Test-time compute scaling parameters
-    use_test_time_scaling: bool = False
-    revision_candidates: int = 3
-    initial_draft_candidates: int = 1
-    
-    # Combined approach - single API call for review/editorial/revision with diffs
-    use_combined_approach: bool = True  # Always True - this is the only approach
-    
-    def __post_init__(self):
-        if self.fallback_models is None:
-            if "gpt-5" in self.default_model:
-                self.fallback_models = ["gpt-4o", "gpt-4"]
-            else:
-                self.fallback_models = ["gpt-3.5-turbo"]
-    
-    @classmethod
-    def from_file(cls, config_path: Path) -> 'WorkflowConfig':
-        """Load configuration from JSON file."""
-        if not config_path.exists():
-            return cls()  # Return default config
-        
-        try:
-            with open(config_path) as f:
-                data = json.load(f)
-            return cls(**data)
-        except (json.JSONDecodeError, TypeError) as e:
-            print(f"[WARNING] Config file error: {e}. Using defaults.")
-            return cls()
-    
-    def to_file(self, config_path: Path) -> None:
-        """Save configuration to JSON file."""
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, 'w') as f:
-            json.dump(asdict(self), f, indent=2)
-        print(f"[SUCCESS] Configuration saved to {config_path}")
 
 def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = None) -> logging.Logger:
     """Set up structured logging for the workflow."""
@@ -2624,8 +2565,10 @@ def _apply_file_changes(file_changes: dict, project_dir: Path, config=None) -> b
     protector = ContentProtector(project_dir)
     
     # Get content protection settings from config
-    enable_protection = getattr(config, 'enable_content_protection', True) if config else True
-    auto_approve = getattr(config, 'auto_approve_safe_changes', False) if config else False
+    enable_protection = getattr(config, 'content_protection',
+                                getattr(config, 'enable_content_protection', True)) if config else True
+    auto_approve = getattr(config, 'auto_approve_changes',
+                           getattr(config, 'auto_approve_safe_changes', False)) if config else False
     
     for filename, content in file_changes.items():
         file_path = project_dir / filename
@@ -4368,7 +4311,7 @@ def _validate_doi_with_crossref(doi: str, config: Optional[WorkflowConfig] = Non
     global _last_doi_check_time
     
     # Rate limiting - use config delay or default
-    rate_limit_delay = config.doi_rate_limit_delay if config else 0.1
+    rate_limit_delay = getattr(config, 'doi_rate_limit_delay', 0.1) if config else 0.1
     current_time = time.time()
     if current_time - _last_doi_check_time < rate_limit_delay:
         time.sleep(rate_limit_delay)
@@ -4433,7 +4376,7 @@ def _extract_simulation_code_with_validation(paper_path: Path, sim_path: Path) -
 
 def _calculate_dynamic_timeout(paper_content: str, config: Optional[WorkflowConfig] = None) -> int:
     """Calculate dynamic timeout based on document complexity."""
-    base_timeout = config.latex_timeout_base if config else 120  # Use config or default
+    base_timeout = getattr(config, 'latex_timeout_base', 120) if config else 120  # Use config or default
     
     # Count complexity indicators
     tikz_count = len(re.findall(r'\\begin\{tikzpicture\}', paper_content))
@@ -4622,7 +4565,7 @@ if __name__ == "__main__":
         
         # Save configuration if requested
         if ns.save_config:
-            config.to_file(Path(ns.save_config))
+            config.save_to_file(Path(ns.save_config))
             print(f" Configuration saved to: {ns.save_config}")
             sys.exit(0)
         
@@ -4646,8 +4589,8 @@ if __name__ == "__main__":
         
         # Set configuration options
         config.enable_pdf_review = ns.enable_pdf_review
-        config.enable_content_protection = ns.enable_content_protection
-        config.auto_approve_safe_changes = getattr(ns, 'auto_approve_changes', False)
+        config.content_protection = ns.enable_content_protection
+        config.auto_approve_changes = getattr(ns, 'auto_approve_changes', False)
         config.content_protection_threshold = ns.content_protection_threshold
         config.no_early_stopping = ns.no_early_stopping
         
