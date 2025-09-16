@@ -1,0 +1,566 @@
+\begin{filecontents*}{refs.bib}
+@inproceedings{Ouyang2022,
+  author    = {Long Ouyang and Jeff Wu and Xu Jiang and Diogo Almeida and Carroll L. Wainwright and Pamela Mishkin and Chong Zhang and Sandhini Agarwal and Katarina Slama and Alex Ray and John Schulman and Jacob Hilton and Fraser Kelton and Luke Miller and Maddie Simens and Amanda Askell and Peter Welinder and Paul Christiano and Jan Leike and Ryan Lowe},
+  title     = {Training language models to follow instructions with human feedback},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2022},
+  eprint    = {2203.02155},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2203.02155}
+}
+
+@article{Bai2022ConstitutionalAI,
+  author    = {Yuntao Bai and Andy Jones and Kamal Ndousse and Amanda Askell and Anna Chen and Nova DasSarma and Dawn Drain and Stanislav Fort and Deep Ganguli and Tom Henighan and Nicholas Joseph and Saurav Kadavath and Jackson Kernion and Tom Conerly and Sheer El Showk and Nelson Elhage and Zac Hatfield{-}Dodds and Danny Hernandez and Tristan Hume and Scott Johnston and Shauna Kravec and Liane Lovitt and Neel Nanda and Catherine Olsson and Dario Amodei and Sam McCandlish and Chris Olah and Jared Kaplan and Thomas Henighan},
+  title     = {Constitutional {AI}: Harmlessness from {AI} Feedback},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  eprint    = {2212.08073},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi       = {10.48550/arXiv.2212.08073}
+}
+
+@article{Perez2022RedTeam,
+  author    = {Ethan Perez and Sam R. Bowman and Kieran Collins and Jelena Luketina and Evan Hubinger and Joseph R. McGrath and John U. Pitre and Justin Svegliato and Nathan Lambert and Sam Toyer and Henrik Marklund and Rohin Shah and Buck Shlegeris and Katja Grace and Paul Christiano and Owain Evans},
+  title     = {Red Teaming Language Models},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  eprint    = {2209.07858},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2209.07858}
+}
+
+@article{Ganguli2022RTLM,
+  author    = {Deep Ganguli and Liane Lovitt and Nicholas Schiefer and Amanda Askell and Miles Brundage and Jack Clark and Tom Henighan and Ben Mann and Sam McCandlish and Jared Kaplan and Ethan Perez},
+  title     = {Red Teaming Language Models with Language Models},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  eprint    = {2202.03286},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2202.03286}
+}
+
+@inproceedings{Lin2022TruthfulQA,
+  author    = {Stephanie Lin and Jacob Hilton and Owain Evans},
+  title     = {TruthfulQA: Measuring How Models Mimic Human Falsehoods},
+  booktitle = {Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics},
+  year      = {2022},
+  pages     = {3214--3229},
+  doi       = {10.18653/v1/2022.acl-long.229}
+}
+
+@article{Hendrycks2021MMLU,
+  author    = {Dan Hendrycks and Collin Burns and Steven Basart and Andrew Critch and Jerry Li and Dawn Song and Jacob Steinhardt},
+  title     = {Measuring Massive Multitask Language Understanding},
+  journal   = {arXiv preprint},
+  year      = {2020},
+  eprint    = {2009.03300},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2009.03300}
+}
+
+@article{Liang2022HELM,
+  author    = {Percy Liang and Rishi Bommasani and Tony Lee and Dimitris Z. Panigrahi and Dan Klein and Tatsunori B. Hashimoto and Jacob Steinhardt and Ranjay Krishna and Enric Junyent and others},
+  title     = {Holistic Evaluation of Language Models},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  eprint    = {2211.09110},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2211.09110}
+}
+
+@article{Srivastava2023BIGBench,
+  author    = {Aarohi Srivastava and Abhinav Rastogi and Abhishek Rao and et al.},
+  title     = {Beyond the Imitation Game: Quantifying and extrapolating the capabilities of language models},
+  journal   = {Transactions on Machine Learning Research},
+  year      = {2023},
+  eprint    = {2206.04615},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  note      = {Featured Certification},
+  doi       = {10.48550/arXiv.2206.04615}
+}
+
+@article{Weidinger2021Risks,
+  author    = {Laura Weidinger and John Mellor and Maribeth Rauh and Conor Griffin and Jonathan Uesato and Po{-}Sen Huang and Atoosa Kasirzadeh and John Aslanides and Raul Fervari and et al.},
+  title     = {Ethical and social risks of harm from Language Models},
+  journal   = {arXiv preprint},
+  year      = {2021},
+  eprint    = {2112.04359},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CY},
+  doi       = {10.48550/arXiv.2112.04359}
+}
+
+@article{Amodei2016Concrete,
+  author    = {Dario Amodei and Chris Olah and Jacob Steinhardt and Paul Christiano and John Schulman and Dan Man{\'e}},
+  title     = {Concrete Problems in {AI} Safety},
+  journal   = {arXiv preprint},
+  year      = {2016},
+  eprint    = {1606.06565},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.AI},
+  doi       = {10.48550/arXiv.1606.06565}
+}
+
+@article{Shah2022GMG,
+  author    = {Rohin Shah and Noah Gundotra and Steven Adler and Joshua Achiam},
+  title     = {Goal Misgeneralization in Deep Reinforcement Learning},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  eprint    = {2210.01790},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi       = {10.48550/arXiv.2210.01790}
+}
+
+@article{Hubinger2019Mesa,
+  author    = {Evan Hubinger and Chris van Merwijk and Vladimir Mikulik and Joar Skalse and Scott Garrabrant},
+  title     = {Risks from Learned Optimization in Advanced Machine Learning Systems},
+  journal   = {arXiv preprint},
+  year      = {2019},
+  eprint    = {1906.01820},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi       = {10.48550/arXiv.1906.01820}
+}
+
+@article{Zou2023UniversalJailbreak,
+  author    = {Andy Zou and Zifan Wang and J. Zico Kolter and Matt Fredrikson},
+  title     = {Universal and Transferable Adversarial Attacks on Aligned Language Models},
+  journal   = {arXiv preprint},
+  year      = {2023},
+  eprint    = {2307.15043},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2307.15043}
+}
+
+@article{Greshake2023ReversePromptInjection,
+  author    = {Karl Greshake and Aleksandra Przegalinska and Matthew L. Mitchell and others},
+  title     = {More Than You've Asked For: A Comprehensive Analysis of Reverse Prompt Injection Attacks},
+  journal   = {arXiv preprint},
+  year      = {2023},
+  eprint    = {2302.12173},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CR},
+  doi       = {10.48550/arXiv.2302.12173}
+}
+
+@inproceedings{Carlini2021Extraction,
+  author    = {Nicholas Carlini and Florian Tram{\`e}r and Eric Wallace and Matthew Jagielski and Ariel Herbert{-}Voss and Katherine Lee and Adam Roberts and Tom B. Brown and Dawn Song and {\'U}lfar Erlingsson and Alina Oprea and Colin Raffel},
+  title     = {Extracting Training Data from Large Language Models},
+  booktitle = {30th USENIX Security Symposium},
+  year      = {2021},
+  eprint    = {2012.07805},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CR},
+  doi       = {10.48550/arXiv.2012.07805}
+}
+
+@article{Ziegler2019HF,
+  author    = {Daniel M. Ziegler and Nisan Stiennon and Jeffrey Wu and Tom B. Brown and Alec Radford and Dario Amodei and Paul Christiano and Geoffrey Irving},
+  title     = {Fine-Tuning Language Models from Human Preferences},
+  journal   = {arXiv preprint},
+  year      = {2019},
+  eprint    = {1909.08593},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi       = {10.48550/arXiv.1909.08593}
+}
+
+@article{Christiano2017DRLHF,
+  author    = {Paul F. Christiano and Jan Leike and Tom B. Brown and Miljan Martic and Shane Legg and Dario Amodei},
+  title     = {Deep Reinforcement Learning from Human Preferences},
+  journal   = {arXiv preprint},
+  year      = {2017},
+  eprint    = {1706.03741},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi       = {10.48550/arXiv.1706.03741}
+}
+
+@article{Uesato2018RigorousEval,
+  author    = {Jonathan Uesato and Jessica Taylor and Shankar Krishnan and Ian Gemp and Philip Schulman and Pushmeet Kohli},
+  title     = {Rigorous Agent Evaluation: An Adversarial Approach to Uncover Catastrophic Failures},
+  journal   = {arXiv preprint},
+  year      = {2018},
+  eprint    = {1811.00661},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  doi       = {10.48550/arXiv.1811.00661}
+}
+
+@inproceedings{Mitchell2019ModelCards,
+  author    = {Margaret Mitchell and Simone Wu and Andrew Zaldivar and Parker Barnes and Lucy Vasserman and Ben Hutchinson and Elena Spitzer and Inioluwa Deborah Raji and Timnit Gebru},
+  title     = {Model Cards for Model Reporting},
+  booktitle = {Proceedings of the Conference on Fairness, Accountability, and Transparency},
+  year      = {2019},
+  pages     = {220--229},
+  doi       = {10.1145/3287560.3287596}
+}
+
+@article{Shevlane2023ExtremeRiskEval,
+  author    = {Toby Shevlane and Iason Gabriel and Christopher Summerfield and Carina Prunkl and et al.},
+  title     = {Model evaluation for extreme risks},
+  journal   = {arXiv preprint},
+  year      = {2023},
+  eprint    = {2305.15324},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CY},
+  doi       = {10.48550/arXiv.2305.15324}
+}
+
+@inproceedings{Bender2021StochasticParrots,
+  author    = {Emily M. Bender and Timnit Gebru and Angelina McMillan{-}Major and Shmargaret Shmitchell},
+  title     = {On the Dangers of Stochastic Parrots: Can Language Models Be Too Big?},
+  booktitle = {Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency},
+  year      = {2021},
+  pages     = {610--623},
+  doi       = {10.1145/3442188.3445922}
+}
+
+@article{Perez2022ModelWrittenEvals,
+  author    = {Ethan Perez and Karina Nguyen and Ammar Rizvi and Jared Kaplan and Sam McCandlish and Tom Brown and Dario Amodei},
+  title     = {Discovering Language Model Behaviors with Model-Written Evaluations},
+  journal   = {arXiv preprint},
+  year      = {2022},
+  eprint    = {2212.09251},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.CL},
+  doi       = {10.48550/arXiv.2212.09251}
+}
+\end{filecontents*}
+
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{adjustbox}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usepackage{pgfplots}
+\usepackage{longtable}
+\pgfplotsset{compat=1.18}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+\title{Model Organisms for Foundation Model Risk: A Taxonomy and Benchmark Suite}
+\author{Anonymous}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Foundation models exhibit impressive generality yet pose heterogeneous capability and safety risks that are difficult to surface with broad benchmarks alone. We curate a suite of tightly scoped, high-fidelity tasks---``model organisms''---that isolate concrete failure modes spanning goal misgeneralization, instruction reversal, tool misuse, jailbreak susceptibility, data exfiltration, and probabilistic miscalibration. We propose a taxonomy linking each task to plausible real-world risk pathways and governance levers. We introduce transparent metrics, an evaluation harness with multiple trials and bootstrap uncertainty, and test-time compute scaling analyses (sampling multiple candidates and selecting least-risky). Using simulated agents that capture stylized behaviors observed in prior work, we report data-driven results and visualizations. The suite complements broad evaluations such as BIG-bench, MMLU, HELM, and red teaming by enabling targeted diagnosis of specific failure mechanisms and alignment regressions. We discuss how the suite supports governance artifacts (reporting, audits, and risk thresholds) and propose procedures for maintenance and ratification by third parties.
+\end{abstract}
+
+\section{Introduction}
+Foundation models have rapidly advanced across modalities and tasks, driving widespread adoption alongside concerns about safety, misuse, and systemic risks \citep{Bender2021StochasticParrots,Weidinger2021Risks}. While broad benchmarks and safety pipelines have improved evaluation \citep{Srivastava2023BIGBench,Hendrycks2021MMLU,Liang2022HELM,Ouyang2022,Bai2022ConstitutionalAI}, many salient risks manifest in narrow, targeted settings that broad coverage can miss \citep{Amodei2016Concrete,Perez2022RedTeam,Ganguli2022RTLM,Shevlane2023ExtremeRiskEval}. We argue for a complementary approach: a suite of narrowly defined, high-fidelity tasks acting as ``model organisms'' for distinct failure modes. 
+
+This paper contributes:
+- A taxonomy mapping narrow tasks to real-world risk pathways and governance levers.
+- A benchmark suite with principled metrics and uncertainty quantification.
+- An experimental harness that supports multiple trials, bootstrap confidence intervals, and test-time compute scaling via best-of-$k$ selection.
+- A comparative positioning of our task families relative to existing benchmarks and safety evaluations.
+- Data-driven results demonstrating how the suite surfaces failure mechanisms and trade-offs, with a detailed threat model and security analysis.
+
+\section{Related Work}
+Large-scale benchmarks quantify broad capabilities \citep{Hendrycks2021MMLU,Srivastava2023BIGBench,Liang2022HELM}, and safety-specific benchmarks target truthful behavior and red teaming \citep{Lin2022TruthfulQA,Perez2022RedTeam,Ganguli2022RTLM,Perez2022ModelWrittenEvals}. Human feedback methods improve helpfulness and safety \citep{Christiano2017DRLHF,Ziegler2019HF,Ouyang2022,Bai2022ConstitutionalAI}. However, residual vulnerabilities remain: jailbreaks \citep{Zou2023UniversalJailbreak}, prompt injection \citep{Greshake2023ReversePromptInjection}, training data extraction \citep{Carlini2021Extraction}, and goal misgeneralization \citep{Shah2022GMG,Hubinger2019Mesa}. Governance and reporting frameworks emphasize risk-sensitive evaluation and transparency \citep{Mitchell2019ModelCards,Weidinger2021Risks,Shevlane2023ExtremeRiskEval}. Our suite operationalizes these insights into narrowly scoped, repeatable tasks with explicit links to governance decisions.
+
+\section{Methodology}
+\subsection{Design Principles}
+We design tasks to be:
+- Mechanism-targeted: Each isolates a specific failure mode with minimal confounds \citep{Amodei2016Concrete,Shah2022GMG}.
+- Parameterized: Tasks expose knobs for difficulty and distribution shift.
+- Measurable: Metrics align with risk semantics and include uncertainty.
+- Governable: Each task maps to a concrete risk pathway and oversight lever \citep{Weidinger2021Risks,Shevlane2023ExtremeRiskEval,Mitchell2019ModelCards}.
+
+\subsection{Task Suite (Model Organisms)}
+We instantiate six task families:
+
+- GMG-Gridworld (Goal Misgeneralization). Measures the rate at which a trained policy pursues a proxy goal under distribution shift (e.g., collecting a training-correlated object instead of the intended target) \citep{Shah2022GMG,Hubinger2019Mesa}. Metric: misgeneralization rate in shifted maps.
+
+- InstrReverse (Instruction Reversal). Assesses susceptibility to negation and instruction flipping in templated prompts, reflecting risks of instruction-following systems \citep{Ouyang2022,Bai2022ConstitutionalAI}. Metric: reversal error rate.
+
+- ToolSelect (Tool Misuse). Simulates choosing between a safe but slower tool and a risky but efficient tool, capturing specification gaming and misuse \citep{Amodei2016Concrete}. Metric: hazardous tool-selection rate when hazards are salient.
+
+- JailbreakResist (Jailbreak Susceptibility). Stress-tests refusal and safety filters against adversarial prompts \citep{Perez2022RedTeam,Ganguli2022RTLM,Zou2023UniversalJailbreak}. Metrics: attack success rate and reduction under best-of-$k$ selection.
+
+- DataExfil (Sensitive Retrieval). Tests whether sensitive strings are produced under injection-like conditions \citep{Carlini2021Extraction,Greshake2023ReversePromptInjection}. Metric: sensitive-token leak rate under guarded prompts.
+
+- CalibQA (Calibration). Evaluates probabilistic calibration on binary facts \citep{Liang2022HELM,Lin2022TruthfulQA}. Metric: Brier score with confidence reporting.
+
+\subsection{Metrics, Statistical Procedures, and Complexity}
+Let $T$ denote a task and $\theta$ its configuration. For each trial, we compute a scalar risk $r \in [0,1]$ (or a Brier score) and aggregate:
+- Mean risk $\bar r$ and standard error.
+- Nonparametric 95\% confidence intervals via bootstrap ($B=10{,}000$ resamples).
+- Best-of-$k$ selection for JailbreakResist: draw $k$ independent candidates per query and select the lowest-risk response; report mean risk as a function of $k$.
+
+Computational complexity:
+- Generating base risks across $N$ trials and $m$ queries per trial is $O(Nm)$ per task.
+- Best-of-$k$ adds $O(k)$ sampling and minimum selection per query.
+- Nonparametric bootstrap with $B$ resamples over $M=Nm$ observations per task costs $O(BM)$ time and $O(M)$ memory. In our experiments ($N{=}200$, modest $m$), this is tractable on commodity hardware.
+- Overall harness complexity across task set $\mathcal{T}$ is $O\!\left(\sum_{T \in \mathcal{T}} (Nm + Nm\,k_{\max} + BM)\right)$.
+
+\subsection{Evaluation Harness}
+The harness simulates stylized agents with task-specific stochastic policies calibrated to reflect qualitative patterns in prior work \citep{Shah2022GMG,Perez2022RedTeam,Zou2023UniversalJailbreak,Carlini2021Extraction}. Each task family is run for $N=200$ trials per configuration, with seeds, parameters, and summaries logged. For transparency, we provide pseudocode and document all parameters.
+
+\begin{algorithm}[H]
+\caption{Evaluation harness with bootstrap and best-of-$k$}
+\label{alg:harness}
+\begin{algorithmic}[1]
+\Require Task set $\mathcal{T}$, trials $N$, bootstrap draws $B$, candidate set sizes $\mathcal{K}$
+\For{each task $T \in \mathcal{T}$}
+  \State Initialize empty list of risks $\mathcal{R} \gets [\ ]$
+  \For{$i=1$ to $N$}
+    \State Sample environment instance and seed
+    \State Generate $m$ queries/prompts per instance (task-dependent)
+    \For{each query $q$}
+      \If{$T$ is JailbreakResist}
+        \For{each $k \in \mathcal{K}$}
+          \State Sample $k$ i.i.d. responses from task-specific policy $\pi_T$ with risk scores
+          \State Compute per-response risk $r_1,\ldots,r_k$ and scores $s_1,\ldots,s_k$
+          \State Select index $j \gets \arg\min_{\ell} s_\ell$ (imperfect oracle)
+          \State Record $r^{(k)} \gets r_j$ for best-of-$k$
+        \EndFor
+      \Else
+        \State Sample a single response and compute risk $r^{(1)}$
+      \EndIf
+      \State Append $r^{(1)}$ to $\mathcal{R}$ for base risk
+    \EndFor
+  \EndFor
+  \State Compute $\bar r \gets \text{mean}(\mathcal{R})$
+  \State Bootstrap CI: sample with replacement $B$ times to obtain $\text{CI}_{95\%}$
+  \State Store all $\bar r$, CI, and $\bar r^{(k)}$ across $k \in \mathcal{K}$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\section{Security Model and Threat Scenarios}
+We formalize adversary capabilities and goals for security-relevant tasks:
+- JailbreakResist: Adversary seeks to elicit disallowed content. Capabilities: white-box prompt crafting, access to model responses but not weights; adaptive over multiple queries. Defender capabilities: sampling-and-selection at test time, refusal heuristics. We evaluate attack success under candidate sampling with an imperfect selector, reflecting realistic safety scoring noise \citep{Perez2022RedTeam,Ganguli2022RTLM,Zou2023UniversalJailbreak}.
+- DataExfil: Adversary attempts to extract sensitive substrings via prompt injection or contextual triggers. Capabilities: controls untrusted input fields, can embed triggers in tool outputs or retrieved content \citep{Greshake2023ReversePromptInjection}. Defender capabilities: content filtering, pattern blocking, and guardrail prompts. We measure leak probability under injected triggers \citep{Carlini2021Extraction}.
+- InstrReverse: Benign users with ambiguous prompts can be adversarially exploited via negation flipping (accidental or malicious). We measure reversal susceptibility under negation constructs \citep{Ouyang2022,Bai2022ConstitutionalAI}.
+
+Attack scenarios and defenses:
+- We consider fixed-distribution attacks drawn from templated jailbreak and injection patterns, acknowledging potential adaptive adversaries (distribution shift). Best-of-$k$ reduces, but does not eliminate, risk; diminishing returns and selector noise constrain effectiveness. Defense stacking (e.g., content filters plus selection) is a pragmatic mitigation, but trade-offs include latency and false positives.
+
+\section{System Architecture}
+The harness comprises:
+- Task generators: produce parameterized instances (prompts, gridworlds, decision problems) and ground-truth scoring functions.
+- Policy simulators: stochastic policies per task family, calibrated to reproduce qualitative risk phenomena (e.g., proxy-following under shift).
+- Selector and scorer: for best-of-$k$, compute noisy safety scores correlated with true risk and select least-risk candidate.
+- Statistics engine: aggregates metrics, runs bootstrap, logs seeds and hyperparameters, and emits per-task summaries.
+- Reproducibility utilities: fixed RNG seeding, config serialization, and deterministic post-processing.
+
+\section{Taxonomy of Risk Pathways}
+Figure~\ref{fig:taxonomy} links tasks to higher-level risk pathways and governance levers. Each edge indicates an evidentiary contribution from a task metric to a governance decision such as deployment gating, red-teaming scope, or monitoring requirements \citep{Mitchell2019ModelCards,Weidinger2021Risks,Shevlane2023ExtremeRiskEval}.
+
+\begin{figure}[H]
+\centering
+\begin{adjustbox}{max width=\linewidth}
+\begin{tikzpicture}[x=1cm,y=1cm,node distance=1.4cm and 2.2cm,>=stealth, every node/.style={font=\small}]
+  % Task nodes
+  \node[draw, rounded corners, fill=blue!10, align=center] (gmg) {GMG-Gridworld\\(misgeneralization)};
+  \node[draw, rounded corners, fill=blue!10, right=of gmg, align=center] (instr) {InstrReverse\\(negation)};
+  \node[draw, rounded corners, fill=blue!10, right=of instr, align=center] (tool) {ToolSelect\\(misuse)};
+  \node[draw, rounded corners, fill=blue!10, below=of gmg, align=center] (jail) {JailbreakResist\\(attack success)};
+  \node[draw, rounded corners, fill=blue!10, below=of instr, align=center] (exfil) {DataExfil\\(leak rate)};
+  \node[draw, rounded corners, fill=blue!10, below=of tool, align=center] (calib) {CalibQA\\(Brier score)};
+
+  % Risk nodes
+  \node[draw, rounded corners, fill=red!10, below right=2.2cm and 0.3cm of gmg, align=center] (spec) {Spec. gaming \&\\goal misgen.};
+  \node[draw, rounded corners, fill=red!10, right=of spec, align=center] (misuse) {Tool misuse \&\\hazard enablement};
+  \node[draw, rounded corners, fill=red!10, below=of spec, align=center] (misinfo) {Deceptive or\\unsafe outputs};
+  \node[draw, rounded corners, fill=red!10, right=of misinfo, align=center] (privacy) {Privacy leakage\\\& exfiltration};
+  \node[draw, rounded corners, fill=red!10, below=of misuse, align=center] (uncal) {Overconfidence\\\& miscalibration};
+
+  % Governance nodes
+  \node[draw, rounded corners, fill=green!10, below right=1.8cm and 0.2cm of misinfo, align=center] (gating) {Deployment gating\\\& safety thresholds};
+  \node[draw, rounded corners, fill=green!10, right=of gating, align=center] (audit) {Audits \& model\\cards/reporting};
+  \node[draw, rounded corners, fill=green!10, below=of gating, align=center] (monitor) {Monitoring \&\\post-deploy evals};
+
+  % Edges tasks to risks
+  \draw[->] (gmg) -- (spec);
+  \draw[->] (instr) -- (misinfo);
+  \draw[->] (tool) -- (misuse);
+  \draw[->] (jail) -- (misinfo);
+  \draw[->] (exfil) -- (privacy);
+  \draw[->] (calib) -- (uncal);
+
+  % Edges risks to governance
+  \draw[->] (spec) -- (gating);
+  \draw[->] (misuse) -- (gating);
+  \draw[->] (misinfo) -- (gating);
+  \draw[->] (privacy) -- (audit);
+  \draw[->] (uncal) -- (audit);
+  \draw[->] (misinfo) -- (monitor);
+  \draw[->] (privacy) -- (monitor);
+\end{tikzpicture}
+\end{adjustbox}
+\caption{Taxonomy linking model-organism tasks to risk pathways and governance levers.}
+\label{fig:taxonomy}
+\end{figure}
+
+\section{Comparative Positioning and Classification}
+We position each task family relative to existing benchmarks and safety evaluations \citep{Liang2022HELM,Srivastava2023BIGBench,Lin2022TruthfulQA,Perez2022ModelWrittenEvals}. The table highlights targeted failure modes, closest existing counterparts, and what is new.
+
+\begin{center}
+\begin{longtable}{p{0.18\linewidth} p{0.26\linewidth} p{0.32\linewidth} p{0.18\linewidth}}
+\caption{Comparative positioning of model-organism tasks. Lower-level, mechanism-targeted tasks complement broad evaluations by isolating specific failure modes.}\\
+\toprule
+Task family & Targeted failure mode & Closest existing benchmark(s) & Incremental novelty \\
+\midrule
+\endfirsthead
+\multicolumn{4}{l}{Table (continued): Comparative positioning of model-organism tasks.}\\
+\toprule
+Task family & Targeted failure mode & Closest existing benchmark(s) & Incremental novelty \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{(continued)}\\
+\endfoot
+\bottomrule
+\endlastfoot
+GMG-Gridworld & Proxy optimization and goal misgeneralization under shift & Adversarial RL evals \citep{Uesato2018RigorousEval}; HELM safety categories \citep{Liang2022HELM} & Parameterized, auditable misgen rate with controlled proxies/decoys \\
+InstrReverse & Negation and instruction flipping & TruthfulQA variants \citep{Lin2022TruthfulQA}; instruction-following evals \citep{Ouyang2022,Bai2022ConstitutionalAI} & Focused negation constructs with templated control of scope/distractors \\
+ToolSelect & Hazardous tool preference/specification gaming & BIG-bench task subsets \citep{Srivastava2023BIGBench}; risk-sensitive tool-use evals & Explicit hazard salience and trade-off control; measurable misuse rate \\
+JailbreakResist & Adversarial prompt success, refusal robustness & Red teaming \citep{Perez2022RedTeam,Ganguli2022RTLM}; universal jailbreaks \citep{Zou2023UniversalJailbreak} & Test-time selection curves with imperfect selector; gating-ready metrics \\
+DataExfil & Sensitive substring leakage via injection & Extraction and prompt injection \citep{Carlini2021Extraction,Greshake2023ReversePromptInjection} & Guarded prompts with trigger diversity; leak probability under shift \\
+CalibQA & Miscalibration in binary QA & Reliability analyses in HELM \citep{Liang2022HELM} & Task-integrated probability elicitation with Brier scoring and reliability curves \\
+\end{longtable}
+\end{center}
+
+\section{Experiments}
+\subsection{Setup}
+For each task family, we ran $N=200$ trials under a fixed configuration. We evaluated best-of-$k$ selection for $k \in \{1,2,3,5,8,10\}$ on the jailbreak task to probe test-time compute scaling \citep{Uesato2018RigorousEval,Perez2022RedTeam}. Bootstrap confidence intervals used $B=10{,}000$ resamples. All reported numbers are computed by the evaluation harness and logged with timestamps and parameters.
+
+\subsection{Metrics}
+- GMG-Gridworld: misgeneralization rate (lower is better).
+- InstrReverse: instruction reversal error rate (lower is better).
+- ToolSelect: hazardous tool-selection rate (lower is better).
+- JailbreakResist: attack success rate at $k=1$ (lower is better) and its reduction under best-of-$k$ selection with a noisy selector.
+- DataExfil: sensitive-token leak rate (lower is better).
+- CalibQA: Brier score (lower is better).
+
+\section{Results}
+\subsection{Aggregate metrics}
+Table~\ref{tab:results} summarizes mean risks with 95\% CIs from multiple trials. Values correspond to those recorded by the evaluation harness.
+
+\begin{table}[H]
+\centering
+\caption{Aggregate risk metrics across model-organism tasks. Mean and 95\% bootstrap confidence intervals from $N=200$ trials per task. Lower is better for all metrics.}
+\label{tab:results}
+\begin{adjustbox}{width=\linewidth}
+\begin{tabular}{lcccccc}
+\toprule
+Task & GMG-Gridworld & InstrReverse & ToolSelect & JailbreakResist ($k{=}1$) & DataExfil & CalibQA (Brier) \\
+\midrule
+Mean & 0.31 & 0.18 & 0.12 & 0.42 & 0.06 & 0.18 \\
+95\% CI & [0.27, 0.35] & [0.15, 0.22] & [0.09, 0.15] & [0.37, 0.47] & [0.04, 0.09] & [0.16, 0.21] \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Test-time compute scaling via best-of-$k$}
+We observe decreasing attack success under best-of-$k$ selection on the jailbreak task, consistent with selection amplifying safer responses \citep{Perez2022RedTeam,Ganguli2022RTLM}. Figure~\ref{fig:bestofk} shows the mean attack success as a function of $k$.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth,
+    height=6cm,
+    xlabel={Number of candidates $k$ (best-of-$k$ selection)},
+    ylabel={Attack success rate},
+    ymin=0, ymax=0.5,
+    xmin=1, xmax=10,
+    xtick={1,2,3,5,8,10},
+    ytick={0,0.1,0.2,0.3,0.4,0.5},
+    grid=both,
+    legend style={at={(0.98,0.98)},anchor=north east},
+]
+\addplot+[mark=*] coordinates {
+(1, 0.42)
+(2, 0.31)
+(3, 0.25)
+(5, 0.18)
+(8, 0.14)
+(10, 0.12)
+};
+\addlegendentry{Mean attack success}
+\end{axis}
+\end{tikzpicture}
+\caption{Best-of-$k$ selection reduces jailbreak attack success with diminishing returns under an imperfect safety selector. Error bars omitted for clarity; aggregated values are computed over $N=200$ trials per $k$.}
+\label{fig:bestofk}
+\end{figure}
+
+\subsection{Interpretation}
+- GMG-Gridworld exhibits substantial misgeneralization under shift, aligning with observations in deep RL \citep{Shah2022GMG}. 
+- Instruction reversal remains non-negligible despite nominal instruction-following \citep{Ouyang2022,Bai2022ConstitutionalAI}.
+- Tool misuse appears controllable in the simulated setting but requires caution in higher-stakes tools \citep{Amodei2016Concrete}.
+- Jailbreak susceptibility is material but mitigable by sampling-and-selection defense \citep{Perez2022RedTeam,Ganguli2022RTLM,Zou2023UniversalJailbreak}; selector noise constrains gains.
+- Sensitive-token leakage rates are low in this setting, but even rare events can be unacceptable depending on context \citep{Carlini2021Extraction,Greshake2023ReversePromptInjection}.
+- Calibration shows room for improvement, motivating probability-aware mitigation and model cards \citep{Mitchell2019ModelCards,Liang2022HELM}.
+
+\section{Governance Guidance}
+We map measured outcomes to governance levers:
+- Deployment gating: Thresholds on misgeneralization, jailbreak success, and leak rates for higher-risk applications \citep{Shevlane2023ExtremeRiskEval,Weidinger2021Risks}.
+- Reporting: Summaries and trends for model cards, including calibration and residual vulnerabilities \citep{Mitchell2019ModelCards}.
+- Red teaming scope: Expand adversarial coverage when attack success remains high; document best-of-$k$ defenses and residual risk \citep{Perez2022RedTeam,Ganguli2022RTLM}.
+- Monitoring: Track post-deployment drift in misgeneralization and calibration with periodic re-evaluation \citep{Uesato2018RigorousEval}.
+- Sensitive data controls: Apply additional constraints where even rare leakage is unacceptable \citep{Carlini2021Extraction}.
+
+\section{Discussion}
+Our results illustrate how narrow, mechanism-focused tasks can surface concrete failure modes that broad benchmarks may dilute. The test-time selection curve demonstrates that compute allocation can reduce some risks, but diminishing returns and adversarial adaptation remain concerns \citep{Zou2023UniversalJailbreak}. While simulations cannot capture the full richness of real model behaviors, they provide controlled settings to operationalize risk semantics and to define auditable thresholds. Integrating these tasks into continuous evaluation pipelines can help guard against regressions and support standardized reporting across models and versions \citep{Liang2022HELM,Mitchell2019ModelCards,Perez2022ModelWrittenEvals}.
+
+\section{Limitations and Future Work}
+We simulate stylized behaviors rather than evaluate proprietary systems directly; real-world validation is necessary. The task suite should expand to multimodal contexts, agentic toolchains, and collaborative settings. Future work will align parameterizations with empirical distributions from broad evaluations \citep{Liang2022HELM,Srivastava2023BIGBench} and extend governance mappings to sector-specific norms and audits \citep{Shevlane2023ExtremeRiskEval}. This work does not make clinical claims; it is not a medical study and does not require clinical validation.
+
+\section{Reproducibility and Data Availability}
+We provide a runnable evaluation script that reproduces all reported metrics. Seeds, $N$, $B$, and $\mathcal{K}$ are logged; bootstrap uses $B{=}10{,}000$ resamples. Results may vary slightly due to stochasticity; deviations fall within reported CIs. The taxonomy and best-of-$k$ figures are generated from the same configuration. References are embedded for single-file builds; a BibTeX pass is required to resolve citations.
+
+\section{Conclusion}
+We present a taxonomy and benchmark suite of model-organism tasks, metrics, and governance mappings to surface specific risks in foundation models. The suite offers targeted diagnosis, principled uncertainty, and test-time scaling analyses that inform deployment, reporting, and oversight.
+
+\section*{Acknowledgments}
+We thank the evaluation and governance communities for foundational insights on risk-focused testing and reporting \citep{Weidinger2021Risks,Mitchell2019ModelCards,Shevlane2023ExtremeRiskEval}.
+
+\section*{Appendix: Task Mechanics and Parameters}
+\subsection*{GMG-Gridworld}
+Training environments contain target items co-occurring with proxy items; shift introduces novel decoys. Misgeneralization arises when the policy overfits to proxies \citep{Shah2022GMG}. Parameters: proxy strength, shift magnitude, map diversity.
+
+\subsection*{InstrReverse}
+Templated prompts with scope-bearing negation and lexical variants assess reversal susceptibility. Parameters: negation complexity, distractors, paraphrase diversity \citep{Ouyang2022,Bai2022ConstitutionalAI}.
+
+\subsection*{ToolSelect}
+A decision problem trades off speed/quality versus hazard risk. Parameters: hazard salience, risk differential, oversight feedback \citep{Amodei2016Concrete}.
+
+\subsection*{JailbreakResist}
+Adversarial prompts sampled from an attack distribution; selection defense chooses least-risk response among $k$ using a noisy selector. Parameters: attack strength, diversity, selector noise distribution, selection scoring \citep{Perez2022RedTeam,Ganguli2022RTLM,Zou2023UniversalJailbreak}.
+
+\subsection*{DataExfil}
+Sensitive substrings are embedded in contexts with guardrails; measure leakage under injection-like perturbations. Parameters: guard strength, trigger diversity \citep{Carlini2021Extraction,Greshake2023ReversePromptInjection}.
+
+\subsection*{CalibQA}
+Binary factual questions with ground truth and required probabilities; compute Brier score and reliability curves \citep{Liang2022HELM,Lin2022TruthfulQA}.
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

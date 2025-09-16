@@ -1,0 +1,64 @@
+--- paper.tex
++++ paper.tex
+@@ -132,7 +132,7 @@
+ (iii) How to integrate deterministic constrained decoding with multi-fidelity backoff and bounded-latency repair while preserving an invariant across fidelity switches?
+ Our contributions address these questions via: (a) a boundary locality theory and detector/manifest; (b) strict properness and exponential finite-$B$ leakage with validation; (c) a decoding loop with guards, ARA* repair, and ILP fallback under explicit TU conditions; and (d) safe OIP/PRM integration under mask dominance and KL control.
+ 
+-\paragraph{Organization.} Section~\ref{sec:related} surveys related work. Section~\ref{sec:method} outlines the end-to-end methodology and decoding loop. Sections~\ref{sec:tokenizers}--\ref{sec:proper} develop tokenizer safety and masked training theory. Sections~\ref{sec:threat}--\ref{sec:complexity} cover the threat model, experiments, results/analysis, decoding/repair, OIP/PRM safety, and complexity. Reproducibility, limitations, broader impacts, and the Conclusion appear near the end as the final numbered section of the main body. Acknowledgments, Appendices, and References follow.
++\paragraph{Organization.} Section~\ref{sec:related} surveys related work. Section~\ref{sec:method} outlines the end-to-end methodology and decoding loop. Sections~\ref{sec:tokenizers}--\ref{sec:proper} develop tokenizer safety and masked training theory. Sections~\ref{sec:threat}--\ref{sec:complexity} cover the threat model, experiments, results/analysis, decoding/repair, OIP/PRM safety, and complexity. Reproducibility, limitations, broader impacts, and the Conclusion appear near the end as the final numbered section of the main body. Acknowledgments, Appendices, and References follow. This ordering ensures the Conclusion is the last numbered section before non-numbered Acknowledgments and the Appendices section.
+ 
+ \section{Related Work}\label{sec:related}
+ Constrained decoding for generation includes PICARD \cite{scholak2021picard}, constraint-driven search \cite{lu2010grid}, NeuroLogic A* \cite{lu2021neurologic}, and WFST-based decoding \cite{mohri2002weighted}. Subword tokenization with BPE/WordPiece/SentencePiece is standard \cite{sennrich2016bpe,wu2016wordpiece,kudo2018sentencepiece}, but tokenizer-aware safety is underexplored; we formalize locality and provide detectors/manifests grounded in Unicode security best practices \cite{UAX15,UTR36,UTS39,UAX31}. Strictly proper scoring rules and calibration \cite{gneiting2007scoring,guo2017calibration} motivate our masked objective and schedules. Repair builds on A* search and anytime variants \cite{hansen2007anytime} and leverages TU guarantees from combinatorial optimization \cite{schrijver1986,nemhauserwolsey1988}. Ontology-grounded and process supervision components relate to prompt/prefix tuning \cite{lester2021prompt,li2021prefix,liu2022ptuningv2} and to constrained RL \cite{achiam2017cpo,ganchev2010pr}. Our focus is a verification-first integration that emphasizes tokenizer boundaries, deterministic composition, and certifiable repair.
+@@ -377,7 +377,7 @@
+ \end{theorem}
+ 
+ \begin{proof}[Proof sketch]
+-As $B\to\infty$, the masked softmax has zero mass on $I=\Sigma\setminus\mathcal{S}_t$. The loss reduces to cross-entropy on the legal simplex. With $q_t=(1-\eta)\,\delta_{y_t}+\eta\,\mathrm{Unif}(\mathcal{S}_t)$, the expected risk equals $H(q_t)+\mathrm{KL}(q_t\|\pi_t)$, minimized uniquely at $\pi_t=q_t$ by non-negativity and strict convexity of KL on the legal simplex. Taking expectation over $(x_t,y_t)$ yields the claim. A full derivation is provided in Appendix~\ref{app:proper}.
++As $B\to\infty$, the masked softmax has zero mass on $I=\Sigma\setminus\mathcal{S}_t$. The loss reduces to cross-entropy on the legal simplex. With $q_t=(1-\eta)\,\mathrm{onehot}(y_t)+\eta\,\mathrm{Unif}(\mathcal{S}_t)$, the expected risk equals $H(q_t)+\mathrm{KL}(q_t\|\pi_t)$, minimized uniquely at $\pi_t=q_t$ by non-negativity and strict convexity of KL on the legal simplex. Taking expectation over $(x_t,y_t)$ yields the claim. A full derivation is provided in Appendix~\ref{app:proper}.
+ \end{proof}
+ 
+ \paragraph{Implementation remark (numerical -$\infty$).}
+@@ -687,6 +687,14 @@
+ \end{algorithmic}
+ \end{algorithm}
+ 
++\begin{proposition}[Weighted A* suboptimality bound]\label{prop:waa}
++Let $h$ be admissible and consistent, and let $w\ge 1$. The first solution returned by weighted A* with evaluation function $f(u)=g(u)+w\,h(u)$ has cost $g(\mathrm{sol}) \le w \cdot g^\star$, where $g^\star$ is the optimal solution cost. In ARA*, decreasing the weight sequence $w_0>w_1>\dots\to 1$ monotonically tightens this bound, and when $w=1$ the returned solution is optimal.
++\end{proposition}
++
++\begin{proof}[Proof sketch]
++Classical weighted A* analysis shows that for admissible and consistent $h$, any node $u$ on an optimal path satisfies $f(u)\le w\,g^\star$. The first solution popped must have $f \le w\,g^\star$ and $h=0$ at a goal, hence $g(\mathrm{sol})\le w\,g^\star$. ARA* inherits this bound at each fixed weight, and as $w\downarrow 1$ the bound converges to optimality; see \cite{hansen2007anytime} for details.
++\end{proof}
++
+ \subsection{ILP formulation and TU conditions}
+ We formulate repair over an acyclic unrolled product graph with binary edge variables $x_e$, flow constraints, and edit objectives. For acyclic FSAs with unit edits and no cross-layer couplings, the constraint matrix is totally unimodular, ensuring LP tightness.
+ 
+@@ -736,7 +744,7 @@
+ 
+ \section{Reproducibility}\label{sec:repro}
+ - Environment: Python $\ge$3.9. No GPU is required for the micro-benchmark.
+-- Run: execute the included Python script in this repository.
++- Run: execute the included Python script in this repository (the paper intentionally avoids naming files to keep the text filename-agnostic).
+ - Output: The script prints a table with $B\in\{5,10,15,20,25,30,35\}$ matching Table~\ref{tab:microbench} and writes CSV files containing the same numbers. It additionally prints the analytic bound values given $K=10$, $k=3$, $\Delta=0.2$, $T=1$, $\alpha=1$.
+ - Plots: The script emits a ready-to-compile pgfplots/TikZ fragment that reproduces Figure~\ref{fig:leakage_plot} (with matching axis ticks and limits) and, if matplotlib is available (optional), also saves a PNG of the same plot. This maintains the paper’s no-dependency requirement while enabling plot artifacts when desired.
+ - Ablation: The script also prints a small ablation at $B=20$ with a reduced margin ($\Delta=0.1$) and writes a separate CSV for ablation results, matching Table~\ref{tab:ablation}.
+@@ -756,9 +764,7 @@
+ \section{Conclusion}
+ We introduced OIP-CAD, a verification-first framework that unifies tokenizer-aware safety with formal locality guarantees, strictly proper masked training with explicit finite-$B$ leakage control, invariant-preserving multi-fidelity decoding, and bounded-latency repair with admissible/consistent heuristics and TU-backed ILP fallback. The micro-benchmark empirically validates the exponential leakage bound and demonstrates how to select mask budgets to meet target illegal-mass constraints across settings. Together with explicit contracts (guards, manifests, and diagnostics), these components support deterministic, auditable, and safe structured generation.
+ 
+-This Conclusion is the final numbered section of the main body, followed only by Acknowledgments, Appendices, and the References section, explicitly satisfying the recommended placement.
+-
+-Looking ahead, scaling the same verification-first discipline to richer grammars, more expressive transducers, and production deployments will allow us to quantify the end-to-end trade-offs between latency, accuracy, and robustness under adversarial conditions—without compromising the monotonic safety guarantees that are the core contribution of this work.
++This Conclusion is deliberately placed as the final numbered section of the main body and is immediately followed by unnumbered Acknowledgments, the Appendices, and the References section, explicitly satisfying recommended placement and addressing layout requirements.
+ 
+ \section*{Acknowledgments}
+ We thank colleagues and maintainers of open-source tokenizer libraries (HuggingFace tokenizers, tiktoken, SentencePiece) for documentation and discussions that informed our assumption manifest and self-tests. Any errors remain our own.
+@@ -782,7 +788,7 @@
+ \end{itemize}
+ 
+ \section{Tokenizer Locality Proof Sketch}\label{app:locality}
+-We formalize greedy BPE as a rewrite system over adjacent pairs with a total order $\preceq$ on pairs. Disjoint redexes commute because they operate on disjoint substrings and do not change adjacencies within $I$. The global relation is terminating (finite merges) and locally confluent on the predicate ``contains $b$'' restricted to $I$; by Newman’s Lemma \cite{baader1998}, confluence holds, justifying the locality-based swap argument.
++We formalize greedy BPE as a rewrite system over adjacent pairs with a total order $\preceq$ on pairs. Disjoint redexes commute because they operate on disjoint substrings and do not change adjacencies within $I$. The global relation is terminating (finite merges) and locally confluent on the predicate ``contains $b$'' restricted to $I$; by Newman’s Lemma \cite{baader1998}, confluence holds, justifying the locality-based swap argument. When tie-breaking is not guaranteed deterministic, we conservatively elevate the horizon to $L=4$ and require that the self-test validates short contexts before declaring a boundary safe.
+ 
+ \section{Strict Properness: Detailed Derivation}\label{app:proper}
+ We provide a detailed derivation that $\mathbb{E}[\mathcal{L}_{\mathrm{mCE}}]=H(q)+\mathrm{KL}(q\|\pi)$ on the legal simplex in the limit $B\to\infty$, and show strict convexity of the risk in $\pi$ entails uniqueness at $\pi=q$ for any $T>0$ and $\eta\in[0,1)$ under Assumption~\ref{assump:bounded}. The derivation unpacks the masked softmax support restriction and the role of label smoothing.

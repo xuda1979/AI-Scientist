@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-10T10:40:01.194378",
+  "file": "output\\ARH\\paper.tex",
+  "backup": "output\\ARH\\backups\\paper.tex_pre_revision_104001",
+  "metrics": {
+    "word_count": 6398,
+    "char_count": 54744,
+    "section_count": 23,
+    "subsection_count": 6,
+    "figure_count": 2,
+    "table_count": 3,
+    "equation_count": 10,
+    "citation_count": 0,
+    "paragraph_count": 88,
+    "page_estimate": 25.592
+  }
+}

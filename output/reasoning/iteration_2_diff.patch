@@ -1,0 +1,163 @@
+--- paper.tex
++++ paper.tex
+@@ -102,7 +102,7 @@
+ 
+ Our design emphasizes verifiability: each component has explicit contracts, testable assumptions, and measurable certificates. We prioritize monotonic safety (no ``unsafe success'') and deterministic execution where possible to improve reproducibility.
+ 
+-\begin{figure}[htbp]
++\begin{figure}[h]
+ \centering
+ \vspace{0.5em}
+ \resizebox{\linewidth}{!}{%
+@@ -132,7 +132,7 @@
+ (iii) How to integrate deterministic constrained decoding with multi-fidelity backoff and bounded-latency repair while preserving an invariant across fidelity switches?
+ Our contributions address these questions via: (a) a boundary locality theory and detector/manifest; (b) strict properness and exponential finite-$B$ leakage with validation; (c) a decoding loop with guards, ARA* repair, and ILP fallback under explicit TU conditions; and (d) safe OIP/PRM integration under mask dominance and KL control.
+ 
+-\paragraph{Organization.} Section~\ref{sec:related} surveys related work. Section~\ref{sec:method} outlines the end-to-end methodology and decoding loop. Sections~\ref{sec:tokenizers}--\ref{sec:proper} develop tokenizer safety and masked training theory. Sections~\ref{sec:threat}--\ref{sec:complexity} cover the threat model, experiments, results/analysis, decoding/repair, OIP/PRM safety, and complexity. Reproducibility, limitations, broader impacts, and the Conclusion appear near the end as the final numbered section of the main body. Acknowledgments, Appendices, and References follow. This ordering ensures the Conclusion is the last numbered section before non-numbered Acknowledgments and the Appendices section.
++\paragraph{Organization.} Section~\ref{sec:related} surveys related work. Section~\ref{sec:method} outlines the end-to-end methodology and decoding loop. Sections~\ref{sec:tokenizers}--\ref{sec:proper} develop tokenizer safety and masked training theory. Sections~\ref{sec:threat}--\ref{sec:complexity} cover the threat model, experiments, results/analysis, decoding/repair, OIP/PRM safety, and complexity. Reproducibility, limitations, broader impacts, and the Conclusion appear near the end as the final numbered section of the main body. Acknowledgments, Appendices, and References follow, with References at the very end. To support reading flow and comply with contextual placement guidelines, all figures, tables, and algorithms are placed in the subsection following their first mention using [h] or [ht] placement.
+ 
+ \section{Related Work}\label{sec:related}
+ Constrained decoding for generation includes PICARD \cite{scholak2021picard}, constraint-driven search \cite{lu2010grid}, NeuroLogic A* \cite{lu2021neurologic}, and WFST-based decoding \cite{mohri2002weighted}. Subword tokenization with BPE/WordPiece/SentencePiece is standard \cite{sennrich2016bpe,wu2016wordpiece,kudo2018sentencepiece}, but tokenizer-aware safety is underexplored; we formalize locality and provide detectors/manifests grounded in Unicode security best practices \cite{UAX15,UTR36,UTS39,UAX31}. Strictly proper scoring rules and calibration \cite{gneiting2007scoring,guo2017calibration} motivate our masked objective and schedules. Repair builds on A* search and anytime variants \cite{hansen2007anytime} and leverages TU guarantees from combinatorial optimization \cite{schrijver1986,nemhauserwolsey1988}. Ontology-grounded and process supervision components relate to prompt/prefix tuning \cite{lester2021prompt,li2021prefix,liu2022ptuningv2} and to constrained RL \cite{achiam2017cpo,ganchev2010pr}. Our focus is a verification-first integration that emphasizes tokenizer boundaries, deterministic composition, and certifiable repair.
+@@ -147,7 +147,7 @@
+ \end{equation}
+ with $\tau>0$ controlling the warmup length, $B_{\min}$ chosen to avoid early hard barriers, and $B_{\max}$ chosen to satisfy the worst-case target $\eta_{\max}$ via Corollary~\ref{cor:budget} using conservative $(K{-}k)$ and $\Delta$ estimates. In practice, we update $B_t$ per task bucket using running estimates of $k$ and $\Delta$.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{Adaptive mask budget schedule with per-bucket statistics}
+ \label{alg:budget_schedule}
+ \begin{algorithmic}[1]
+@@ -166,7 +166,7 @@
+ \subsection{Decoding: guard-first constrained generation with bounded repair}
+ At inference, we compose the tokenizer guard, subsequential transducer $\mathcal{B}$, and grammar $\mathcal{A}/\mathcal{G}$ to produce legal-next-token masks. Algorithm~\ref{alg:decode_loop} details the decoding loop with guards, fidelity switching, and repair. When the no-valid-token condition arises, we first attempt shadow byte-level backoff under the guard to resynchronize; otherwise we trigger bounded ARA* repair with a latency cap and an ILP fallback when TU conditions hold. OIP and PRM bonuses are strictly applied post-mask and within a KL trust region.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{OIP-CAD decoding loop with guards, multi-fidelity backoff, and bounded repair}
+ \label{alg:decode_loop}
+ \begin{algorithmic}[1]
+@@ -242,7 +242,7 @@
+ \subsection{Manifest of assumptions and policies}\label{sec:manifest}
+ We introduce the tokenizer manifest and policies in Tables~\ref{tab:manifest} and \ref{tab:manifest-pt2} before presenting the self-test routine that consumes them.
+ 
+-\begin{table}[htbp]
++\begin{table}[h]
+ \caption[Tokenizer manifest (part 1)]{Manifest of tokenizer behaviors and policies (part 1 of 2). A runtime self-test reads version/flags and caches a verdict; wide policy text is wrapped within the page border.}
+ \label{tab:manifest}
+ \centering
+@@ -262,7 +262,7 @@
+ \vspace{0.5em}
+ \end{table}
+ 
+-\begin{table}[htbp]
++\begin{table}[h]
+ \caption[Tokenizer manifest (part 2)]{Manifest of tokenizer behaviors and policies (part 2; continued).}
+ \label{tab:manifest-pt2}
+ \centering
+@@ -285,7 +285,7 @@
+ \subsection{Runtime self-test algorithm}\label{sec:selftest}
+ We codify the manifest and guards in an explicit, auditable self-test executed at initialization and cached with version stamps. Algorithm~\ref{alg:selftest} lists the checks and the conservative fallbacks that are enforced when assumptions do not hold.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{RuntimeTokenizerSelfTest: versioned guard and policy checks}
+ \label{alg:selftest}
+ \begin{algorithmic}[1]
+@@ -314,7 +314,7 @@
+ \subsection{Merge-DAG construction pseudocode}\label{sec:mergedag}
+ To aid implementation of the detector and self-test, we provide a high-level pseudocode for building $G_\tau$ up to horizon $L$ and checking safety for a boundary set $\mathcal{R}$. Algorithm~\ref{alg:mergedag} formalizes this procedure.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{BuildMergeDAGAndCheckSafety: horizon-$L$ Merge-DAG and boundary checks}
+ \label{alg:mergedag}
+ \begin{algorithmic}[1]
+@@ -331,6 +331,7 @@
+   \ForAll{adjacent token-boundary pairs inside $x$}
+     \If{pair is mergeable under $\tau$'s total order and flags}
+       \State Let $y$ be the merged byte string; add edge $(x\to y)$ to $E$
++    \If{not mergeable} \State continue \EndIf
+     \EndIf
+   \EndFor
+ \EndFor
+@@ -456,7 +457,7 @@
+ \subsection{Results}\label{sec:results}
+ Table~\ref{tab:microbench} reports the empirical illegal mass alongside the analytic bound across budgets $B$, and Figure~\ref{fig:leakage_plot} visualizes the exponential decay with $B$ on a log scale.
+ 
+-\begin{table}[htbp]
++\begin{table}[h]
+ \caption[Finite-B leakage micro-benchmark]{Controlled micro-benchmark validating Theorem~\ref{thm:finiteB} over budgets $B$. Values match the included script. The analytic curve consistently upper-bounds the exact illegal mass with a nearly constant multiplicative slack.}
+ \label{tab:microbench}
+ \centering
+@@ -480,7 +481,7 @@
+ \vspace{0.5em}
+ \end{table}
+ 
+-\begin{figure}[htbp]
++\begin{figure}[h]
+ \centering
+ \vspace{0.5em}
+ \begin{tikzpicture}
+@@ -514,7 +515,7 @@
+ \subsection{Ablation: effect of margin $\Delta$}\label{sec:ablation}
+ We vary the logit margin $\Delta$ by increasing the best illegal logit from $0.0$ to $0.1$ (keeping all other logits fixed), thereby decreasing $\Delta$ from $0.2$ to $0.1$. At a fixed budget $B=20$ with $K=10$, $k=3$, $\alpha=T=1$, the empirical illegal mass slightly increases while the analytic upper bound grows according to Theorem~\ref{thm:finiteB}. This scenario reflects realistic cases where near-legal tokens narrow the logit margin; the bound’s explicit $\Delta$ dependence ensures mask budgets can be prudently adjusted. Table~\ref{tab:ablation} summarizes the comparison.
+ 
+-\begin{table}[htbp]
++\begin{table}[h]
+ \caption[Ablation at fixed budget]{Ablation at $B=20$: reducing the margin $\Delta$ increases the illegal mass and slack factor in a predictable way. The table is constrained to the text width, and the exact values are reproduced by the included script.}
+ \label{tab:ablation}
+ \centering
+@@ -549,7 +550,7 @@
+ \subsection{Sanity checks: $L_1$ gap and gradient leakage}
+ To make the consequences of Theorem~\ref{thm:finiteB}(ii, iii) visible without running code, Table~\ref{tab:sanity} reports representative values (two budgets). The $L_1$ gap closely matches twice the illegal mass (analytical identity), and the maximum illegal gradient magnitude is safely below the analytic bound.
+ 
+-\begin{table}[htbp]
++\begin{table}[h]
+ \caption[Sanity checks of finite-B consequences]{Sanity checks at two budgets verifying Theorem~\ref{thm:finiteB}(ii, iii). Values match the included script (minor rounding differences are due to numerical precision; the analytical identities hold exactly).}
+ \label{tab:sanity}
+ \centering
+@@ -572,7 +573,7 @@
+ \subsection{Masks and complexity}
+ Masks derive from products $\mathcal{P}=\mathcal{A}\otimes\mathcal{B}$ (FSA) or stack products with $\mathcal{G}$ (PDA). With $\epsilon$-closure summaries, per-step worst-case is $O(d_{\max}+c_\epsilon)$ where $d_{\max}$ is maximal out-degree and $c_\epsilon$ the closure update cost. Algorithm~\ref{alg:mask_build} outlines the construction of legal-next-token masks.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{BuildMaskFromProduct: constructing legal-next-token masks}
+ \label{alg:mask_build}
+ \begin{algorithmic}[1]
+@@ -601,7 +602,7 @@
+ \subsection{Shadow byte-level backoff and resynchronization}
+ We run a bounded-depth shadow search in byte space to emit guarded bytes that restore a valid next-token set, with caps to avoid degeneracy. Algorithm~\ref{alg:shadow_backoff} specifies the resynchronization procedure.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{Shadow byte-level backoff with resynchronization and caps}
+ \label{alg:shadow_backoff}
+ \begin{algorithmic}[1]
+@@ -656,7 +657,7 @@
+ \subsection{ARA* repair pseudocode and properties}
+ We use an anytime repair variant with a decreasing weight schedule $w_0>w_1>\dots\to 1$. The search maintains suboptimality bounds that tighten as $w\downarrow 1$ and is terminated under a fixed expansion or latency budget. Algorithm~\ref{alg:arastar} shows the repair loop.
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{ARAStarRepair: bounded-latency minimal-edit repair (anytime A*)}
+ \label{alg:arastar}
+ \begin{algorithmic}[1]
+@@ -713,7 +714,7 @@
+ Masking after adding $b$ zeroes out probability for illegal tokens regardless of PRM bonuses, ensuring support inclusion. The KL trust region bounds $\mathrm{TV}(\pi(z),\pi(z{+}b))\le \sqrt{2\rho}$ by Pinsker, limiting PRM-induced drift on legal probabilities.
+ \end{proof}
+ 
+-\begin{algorithm}[htbp]
++\begin{algorithm}[h]
+ \caption{KL-constrained PRM bonus application (post-mask, trust-region safe)}
+ \label{alg:prm_kl}
+ \begin{algorithmic}[1]
+@@ -764,7 +765,7 @@
+ \section{Conclusion}
+ We introduced OIP-CAD, a verification-first framework that unifies tokenizer-aware safety with formal locality guarantees, strictly proper masked training with explicit finite-$B$ leakage control, invariant-preserving multi-fidelity decoding, and bounded-latency repair with admissible/consistent heuristics and TU-backed ILP fallback. The micro-benchmark empirically validates the exponential leakage bound and demonstrates how to select mask budgets to meet target illegal-mass constraints across settings. Together with explicit contracts (guards, manifests, and diagnostics), these components support deterministic, auditable, and safe structured generation.
+ 
+-This Conclusion is deliberately placed as the final numbered section of the main body and is immediately followed by unnumbered Acknowledgments, the Appendices, and the References section, explicitly satisfying recommended placement and addressing layout requirements.
++As a final outlook, we anticipate that certified tokenizer guards and principled finite-budget training will become standard practice for safety-critical structured generation. Extending our invariant-preserving decoding and repair to richer grammars and large-scale, heterogeneous task suites—while maintaining deterministic, auditable execution—remains a key next step. Throughout, we intentionally place this Conclusion as the final numbered section of the main body, immediately preceding Acknowledgments, the Appendices, and the References, satisfying placement and layout guidelines.
+ 
+ \section*{Acknowledgments}
+ We thank colleagues and maintainers of open-source tokenizer libraries (HuggingFace tokenizers, tiktoken, SentencePiece) for documentation and discussions that informed our assumption manifest and self-tests. Any errors remain our own.

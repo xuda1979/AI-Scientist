@@ -1,0 +1,26 @@
+# Results generated: 2025-09-10T15:32:38.291151+00:00
+# Task mixture base per-sample correctness probabilities and weights:
+#   p=0.750, w=0.10
+#   p=0.650, w=0.20
+#   p=0.600, w=0.30
+#   p=0.550, w=0.25
+#   p=0.520, w=0.15
+# Budgets evaluated: 1,2,4,8,16
+# Number of synthetic examples assumed for CI reporting: 50000
+method,budget,accuracy,stderr_approx
+EqualSC,1,0.600500,0.002190
+EqualSC,2,0.600500,0.002190
+EqualSC,4,0.645610,0.002139
+EqualSC,8,0.699662,0.002050
+EqualSC,16,0.759460,0.001911
+CARD,1,0.600500,0.002190
+CARD,2,0.633598,0.002155
+CARD,4,0.673243,0.002098
+CARD,8,0.719707,0.002009
+CARD,16,0.772976,0.001873
+metric,budget,value
+ECE_EqualSC,1,0.029436
+ECE_EqualSC,2,0.018442
+ECE_EqualSC,4,0.055720
+ECE_EqualSC,8,0.104909
+ECE_EqualSC,16,0.161961

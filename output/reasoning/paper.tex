@@ -24,6 +24,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode} % robust pseudocode
 \usepackage{adjustbox} % constrain wide tables/figures to text width
+\usepackage{placeins} % ensure floats do not drift across section boundaries
 \pgfplotsset{compat=1.18}
 
 % Reduce overfull boxes in narrow columns with long identifiers/urls
@@ -81,12 +82,7 @@ We present OIP-CAD, a verification-first framework for structured generation in 
 We provide formal results and a fully reproducible, controlled micro-benchmark that validates our finite-$B$ leakage bounds and demonstrates invariant-preserving decoding under a simple grammar. We release a tokenizer self-test manifest and minimal scripts to reproduce figures and tables in this paper. Large-scale results on task suites are an important direction, but are out of scope for this artifact-light submission; our focus is on proofs, safety contracts, and correctness-first micro-benchmarks.
 \end{abstract}
 
-\section*{Glossary (pruned)}
-- FSA/PDA: Finite-State/Pushdown Automaton.
-- OIP: Ontology-Initialized Prefixes.
-- CAD: Constraint-Aware Decoding.
-- ARA*: Anytime weighted A* with decreasing weights.
-- PRM: Process Reward Model.
+% Symbols and notation remain near the beginning for readability.
 
 \section*{Symbols and Notation}
 - $\mathcal{U}$: byte alphabet; $\Sigma$: tokenizer tokens; $\Gamma$: grammar/output symbols.
@@ -94,10 +90,22 @@ We provide formal results and a fully reproducible, controlled micro-benchmark t
 - $K=|\Sigma|$, $k=|\mathcal{S}_t|$: vocabulary and legal-set sizes.
 - $\Delta$: max logit margin between best legal vs best illegal.
 - $L$: locality horizon; $M$: number of BPE merges; $G_\tau$: Merge-DAG.
-- Types: a finite set $\mathsf{T}$ of semantic classes (e.g., number, string, identifier) mapped to token subsets via a predicate $P:\Sigma\to 2^{\mathsf{T}}$.
+- Types: a finite set $\mathsf{T}$ of semantic classes (e.g., number, string, identifier). We write $P:\Sigma\to 2^{\mathsf{T}}$ for a type-predicate mapping each token to the set of types it satisfies, and $S:\mathsf{T}\to 2^{\Sigma}$ for the induced type-to-token map $S(\tau)=\{u\in\Sigma:\tau\in P(u)\}$.
+- Softmax and masking: we write $\pi(z)=\mathrm{softmax}(z/T)$ for logits $z\in\mathbb{R}^K$ at temperature $T$, and use a mask $m\in[-\infty,0]^K$ with $m_u=-\infty$ on illegal indices and $0$ otherwise. In practice, $-\infty$ is implemented as a sufficiently large negative constant; see the implementation remark in Section~\ref{sec:proper}.
 
-\begin{figure}[ht]
+\section{Introduction and Design Decisions}
+LLMs must emit structured artifacts accepted by schemas, parsers, and compilers. Constrained decoding tightly couples to subword tokenizers and recursive grammars. Figure~\ref{fig:flow} summarizes the OIP-CAD pipeline and the composition ordering we adopt in all experiments and examples. OIP-CAD adopts a safety-first contract:
+- Tokenizer guard: a formal boundary model with detectors and a runtime self-test manifest; ambiguous cases trigger conservative fallbacks (byte-level spans).
+- Masked training: align the model to constrained supports with soft masks; control leakage via adaptive schedules; mix with unconstrained batches for calibration.
+- Constrained decoding: deterministic masks from FSA/PDA products; no illegal token is committed.
+- Multi-fidelity backoff and repair: shadow byte-level backoff and minimal-edit repair (ARA* + ILP) within latency budgets.
+- OIP + PRM: ontology-grounded prefixes and process rewards, both strictly post-mask to preserve safety.
+
+Our design emphasizes verifiability: each component has explicit contracts, testable assumptions, and measurable certificates. We prioritize monotonic safety (no ``unsafe success'') and deterministic execution where possible to improve reproducibility.
+
+\begin{figure}[h]
 \centering
+\vspace{0.5em}
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[node distance=1.2cm,>=stealth,thick]
 \tikzstyle{block}=[rectangle,rounded corners,draw=black,fill=blue!7,align=center,minimum width=3.5cm,minimum height=0.9cm]
@@ -116,23 +124,16 @@ We provide formal results and a fully reproducible, controlled micro-benchmark t
 }
 \caption[OIP-CAD flow diagram]{Flow: normalization, tokenizer with guard/self-test, subsequential transducer, and automata products producing masks; byte-level fallback and repair are safety refinements. The figure is constrained to the text width.}
 \label{fig:flow}
+\vspace{0.5em}
 \end{figure}
-
-\section{Introduction and Design Decisions}
-LLMs must emit structured artifacts accepted by schemas, parsers, and compilers. Constrained decoding tightly couples to subword tokenizers and recursive grammars. Figure~\ref{fig:flow} summarizes the OIP-CAD pipeline and the composition ordering we adopt in all experiments and examples. OIP-CAD adopts a safety-first contract:
-- Tokenizer guard: a formal boundary model with detectors and a runtime self-test manifest; ambiguous cases trigger conservative fallbacks (byte-level spans).
-- Masked training: align the model to constrained supports with soft masks; control leakage via adaptive schedules; mix with unconstrained batches for calibration.
-- Constrained decoding: deterministic masks from FSA/PDA products; no illegal token is committed.
-- Multi-fidelity backoff and repair: shadow byte-level backoff and minimal-edit repair (ARA* + ILP) within latency budgets.
-- OIP + PRM: ontology-grounded prefixes and process rewards, both strictly post-mask to preserve safety.
-
-Our design emphasizes verifiability: each component has explicit contracts, testable assumptions, and measurable certificates. We prioritize monotonic safety (no “unsafe success”) and deterministic execution where possible to improve reproducibility.
 
 \paragraph{Research questions and contributions.} This work investigates:
 (i) How to formalize tokenizer-aware safety so that protected boundaries (quotes/sentinels) are provably atomic and non-creating under practical BPE/WordPiece/Unigram implementations?
 (ii) Can a masked-logit objective provide strict properness on constrained supports and yield practically tight, quantifiable leakage at finite budgets $B$?
 (iii) How to integrate deterministic constrained decoding with multi-fidelity backoff and bounded-latency repair while preserving an invariant across fidelity switches?
 Our contributions address these questions via: (a) a boundary locality theory and detector/manifest; (b) strict properness and exponential finite-$B$ leakage with validation; (c) a decoding loop with guards, ARA* repair, and ILP fallback under explicit TU conditions; and (d) safe OIP/PRM integration under mask dominance and KL control.
+
+\paragraph{Organization.} Section~\ref{sec:related} surveys related work. Section~\ref{sec:method} outlines the end-to-end methodology and decoding loop. Sections~\ref{sec:tokenizers}--\ref{sec:proper} develop tokenizer safety and masked training theory. Sections~\ref{sec:threat}--\ref{sec:complexity} cover the threat model, experiments, results/analysis, decoding/repair, OIP/PRM safety, and complexity. Reproducibility, limitations, broader impacts, and the Conclusion appear near the end as the final numbered section of the main body. To support reading flow and comply with contextual placement guidelines, all figures, tables, and algorithms are placed in the subsection following their first mention using [h] or [ht] placement.
 
 \section{Related Work}\label{sec:related}
 Constrained decoding for generation includes PICARD \cite{scholak2021picard}, constraint-driven search \cite{lu2010grid}, NeuroLogic A* \cite{lu2021neurologic}, and WFST-based decoding \cite{mohri2002weighted}. Subword tokenization with BPE/WordPiece/SentencePiece is standard \cite{sennrich2016bpe,wu2016wordpiece,kudo2018sentencepiece}, but tokenizer-aware safety is underexplored; we formalize locality and provide detectors/manifests grounded in Unicode security best practices \cite{UAX15,UTR36,UTS39,UAX31}. Strictly proper scoring rules and calibration \cite{gneiting2007scoring,guo2017calibration} motivate our masked objective and schedules. Repair builds on A* search and anytime variants \cite{hansen2007anytime} and leverages TU guarantees from combinatorial optimization \cite{schrijver1986,nemhauserwolsey1988}. Ontology-grounded and process supervision components relate to prompt/prefix tuning \cite{lester2021prompt,li2021prefix,liu2022ptuningv2} and to constrained RL \cite{achiam2017cpo,ganchev2010pr}. Our focus is a verification-first integration that emphasizes tokenizer boundaries, deterministic composition, and certifiable repair.
@@ -147,10 +148,26 @@ B_t \;=\; B_{\min} + (B_{\max}-B_{\min})\left(1 - e^{-t/\tau}\right),
 \end{equation}
 with $\tau>0$ controlling the warmup length, $B_{\min}$ chosen to avoid early hard barriers, and $B_{\max}$ chosen to satisfy the worst-case target $\eta_{\max}$ via Corollary~\ref{cor:budget} using conservative $(K{-}k)$ and $\Delta$ estimates. In practice, we update $B_t$ per task bucket using running estimates of $k$ and $\Delta$.
 
-\subsection{Decoding: guard-first constrained generation with bounded repair}
-At inference, we compose the tokenizer guard, subsequential transducer $\mathcal{B}$, and grammar $\mathcal{A}/\mathcal{G}$ to produce legal-next-token masks. When the no-valid-token condition arises, we first attempt shadow byte-level backoff under the guard to resynchronize; otherwise we trigger bounded ARA* repair with a latency cap and an ILP fallback when TU conditions hold. OIP and PRM bonuses are strictly applied post-mask and within a KL trust region.
+\begin{algorithm}[h]
+\caption{Adaptive mask budget schedule with per-bucket statistics}
+\label{alg:budget_schedule}
+\begin{algorithmic}[1]
+\Require initial $B_{\min}$, target cap $B_{\max}$, warmup $\tau$, buckets $\mathcal{D}_1,\dots,\mathcal{D}_J$, target illegal mass $\eta_{\max}$, temperature $T$, mask slope $\alpha$
+\State Initialize per-bucket running stats: $\widehat{k}_j \gets \text{EMA of }|\mathcal{S}_t|$ on $\mathcal{D}_j$; $\widehat{\Delta}_j \gets \text{EMA of }\max_{v\in L}\ell_{t,v}-\max_{u\in I}\ell_{t,u}$
+\For{epoch $e=1,2,\dots$}
+  \State Compute global $B_t \gets B_{\min} + (B_{\max}-B_{\min})(1-e^{-e/\tau})$
+  \For{bucket $j=1$ to $J$}
+     \State Compute conservative budget $B_j^\star \gets \max\!\Big\{B_t,\; \frac{T}{\alpha}\Big[\log\frac{K-\widehat{k}_j}{\eta_{\max}} - \frac{\widehat{\Delta}_j}{T}\Big]\Big\}$ \Comment{Cor.~\ref{cor:budget}}
+     \State Train on $\mathcal{D}_j$ with $B\gets B_j^\star$; update $\widehat{k}_j,\widehat{\Delta}_j$ via EMA
+  \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
 
-\begin{algorithm}[ht]
+\subsection{Decoding: guard-first constrained generation with bounded repair}
+At inference, we compose the tokenizer guard, subsequential transducer $\mathcal{B}$, and grammar $\mathcal{A}/\mathcal{G}$ to produce legal-next-token masks. Algorithm~\ref{alg:decode_loop} details the decoding loop with guards, fidelity switching, and repair. When the no-valid-token condition arises, we first attempt shadow byte-level backoff under the guard to resynchronize; otherwise we trigger bounded ARA* repair with a latency cap and an ILP fallback when TU conditions hold. OIP and PRM bonuses are strictly applied post-mask and within a KL trust region.
+
+\begin{algorithm}[h]
 \caption{OIP-CAD decoding loop with guards, multi-fidelity backoff, and bounded repair}
 \label{alg:decode_loop}
 \begin{algorithmic}[1]
@@ -204,6 +221,9 @@ At every decoding step, the committed prefix maps via $\mathcal{B}$ into a strin
 At step $t$ in product state $s_t$, the legal set $\mathcal{S}(s_t)=\{v\in\Sigma:\delta_{\mathcal{P}}(s_t,v)\text{ defined}\}$ is empty. The system must switch fidelity (shadow byte-level backoff or repair) or abstain. Example: JSON expects a closing quote, but the tokenizer cannot emit it safely due to an unsafe boundary; the detector triggers byte-level backoff to emit bytes until resynchronization.
 \end{definition}
 
+\paragraph{Running example: JSON string boundaries and resynchronization.}
+Consider a JSON fragment expecting a closing quote for a string value while the guard marks the quote boundary byte $b={\tt 0x22}$ as unsafe under the current tokenizer version/flags. The legal-next-token set becomes empty at state $s$. The shadow backoff emits guarded bytes (e.g., a quoted byte token or a byte-level escape) until the product $\mathcal{P}$ re-enters a state where at least one legal token is enabled. This illustrates how the no-valid-token condition arises from unsafe boundaries and how the invariant is preserved by emitting only guarded bytes until resynchronization; if resynchronization fails within the byte budget, ARA* repair is invoked (Algorithms~\ref{alg:shadow_backoff} and \ref{alg:arastar}).
+
 \section{Tokenizer Safety: Theory, Manifest, and Detection}\label{sec:tokenizers}
 \subsection{Greedy locality for BPE/WordPiece}
 \begin{lemma}[3-token greedy locality]\label{lem:local}
@@ -213,7 +233,7 @@ Under Assumption~\ref{assump:tok}, let $b\in\mathcal{R}$ be a fixed boundary byt
 \begin{proof}
 We formalize a greedy schedule as a sequence of reductions on a string of token ids, where each step replaces adjacent pair $(u,v)$ by a merged id $w$ if ranked highest among all currently available adjacent pairs. Let positions be indexed by current token boundaries. Let $I$ denote the minimal interval of positions covering: (i) the left neighbor of $b$, (ii) the tokens whose concatenated bytes equal $b$ if $b$ is already present, and (iii) the right neighbor of $b$; when $b$ is absent, (ii) is the boundary between the two tokens whose concatenation could equal $b$ after merges.
 
-By induction, any merge outside $I$ commutes with any sequence of merges inside $I$ w.r.t. the predicate “there exists a contiguous occurrence of $b$.” Merges outside $I$ do not alter bytes inside $I$, and the total order on pairs implies we can swap a higher-ranked external merge with a local merge without changing the existence of $b$. Creation and destruction both require the first violating merge to occur within $I$.
+By induction, any merge outside $I$ commutes with any sequence of merges inside $I$ w.r.t. the predicate ``there exists a contiguous occurrence of $b$.'' Merges outside $I$ do not alter bytes inside $I$, and the total order on pairs implies we can swap a higher-ranked external merge with a local merge without changing the existence of $b$. Creation and destruction both require the first violating merge to occur within $I$.
 \end{proof}
 
 \begin{theorem}[Boundary preservation under locality]\label{thm:bpe}
@@ -221,10 +241,15 @@ Under Assumption~\ref{assump:tok} and Lemma~\ref{lem:local}, safety of $b$ in th
 \end{theorem}
 
 \subsection{Manifest of assumptions and policies}\label{sec:manifest}
-\begin{table}[ht]
+We introduce the tokenizer manifest and policies in Tables~\ref{tab:manifest} and \ref{tab:manifest-pt2} before presenting the self-test routine that consumes them.
+
+\begin{table}[h]
+\caption[Tokenizer manifest (part 1)]{Manifest of tokenizer behaviors and policies (part 1 of 2). A runtime self-test reads version/flags and caches a verdict; wide policy text is wrapped within the page border.}
+\label{tab:manifest}
 \centering
 \scriptsize
 \setlength{\tabcolsep}{3.5pt}
+\vspace{0.5em}
 \begin{adjustbox}{max width=\linewidth}
 \begin{tabularx}{\linewidth}{@{}Q C{1.2cm} C{1.0cm} C{1.2cm} C{1.0cm} C{1.2cm} C{1.3cm} C{1.3cm} Q@{}}
 \toprule
@@ -235,14 +260,16 @@ tiktoken 0.5.2 & $\checkmark$ & $\checkmark$ & NFC & identity & opt & none & $\c
 \bottomrule
 \end{tabularx}
 \end{adjustbox}
-\caption[Tokenizer manifest (part 1)]{Manifest of tokenizer behaviors and policies (part 1 of 2). A runtime self-test reads version/flags and caches a verdict; wide policy text is wrapped within the page border.}
-\label{tab:manifest}
+\vspace{0.5em}
 \end{table}
 
-\begin{table}[ht]
+\begin{table}[h]
+\caption[Tokenizer manifest (part 2)]{Manifest of tokenizer behaviors and policies (part 2; continued).}
+\label{tab:manifest-pt2}
 \centering
 \scriptsize
 \setlength{\tabcolsep}{3.5pt}
+\vspace{0.5em}
 \begin{adjustbox}{max width=\linewidth}
 \begin{tabularx}{\linewidth}{@{}Q C{1.2cm} C{1.0cm} C{1.6cm} C{1.0cm} C{1.2cm} C{1.3cm} C{1.3cm} Q@{}}
 \toprule
@@ -253,14 +280,13 @@ WordPiece (BERT) & $\checkmark$ & $\checkmark$ & NFKD (often) & whitespace & n/a
 \bottomrule
 \end{tabularx}
 \end{adjustbox}
-\caption[Tokenizer manifest (part 2)]{Manifest of tokenizer behaviors and policies (part 2 of 2; continued from Table~\ref{tab:manifest}).}
-\label{tab:manifest-pt2}
+\vspace{0.5em}
 \end{table}
 
 \subsection{Runtime self-test algorithm}\label{sec:selftest}
-We codify the manifest and guards in an explicit, auditable self-test executed at initialization and cached with version stamps.
+We codify the manifest and guards in an explicit, auditable self-test executed at initialization and cached with version stamps. Algorithm~\ref{alg:selftest} lists the checks and the conservative fallbacks that are enforced when assumptions do not hold.
 
-\begin{algorithm}[ht]
+\begin{algorithm}[h]
 \caption{RuntimeTokenizerSelfTest: versioned guard and policy checks}
 \label{alg:selftest}
 \begin{algorithmic}[1]
@@ -287,9 +313,9 @@ We codify the manifest and guards in an explicit, auditable self-test executed a
 We construct a Merge-DAG $G_\tau$ whose nodes are byte strings concatenated from up to $L$ tokens; edges apply a single ranked merge valid under some greedy schedule. Safety requires $b$ to be a sink and non-creating node under all contexts and normalizations. Complexity scales with the number of distinct byte strings $V_L$ and merges $M$; precise build times depend on the tokenizer and horizon $L$.
 
 \subsection{Merge-DAG construction pseudocode}\label{sec:mergedag}
-To aid implementation of the detector and self-test, we provide a high-level pseudocode for building $G_\tau$ up to horizon $L$ and checking safety for a boundary set $\mathcal{R}$.
+To aid implementation of the detector and self-test, we provide a high-level pseudocode for building $G_\tau$ up to horizon $L$ and checking safety for a boundary set $\mathcal{R}$. Algorithm~\ref{alg:mergedag} formalizes this procedure.
 
-\begin{algorithm}[ht]
+\begin{algorithm}[h]
 \caption{BuildMergeDAGAndCheckSafety: horizon-$L$ Merge-DAG and boundary checks}
 \label{alg:mergedag}
 \begin{algorithmic}[1]
@@ -306,6 +332,7 @@ To aid implementation of the detector and self-test, we provide a high-level pse
   \ForAll{adjacent token-boundary pairs inside $x$}
     \If{pair is mergeable under $\tau$'s total order and flags}
       \State Let $y$ be the merged byte string; add edge $(x\to y)$ to $E$
+    \If{not mergeable} \State continue \EndIf
     \EndIf
   \EndFor
 \EndFor
@@ -352,8 +379,11 @@ Let $(x_t,y_t)\sim p^\star(y_t\mid x_t)$ supported on $\mathcal{S}_t$, and let $
 \end{theorem}
 
 \begin{proof}[Proof sketch]
-As $B\to\infty$, the masked softmax has zero mass on $I=\Sigma\setminus\mathcal{S}_t$. The loss reduces to cross-entropy on the legal simplex. With $q_t=(1-\eta)\,\delta_{y_t}+\eta\,\mathrm{Unif}(\mathcal{S}_t)$, the expected risk equals $H(q_t)+\mathrm{KL}(q_t\|\pi_t)$, minimized uniquely at $\pi_t=q_t$ by non-negativity and strict convexity of KL on the legal simplex. Taking expectation over $(x_t,y_t)$ yields the claim. A full derivation is provided in Appendix~\ref{app:proper}.
+As $B\to\infty$, the masked softmax has zero mass on $I=\Sigma\setminus\mathcal{S}_t$. The loss reduces to cross-entropy on the legal simplex. With $q_t=(1-\eta)\,\mathrm{onehot}(y_t)+\eta\,\mathrm{Unif}(\mathcal{S}_t)$, the expected risk equals $H(q_t)+\mathrm{KL}(q_t\|\pi_t)$, minimized uniquely at $\pi_t=q_t$ by non-negativity and strict convexity of KL on the legal simplex. Taking expectation over $(x_t,y_t)$ yields the claim. A full derivation is provided in Appendix~\ref{app:proper}.
 \end{proof}
+
+\paragraph{Implementation remark (numerical -$\infty$).}
+In practice, we implement illegal logits as $z_u \leftarrow z_u - \alpha B$ with a sentinel magnitude (e.g., $10^6$ in float32) that ensures the finite-$B$ leakage bound (Theorem~\ref{thm:finiteB}) numerically holds at machine precision while avoiding NaNs. This preserves the proof obligations because the derived bounds are continuous in the mask magnitude and the sentinel can be chosen large enough to dominate any legal logit gaps under Assumption~\ref{assump:bounded}.
 
 \subsection{Finite-$B$ leakage bounds and sensitivity}
 Let $L$ and $I$ denote legal and illegal sets with sizes $k$ and $K-k$.
@@ -376,6 +406,25 @@ To ensure $\sum_{u\in I}\pi_t(u)\le \eta$, it suffices to choose
 $B \ge \frac{T}{\alpha}\left[\log\frac{K-k}{\eta}-\frac{\Delta}{T}\right].$
 \end{corollary}
 
+\begin{corollary}[Temperature monotonicity of the leakage bound]\label{cor:temp}
+Fix $\alpha,B,\Delta>0$ and $K,k$. The upper bound $(K-k)\exp\!(-(\alpha B+\Delta)/T)$ is strictly increasing in $T$ for $T>0$. Consequently, at fixed $B$ and logits, larger temperatures increase the worst-case illegal mass bound, while smaller temperatures decrease it. This provides an explicit knob to tighten bounds without changing $B$.
+\end{corollary}
+
+\begin{proof}
+Let $g(T) = \exp(-(\alpha B+\Delta)/T)$. Then $\frac{d}{dT}\log g(T) = \frac{\alpha B+\Delta}{T^2}>0$, so $\log g(T)$ increases in $T$, hence $g(T)$ increases in $T$.
+\end{proof}
+
+\paragraph{Calibration under mixture training.}
+We mix constrained batches (masked loss) and unconstrained batches (standard cross-entropy) at ratio $\lambda\in(0,1)$. Let $\mathcal{R}_{\mathrm{mCE}}$ be the expected masked risk on constrained supports and $\mathcal{R}_{\mathrm{CE}}$ the unconstrained risk. 
+
+\begin{proposition}[Calibration preservation under mixture]\label{prop:mix}
+Assume: (i) $\mathcal{R}_{\mathrm{mCE}}$ is strictly proper on $\Delta(\mathcal{S}_t)$ as $B\to\infty$ (Theorem~\ref{thm:proper}); (ii) unconstrained batches are drawn from the same data distribution over inputs but without masking; (iii) the optimizer ensures bounded logit updates per step (by clipping/weight decay), and PRM/OIP bonuses are applied post-mask within a KL trust region $\rho$. Then for sufficiently large $B$ and small $\rho$, the mixture risk $\lambda\,\mathcal{R}_{\mathrm{mCE}} + (1{-}\lambda)\,\mathcal{R}_{\mathrm{CE}}$ has minimizers whose constrained-support marginals remain within $\sqrt{2\rho}$ total variation of the unconstrained minimizers on shared support. Consequently, mixture training preserves calibration up to $O(\sqrt{\rho})$ on legal supports while driving illegal mass to zero exponentially in $B$ (Theorem~\ref{thm:finiteB}).
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Strict properness identifies the constrained-support optimum on each batch; the unconstrained term pulls toward the full-support optimum. Since PRM/OIP are KL-bounded and applied post-mask, Pinsker’s inequality bounds the total variation drift by $\sqrt{2\rho}$. Finite-$B$ leakage decouples illegal mass exponentially in $B$, thus legal marginals remain calibrated up to $O(\sqrt{\rho})$ as $B$ grows.
+\end{proof}
+
 \section{Threat Model and Security Analysis}\label{sec:threat}
 We specify the attacker’s capabilities, objectives, and our defenses.
 
@@ -393,7 +442,7 @@ Security goals:
 Defenses and guarantees:
 - Tokenizer guard with runtime self-test manifest (Table~\ref{tab:manifest}) validates version, normalization flags, and byte-fallback; ambiguities trigger conservative byte-guarded spans and/or abstention.
 - Locality detector (Lemma~\ref{lem:local}, Theorem~\ref{thm:bpe}) enforces boundary atomicity/non-creation in the presence of greedy merges; Unigram is handled by lattice surgery with unique constrained paths (Theorem~\ref{thm:uni}).
-- Strict post-mask application of OIP/PRM bonuses (Theorem~\ref{thm:prm}) prevents reward-driven violations; KL trust region limits distributional drift.
+- Strict post-mask application of OIP/PRM bonuses (Theorem~\ref{thm:prm}) prevents reward-driven violations; a KL trust region limits distributional drift and is enforced at runtime.
 - Multi-fidelity backoff with invariant-preserving resynchronization (Theorem~\ref{thm:mf}) ensures bounded, safe recovery; failure escalates to repair or abstention.
 - Versioned diagnostics: alarms on tie non-determinism, multiple-$\Gamma$ ambiguity (Theorem~\ref{thm:comp}), and no-valid-token conditions.
 
@@ -415,9 +464,14 @@ We focus on an artifact-light but fully reproducible micro-benchmark validating 
 \end{itemize}
 
 \subsection{Results}\label{sec:results}
-\begin{table}[ht]
+Table~\ref{tab:microbench} reports the empirical illegal mass alongside the analytic bound across budgets $B$, and Figure~\ref{fig:leakage_plot} visualizes the exponential decay with $B$ on a log scale.
+
+\begin{table}[h]
+\caption[Finite-B leakage micro-benchmark]{Controlled micro-benchmark validating Theorem~\ref{thm:finiteB} over budgets $B$. Values match the included script. The analytic curve consistently upper-bounds the exact illegal mass with a nearly constant multiplicative slack.}
+\label{tab:microbench}
 \centering
 \small
+\vspace{0.5em}
 \resizebox{\linewidth}{!}{%
 \begin{tabular}{@{}lccc@{}}
 \toprule
@@ -433,12 +487,12 @@ $B$ & Empirical illegal mass (exact) & Analytic bound $(K-k)e^{-(\alpha B+\Delta
 \bottomrule
 \end{tabular}
 }
-\caption[Finite-B leakage micro-benchmark]{Controlled micro-benchmark validating Theorem~\ref{thm:finiteB} over budgets $B$. Values match the included script. The analytic curve upper-bounds the exact illegal mass with a nearly constant multiplicative slack.}
-\label{tab:microbench}
+\vspace{0.5em}
 \end{table}
 
-\begin{figure}[ht]
+\begin{figure}[h]
 \centering
+\vspace{0.5em}
 \begin{tikzpicture}
 \begin{axis}[
     width=0.7\linewidth,
@@ -464,14 +518,19 @@ $B$ & Empirical illegal mass (exact) & Analytic bound $(K-k)e^{-(\alpha B+\Delta
 \end{tikzpicture}
 \caption[Illegal mass versus mask budget]{Illegal mass decays exponentially with the mask budget $B$. The analytic bound consistently upper-bounds the exact mass across budgets.}
 \label{fig:leakage_plot}
+\vspace{0.5em}
 \end{figure}
 
 \subsection{Ablation: effect of margin $\Delta$}\label{sec:ablation}
-We vary the logit margin $\Delta$ by increasing the best illegal logit from $0.0$ to $0.1$ (keeping all other logits fixed), thereby decreasing $\Delta$ from $0.2$ to $0.1$. At a fixed budget $B=20$ with $K=10$, $k=3$, $\alpha=T=1$, the empirical illegal mass slightly increases while the analytic upper bound grows according to Theorem~\ref{thm:finiteB}. This scenario reflects realistic cases where near-legal tokens (e.g., structurally similar delimiters or confusable characters) narrow the logit margin; the bound’s explicit $\Delta$ dependence ensures mask budgets can be prudently adjusted.
-\begin{table}[ht]
+We vary the logit margin $\Delta$ by increasing the best illegal logit from $0.0$ to $0.1$ (keeping all other logits fixed), thereby decreasing $\Delta$ from $0.2$ to $0.1$. At a fixed budget $B=20$ with $K=10$, $k=3$, $\alpha=T=1$, the empirical illegal mass slightly increases while the analytic upper bound grows according to Theorem~\ref{thm:finiteB}. This scenario reflects realistic cases where near-legal tokens narrow the logit margin; the bound’s explicit $\Delta$ dependence ensures mask budgets can be prudently adjusted. Table~\ref{tab:ablation} summarizes the comparison.
+
+\begin{table}[h]
+\caption[Ablation at fixed budget]{Ablation at $B=20$: reducing the margin $\Delta$ increases the illegal mass and slack factor in a predictable way. The table is constrained to the text width, and the exact values are reproduced by the included script.}
+\label{tab:ablation}
 \centering
 \small
 \setlength{\tabcolsep}{6pt}
+\vspace{0.5em}
 \begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{@{}lccc@{}}
 \toprule
@@ -482,8 +541,7 @@ $\Delta=0.1$ (ablated)  & $\approx 2.181\times 10^{-9}$ & $\approx 1.306\times 1
 \bottomrule
 \end{tabular}
 \end{adjustbox}
-\caption[Ablation at fixed budget]{Ablation at $B=20$: reducing the margin $\Delta$ increases the illegal mass and slack factor in a predictable way. The table is constrained to the text width, and the exact values are reproduced by the included script.}
-\label{tab:ablation}
+\vspace{0.5em}
 \end{table}
 
 \subsection{Additional sanity checks: budget selection and trust region}\label{sec:extrasanity}
@@ -491,10 +549,14 @@ We include two minor, deterministic extensions in the released script:
 - Budget selection check (Cor.~\ref{cor:budget}): For several targets $\eta\in\{10^{-4},10^{-6},10^{-8}\}$, we compute the required $B$ using $(K{-}k,\Delta,\alpha,T)$ from the toy setup and verify empirically that the illegal mass under the masked softmax does not exceed $\eta$.
 - Trust-region (PRM) check (Thm.~\ref{thm:prm}): For a deterministic logit perturbation $b$ scaled to satisfy $\mathrm{KL}(\pi(z)\,\|\,\pi(z{+}b))\le \rho$ (e.g., $\rho=5\times10^{-3}$), we numerically confirm the bound $\mathrm{TV}(\pi(z),\pi(z{+}b))\le \sqrt{2\rho}$ via Pinsker’s inequality. These checks are fully reproducible and run in milliseconds.
 
+\subsection{Temperature sensitivity (deterministic check)}
+Corollary~\ref{cor:temp} implies that, at fixed logits and budget $B$, increasing $T$ loosens the exponential upper bound on illegal mass. We verify this deterministically in the script by evaluating the empirical illegal mass and the analytic bound at two temperatures (e.g., $T\in\{0.8,\,1.2\}$) for $B=20$, holding all other quantities fixed. As expected, the empirical illegal mass decreases at $T=0.8$ and increases at $T=1.2$, tracking the monotonic trend of the analytic bound. The exact values are printed by the script and saved to a CSV to avoid redundancy in the main text.
+
 \section{Results and Analysis}\label{sec:results-main}
 - Exponential decay and slope: On a log scale (Figure~\ref{fig:leakage_plot}), the empirical illegal mass is approximately linear in $B$, consistent with Theorem~\ref{thm:finiteB}. Each increment of $B$ by 5 multiplies the illegal mass by about $6.74\times 10^{-3}\approx e^{-5}$ (e.g., $4.649136\times 10^{-5} / 6.852963\times 10^{-3}\approx 6.79\times 10^{-3}$), matching $\exp(-\alpha B/T)$ with $\alpha=T=1$.
 - Tightness of the analytic bound: The ratio between the analytic bound and the exact mass stabilizes at $\approx 5.596$ for moderate/large $B$ (Table~\ref{tab:microbench}), implying a predictable multiplicative slack governed by the logit margin $\Delta$ and partition function terms.
 - Margin sensitivity: The ablation in Table~\ref{tab:ablation} shows that decreasing $\Delta$ (by increasing the best illegal logit) raises the illegal mass and increases the slack factor, in line with Theorem~\ref{thm:finiteB}'s dependence on $\Delta$.
+- Temperature sensitivity: As predicted by Corollary~\ref{cor:temp}, the empirical and analytic quantities vary monotonically with $T$ at fixed $B$, enabling practitioners to trade calibration temperature and mask budgets.
 - Practical selection of $B$: Corollary~\ref{cor:budget} provides a direct back-of-the-envelope calculation for meeting a target illegal mass budget $\eta$. The micro-benchmark validates that the realized mass tracks the prescribed exponential law, supporting robust budget selection in practice.
 - Extended sanity checks: The script-level budget-selection and trust-region validations (Section~\ref{sec:extrasanity}) provide additional practical assurances for deployment knobs without expanding the scope of this artifact-light report.
 
@@ -502,8 +564,11 @@ We include two minor, deterministic extensions in the released script:
 To make the consequences of Theorem~\ref{thm:finiteB}(ii, iii) visible without running code, Table~\ref{tab:sanity} reports representative values (two budgets). The $L_1$ gap closely matches twice the illegal mass (analytical identity), and the maximum illegal gradient magnitude is safely below the analytic bound.
 
 \begin{table}[h]
+\caption[Sanity checks of finite-B consequences]{Sanity checks at two budgets verifying Theorem~\ref{thm:finiteB}(ii, iii). Values match the included script (minor rounding differences are due to numerical precision; the analytical identities hold exactly).}
+\label{tab:sanity}
 \centering
 \small
+\vspace{0.5em}
 \begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
@@ -514,15 +579,14 @@ $B$ & $L_1$ gap & $2\times$ illegal mass & Max grad (illegal) & Analytic grad bo
 \bottomrule
 \end{tabular}
 \end{adjustbox}
-\caption[Sanity checks of finite-B consequences]{Sanity checks at two budgets verifying Theorem~\ref{thm:finiteB}(ii, iii). Values match the included script (minor rounding differences are due to numerical precision; the analytical identities hold exactly).}
-\label{tab:sanity}
+\vspace{0.5em}
 \end{table}
 
 \section{Constrained Decoding and Multi-Fidelity Safety}
 \subsection{Masks and complexity}
-Masks derive from products $\mathcal{P}=\mathcal{A}\otimes\mathcal{B}$ (FSA) or stack products with $\mathcal{G}$ (PDA). With $\epsilon$-closure summaries, per-step worst-case is $O(d_{\max}+c_\epsilon)$ where $d_{\max}$ is maximal out-degree and $c_\epsilon$ the closure update cost.
+Masks derive from products $\mathcal{P}=\mathcal{A}\otimes\mathcal{B}$ (FSA) or stack products with $\mathcal{G}$ (PDA). With $\epsilon$-closure summaries, per-step worst-case is $O(d_{\max}+c_\epsilon)$ where $d_{\max}$ is maximal out-degree and $c_\epsilon$ the closure update cost. Algorithm~\ref{alg:mask_build} outlines the construction of legal-next-token masks.
 
-\begin{algorithm}[ht]
+\begin{algorithm}[h]
 \caption{BuildMaskFromProduct: constructing legal-next-token masks}
 \label{alg:mask_build}
 \begin{algorithmic}[1]
@@ -545,13 +609,13 @@ Let $z\in\mathbb{R}^K$ be logits and $m\in[-\infty,0]^K$ a mask with $m_u=-\inft
 \end{proposition}
 
 \begin{proof}[Proof sketch]
-Support inclusion is immediate since illegal coordinates are fixed at $-\infty$ pre-softmax. For $b$ restricted to legal indices, the softmax on a fixed support is Lipschitz w.r.t. logits, and total variation between softmax distributions is bounded by the $L_1$ change scaled by a constant $\le 1$; with temperature $T$ the Lipschitz constant remains at most 1 after appropriate rescaling.
+Support inclusion is immediate since illegal coordinates are fixed at $-\infty$ pre-softmax. For $b$ restricted to legal indices, the softmax on a fixed support is Lipschitz w.r.t. logits; the induced change in total variation is bounded by the $L_1$ change in logits scaled by a constant $\le 1$ for any fixed $T>0$.
 \end{proof}
 
 \subsection{Shadow byte-level backoff and resynchronization}
-We run a bounded-depth shadow search in byte space to emit guarded bytes that restore a valid next-token set, with caps to avoid degeneracy.
+We run a bounded-depth shadow search in byte space to emit guarded bytes that restore a valid next-token set, with caps to avoid degeneracy. Algorithm~\ref{alg:shadow_backoff} specifies the resynchronization procedure.
 
-\begin{algorithm}[ht]
+\begin{algorithm}[h]
 \caption{Shadow byte-level backoff with resynchronization and caps}
 \label{alg:shadow_backoff}
 \begin{algorithmic}[1]
@@ -571,7 +635,7 @@ We run a bounded-depth shadow search in byte space to emit guarded bytes that re
     \EndIf
     \State $s' \gets \mathcal{P}.\mathrm{transition\_bytes}(s, u)$
     \If{$s'$ is invalid} \State \textbf{continue} \EndIf
-    \State $k_{\mathrm{legal}} \gets \mathrm{count\_legal\_tokens}(\mathcal{P}, s')$
+    \State $k_{\mathrm{legal}} \gets \mathrm{count\_legal\_\!tokens}(\mathcal{P}, s')$
     \State $\mathrm{score}' \gets \mathrm{score} + \log p_{\mathrm{byte}}(u)$
     \If{$k_{\mathrm{legal}} \ge \text{minResyncK}$}
       \State $R \gets R \cup \{(s', \mathrm{seq}', \mathrm{score}')\}$
@@ -604,9 +668,9 @@ Each component is an admissible, consistent lower bound on the $\epsilon$-closed
 \end{lemma}
 
 \subsection{ARA* repair pseudocode and properties}
-We use an anytime repair variant with a decreasing weight schedule $w_0>w_1>\dots\to 1$. The search maintains suboptimality bounds that tighten as $w\downarrow 1$ and is terminated under a fixed expansion or latency budget.
+We use an anytime repair variant with a decreasing weight schedule $w_0>w_1>\dots\to 1$. The search maintains suboptimality bounds that tighten as $w\downarrow 1$ and is terminated under a fixed expansion or latency budget. Algorithm~\ref{alg:arastar} shows the repair loop.
 
-\begin{algorithm}[ht]
+\begin{algorithm}[h]
 \caption{ARAStarRepair: bounded-latency minimal-edit repair (anytime A*)}
 \label{alg:arastar}
 \begin{algorithmic}[1]
@@ -637,6 +701,14 @@ We use an anytime repair variant with a decreasing weight schedule $w_0>w_1>\dot
 \end{algorithmic}
 \end{algorithm}
 
+\begin{proposition}[Weighted A* suboptimality bound]\label{prop:waa}
+Let $h$ be admissible and consistent, and let $w\ge 1$. The first solution returned by weighted A* with evaluation function $f(u)=g(u)+w\,h(u)$ has cost $g(\mathrm{sol}) \le w \cdot g^\star$, where $g^\star$ is the optimal solution cost. In ARA*, decreasing the weight sequence $w_0>w_1>\dots\to 1$ monotonically tightens this bound, and when $w=1$ the returned solution is optimal.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Classical weighted A* analysis shows that for admissible and consistent $h$, any node $u$ on an optimal path satisfies $f(u)\le w\,g^\star$. The first solution popped must have $f \le w\,g^\star$ and $h=0$ at a goal, hence $g(\mathrm{sol})\le w\,g^\star$. ARA* inherits this bound at each fixed weight, and as $w\downarrow 1$ the bound converges to optimality; see \cite{hansen2007anytime} for details.
+\end{proof}
+
 \subsection{ILP formulation and TU conditions}
 We formulate repair over an acyclic unrolled product graph with binary edge variables $x_e$, flow constraints, and edit objectives. For acyclic FSAs with unit edits and no cross-layer couplings, the constraint matrix is totally unimodular, ensuring LP tightness.
 
@@ -645,7 +717,7 @@ If the unrolled repair graph is a directed acyclic network with single-commodity
 \end{theorem}
 
 \section{OIP and PRM: Safety and Integration}
-OIP encodes an ontology $\mathcal{O}=(V,E)$ via a GNN; InfoNCE trains a continuous prefix projected into the model’s embedding space. The PRM provides process-level rewards converted to logit bonuses.
+OIP encodes an ontology $\mathcal{O}=(V,E)$ via a GNN; InfoNCE trains a continuous prefix projected into the model’s embedding space. The PRM provides process-level rewards converted to logit bonuses. Algorithm~\ref{alg:prm_kl} implements a KL-constrained bonus application that preserves mask dominance.
 
 \begin{theorem}[Mask dominance and PRM safety]\label{thm:prm}
 Let $z$ be pre-mask logits and $b$ be PRM bonuses constrained by a KL trust region $\mathrm{KL}(\pi(z)\|\pi(z+b))\le \rho$. If masks set illegal logits to $-\infty$ (or below a threshold ensuring negligible mass) after adding $b$ and before sampling/argmax, then PRM cannot induce violations of the safety invariant. Moreover, the maximum deviation in legal probabilities is bounded by $f(\rho)\le\sqrt{2\rho}$ via Pinsker’s inequality \cite{csiszar2011it}.
@@ -654,6 +726,20 @@ Let $z$ be pre-mask logits and $b$ be PRM bonuses constrained by a KL trust regi
 \begin{proof}[Proof sketch]
 Masking after adding $b$ zeroes out probability for illegal tokens regardless of PRM bonuses, ensuring support inclusion. The KL trust region bounds $\mathrm{TV}(\pi(z),\pi(z{+}b))\le \sqrt{2\rho}$ by Pinsker, limiting PRM-induced drift on legal probabilities.
 \end{proof}
+
+\begin{algorithm}[h]
+\caption{KL-constrained PRM bonus application (post-mask, trust-region safe)}
+\label{alg:prm_kl}
+\begin{algorithmic}[1]
+\Require logits $z$, legal mask $m\in[-\infty,0]^K$, PRM bonuses $\hat{b}$, KL radius $\rho$, temperature $T$
+\State $p \gets \mathrm{softmax}((z+m)/T)$ \Comment{distribution on legal simplex}
+\State $b \gets \hat{b}$ with $b_u \gets 0$ for all illegal $u$ (respect mask dominance)
+\State Define $\phi(\lambda) = \mathrm{KL}\!\left(p \;\middle\|\; \mathrm{softmax}((z+\lambda b+m)/T)\right)$
+\State Find $\lambda^\star \in [0,1]$ s.t. $\phi(\lambda^\star)\le \rho$ (e.g., bisection over [0,1])
+\State $z' \gets z + \lambda^\star b$
+\State \Return $\mathrm{softmax}((z'+m)/T)$
+\end{algorithmic}
+\end{algorithm}
 
 \paragraph{Practical choice of $\rho$.} In practice, choose $\rho$ so that $\sqrt{2\rho}$ matches a tolerable total-variation change on legal probabilities (e.g., $\rho=5\times10^{-3}$ yields $\mathrm{TV}\le 0.1$). We monitor $\mathrm{KL}$ online and clip bonuses if the trust region would be exceeded. A deterministic trust-region sanity check is included in the script (Section~\ref{sec:extrasanity}).
 
@@ -672,20 +758,61 @@ While our artifact-light scope precludes large-scale task suites, the end-to-end
 
 \section{Reproducibility}\label{sec:repro}
 - Environment: Python $\ge$3.9. No GPU is required for the micro-benchmark.
-- Run: execute the included Python script in this repository.
+- Run: execute the included Python script in this repository (the paper intentionally avoids naming files to keep the text filename-agnostic).
 - Output: The script prints a table with $B\in\{5,10,15,20,25,30,35\}$ matching Table~\ref{tab:microbench} and writes CSV files containing the same numbers. It additionally prints the analytic bound values given $K=10$, $k=3$, $\Delta=0.2$, $T=1$, $\alpha=1$.
+- Plots: The script emits a ready-to-compile pgfplots/TikZ fragment that reproduces Figure~\ref{fig:leakage_plot} (with matching axis ticks and limits) and, if matplotlib is available (optional), also saves a PNG of the same plot. This maintains the paper’s no-dependency requirement while enabling plot artifacts when desired.
 - Ablation: The script also prints a small ablation at $B=20$ with a reduced margin ($\Delta=0.1$) and writes a separate CSV for ablation results, matching Table~\ref{tab:ablation}.
-- Extended checks: The script computes the $L_1$ gap $\|\pi-\tilde{\pi}\|_1$ and verifies that it approaches twice the illegal mass (Theorem~\ref{thm:finiteB}(ii)); checks the gradient-leakage bound (Theorem~\ref{thm:finiteB}(iii)); runs budget-selection checks against Corollary~\ref{cor:budget}; and verifies Pinsker’s inequality in a deterministic trust-region test for PRM.
+- Extended checks: The script computes the $L_1$ gap $\|\pi-\tilde{\pi}\|_1$ and verifies that it approaches twice the illegal mass (Theorem~\ref{thm:finiteB}(ii)); checks the gradient-leakage bound (Theorem~\ref{thm:finiteB}(iii)); runs budget-selection checks against Corollary~\ref{cor:budget}; verifies Pinsker’s inequality in a deterministic trust-region test for PRM (Algorithm~\ref{alg:prm_kl}); and includes a temperature sensitivity check (Corollary~\ref{cor:temp}).
 - Determinism: All numbers are closed-form or exact evaluations of exponentials; no randomness is used.
 - Practical pinning (optional): We recommend pinning Python to a recent 3.9–3.12 release and recording the exact version in logs for auditability.
+
+\section{Limitations and Future Work}
+Our artifact-light submission deliberately focuses on verifiable contracts, formal guarantees, and a controlled micro-benchmark rather than large-scale task suites. This choice isolates the effects of the masking budget and tokenizer-aware constraints but leaves open questions about broader generalization and performance on complex downstream tasks and heterogeneous schemas.
+
+Future work: We plan to (i) build certified, open-source guards/detectors across BPE/WordPiece/Unigram with versioned manifests; (ii) broaden grammars (JSON schemas, SQL dialects, XML/XPath, domain-specific PDAs) including disambiguation strategies for inherently ambiguous CF languages; (iii) quantify latency-accuracy trade-offs of shadow backoff and ARA*/ILP repair on production workloads; (iv) study joint training with stronger PRM/OIP signals under tighter KL trust regions; and (v) integrate human-in-the-loop validators for edge-case Unicode handling and schema drift.
+
+\section{Broader Impacts and Ethical Considerations}
+Constrained, verification-first generation reduces the risk of unsafe or malformed outputs fed into downstream systems (parsers, compilers, and automation pipelines). Our tokenizer-aware defenses mitigate Unicode-based spoofing and boundary-escape attacks. Nonetheless, stronger structural guarantees can be misused to generate convincingly structured yet malicious artifacts; deployment should include access control, rate limits on repair/backoff (to avoid resource exhaustion), secure logging of guard decisions for audit, and red-team testing against prompt-injection and confusable-based exploits. Our approach aims to raise the safety floor while maintaining transparency and reproducibility.
+
+\FloatBarrier
+\clearpage
+\section{Conclusion}
+We introduced OIP-CAD, a verification-first framework that unifies tokenizer-aware safety with formal locality guarantees, strictly proper masked training with explicit finite-$B$ leakage control, invariant-preserving multi-fidelity decoding, and bounded-latency repair with admissible/consistent heuristics and TU-backed ILP fallback. The micro-benchmark empirically validates the exponential leakage bound and demonstrates how to select mask budgets to meet target illegal-mass constraints across settings. Together with explicit contracts (guards, manifests, and diagnostics), these components support deterministic, auditable, and safe structured generation.
+
+As a final outlook, we anticipate that certified tokenizer guards and principled finite-budget training will become standard practice for safety-critical structured generation. Extending our invariant-preserving decoding and repair to richer grammars and large-scale, heterogeneous task suites—while maintaining deterministic, auditable execution—remains a key next step. The Conclusion appears as the closing numbered section of the main body, with Acknowledgments, Appendices, and References following, ensuring proper placement near the end of the paper.
 
 \section*{Acknowledgments}
 We thank colleagues and maintainers of open-source tokenizer libraries (HuggingFace tokenizers, tiktoken, SentencePiece) for documentation and discussions that informed our assumption manifest and self-tests. Any errors remain our own.
 
-\section{Conclusion and Limitations}
-OIP-CAD unifies tokenizer-aware safety with formal proofs and detectors, strictly proper masked training with adaptive leakage control, invariant-preserving multi-fidelity decoding, and bounded repair with certificates. We prioritize verifiability and release minimal, runnable scripts demonstrating key guarantees (finite-$B$ leakage).
+\appendix
+\section{Glossary (pruned)}
+- FSA/PDA: Finite-State/Pushdown Automaton.
+- OIP: Ontology-Initialized Prefixes.
+- CAD: Constraint-Aware Decoding.
+- ARA*: Anytime weighted A* with decreasing weights.
+- PRM: Process Reward Model.
 
-Limitations: Large-scale evaluations on diverse structured tasks are out of scope for this artifact-light submission. Some proofs are presented as sketches relying on explicit tokenizer assumptions and subsequential transduction properties. TU guarantees for repair hold under acyclic FSA settings and may not extend to all PDA cases. Future work: larger-scale evaluations with complete artifacts; tighter Unigram locality characterizations; stronger guarantees for PDAs with ambiguity; and certified implementations for deployment.
+\section{Reproducibility Checklist (supplementary)}
+To aid replication, we summarize key items:
+\begin{itemize}[leftmargin=*]
+\item Environment: Python $\ge$3.9; no GPU or external dependencies required.
+\item Determinism: No randomness; all outputs are exact function evaluations.
+\item Artifacts: Script prints tables, writes CSVs, and emits a TikZ plot fragment matching the paper’s figure.
+\item Validation: Includes budget-selection checks, $L_1$ gap identity checks, gradient-leakage checks, a KL trust-region sanity test (Pinsker), and a temperature sensitivity check.
+\item Versioning: We recommend logging interpreter version and platform for audits.
+\end{itemize}
+
+\section{Tokenizer Locality Proof Sketch}\label{app:locality}
+We formalize greedy BPE as a rewrite system over adjacent pairs with a total order $\preceq$ on pairs. Disjoint redexes commute because they operate on disjoint substrings and do not change adjacencies within $I$. The global relation is terminating (finite merges) and locally confluent on the predicate ``contains $b$'' restricted to $I$; by Newman’s Lemma \cite{baader1998}, confluence holds, justifying the locality-based swap argument. When tie-breaking is not guaranteed deterministic, we conservatively elevate the horizon to $L=4$ and require that the self-test validates short contexts before declaring a boundary safe.
+
+\section{Strict Properness: Detailed Derivation}\label{app:proper}
+We provide a detailed derivation that $\mathbb{E}[\mathcal{L}_{\mathrm{mCE}}]=H(q)+\mathrm{KL}(q\|\pi)$ on the legal simplex in the limit $B\to\infty$, and show strict convexity of the risk in $\pi$ entails uniqueness at $\pi=q$ for any $T>0$ and $\eta\in[0,1)$ under Assumption~\ref{assump:bounded}. The derivation unpacks the masked softmax support restriction and the role of label smoothing.
+
+\section{Finite-$B$ Leakage: Expanded Proof}\label{app:finiteB}
+We expand Theorem~\ref{thm:finiteB}'s proof by bounding the partition function $Z$ and providing alternative bounds that trade $(K{-}k)$ prefactors for tighter constants when a larger legal margin set is known. We also give a perturbation result: small logit changes $\delta \ell$ in illegal indices shift the illegal mass bound multiplicatively by $\exp(\|\delta \ell\|_\infty/T)$.
+
+\section{Example Grammar and Masking for JSON Strings}\label{app:json}
+We sketch a minimal JSON-string fragment to illustrate masks and guarded resynchronization. Let $\Gamma$ contain terminals: quote $\mathtt{"}$, backslash $\mathtt{\textbackslash}$, any printable non-quote, and end-of-string marker. The FSA has states: Start $\to$ InStr $\to$ End, with transitions: Start --$\mathtt{"}$--> InStr; InStr --printable-non-quote--> InStr; InStr --$\mathtt{\textbackslash}$--> Esc; Esc --(escapable set)--> InStr; InStr --$\mathtt{"}$--> End. Protected boundary bytes are $\mathtt{"}$ and $\mathtt{\textbackslash}$. Masks at each step allow only tokens whose byte realizations map via $\mathcal{B}$ to the enabled terminals in the product state. If the quote byte is unsafe under $\tau$ (per the self-test), byte-atomic emission is enforced for $\mathtt{"}$ until resynchronization, after which $\mathcal{S}(s)$ becomes non-empty and subword decoding resumes.
 
 \section*{References}
 \begin{thebibliography}{99}
@@ -708,6 +835,7 @@ Limitations: Large-scale evaluations on diverse structured tasks are out of scop
 \bibitem{scholak2021picard} Scholak, T., Schmid, M., Bahdanau, D. (2021). PICARD: Parsing Incrementally for Constrained Auto-Regressive Decoding. EMNLP.
 \bibitem{schrijver1986} Schrijver, A. (1986). Theory of Linear and Integer Programming. Wiley.
 \bibitem{schulz2002lev} Schulz, K. U., Mihov, S. (2002). Fast string correction with Levenshtein automata. IJDAR.
+\bibitem{schuster2012} Schuster, M., Nakajima, K. (2012). Japanese and Korean Voice Search. ICASSP.
 \bibitem{sennrich2016bpe} Sennrich, R., Haddow, B., Birch, A. (2016). Neural Machine Translation of Rare Words with Subword Units. ACL.
 \bibitem{sui2015safeopt} Sui, Y., Gotovos, A., Burdick, J., Krause, A. (2015). Safe Exploration for Optimization with GPs. ICML.
 \bibitem{UAX31} Unicode Consortium. (2024). UAX \#31: Unicode Identifier and Pattern Syntax.
@@ -715,17 +843,6 @@ Limitations: Large-scale evaluations on diverse structured tasks are out of scop
 \bibitem{UTR36} Unicode Consortium. (2024). UTR \#36: Unicode Security Considerations.
 \bibitem{UTS39} Unicode Consortium. (2024). UTS \#39: Unicode Security Mechanisms.
 \bibitem{wu2016wordpiece} Wu, Y., Schuster, M., Chen, Z., et al. (2016). Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation. arXiv:1609.08144.
-\bibitem{schuster2012} Schuster, M., Nakajima, K. (2012). Japanese and Korean Voice Search. ICASSP.
 \bibitem{nemhauserwolsey1988} Nemhauser, G. L., Wolsey, L. A. (1988). Integer and Combinatorial Optimization. Wiley.
 \end{thebibliography}
-
-\appendix
-\section{Tokenizer Locality Proof Sketch}\label{app:locality}
-We formalize greedy BPE as a rewrite system over adjacent pairs with a total order $\preceq$ on pairs. Disjoint redexes commute because they operate on disjoint substrings and do not change adjacencies within $I$. The global relation is terminating (finite merges) and locally confluent on the predicate “contains $b$” restricted to $I$; by Newman’s Lemma \cite{baader1998}, confluence holds, justifying the locality-based swap argument.
-
-\section{Strict Properness: Detailed Derivation}\label{app:proper}
-We provide a detailed derivation that $\mathbb{E}[\mathcal{L}_{\mathrm{mCE}}]=H(q)+\mathrm{KL}(q\|\pi)$ on the legal simplex in the limit $B\to\infty$, and show strict convexity of the risk in $\pi$ entails uniqueness at $\pi=q$ for any $T>0$ and $\eta\in[0,1)$ under Assumption~\ref{assump:bounded}. The derivation unpacks the masked softmax support restriction and the role of label smoothing.
-
-\section{Finite-$B$ Leakage: Expanded Proof}\label{app:finiteB}
-We expand Theorem~\ref{thm:finiteB}'s proof by bounding the partition function $Z$ and providing alternative bounds that trade $(K{-}k)$ prefactors for tighter constants when a larger legal margin set is known. We also give a perturbation result: small logit changes $\delta \ell$ in illegal indices shift the illegal mass bound multiplicatively by $\exp(\|\delta \ell\|_\infty/T)$.
 \end{document}

@@ -1,0 +1,20 @@
+{
+  "quality_threshold": 0.8,
+  "max_iterations": 2,
+  "request_timeout": 30,
+  "max_retries": 3,
+  "no_early_stopping": false,
+  "enable_pdf_review": false,
+  "reference_validation": true,
+  "figure_validation": true,
+  "research_ideation": true,
+  "diff_output_tracking": true,
+  "content_protection": true,
+  "content_protection_threshold": 0.15,
+  "auto_approve_changes": false,
+  "fallback_models": [
+    "gpt-4o",
+    "gpt-4"
+  ],
+  "max_quality_history_size": 100
+}

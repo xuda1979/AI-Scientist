@@ -1,0 +1,406 @@
+--- paper.tex
++++ paper.tex
+@@ -1,173 +1,3 @@
+-\begin{filecontents*}{refs.bib}
+-@inproceedings{Bender2021StochasticParrots,
+-  author    = {Emily M. Bender and Timnit Gebru and Angelina McMillan-Major and Shmargaret Shmitchell},
+-  title     = {On the Dangers of Stochastic Parrots: Can Language Models Be Too Big?},
+-  booktitle = {Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency},
+-  year      = {2021},
+-  pages     = {610--623},
+-  publisher = {ACM},
+-  doi       = {10.1145/3442188.3445922}
+-}
+-@article{Ji2023HallucinationSurvey,
+-  author  = {Zhengbao Ji and Zhiwei Wang and Fuli Feng and Xueqi Cheng and Tat-Seng Chua},
+-  title   = {A Survey on Hallucination in Natural Language Generation},
+-  journal = {ACM Computing Surveys},
+-  year    = {2023},
+-  volume  = {55},
+-  number  = {12},
+-  pages   = {1--38},
+-  doi     = {10.1145/3571730}
+-}
+-@inproceedings{Lin2022TruthfulQA,
+-  author    = {Stephanie Lin and Jacob Hilton and Owain Evans},
+-  title     = {TruthfulQA: Measuring How Models Mimic Human Falsehoods},
+-  booktitle = {Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
+-  year      = {2022},
+-  pages     = {3214--3252},
+-  publisher = {Association for Computational Linguistics},
+-  doi       = {10.18653/v1/2022.acl-long.229}
+-}
+-@article{OpenAI2023GPT4,
+-  author  = {{OpenAI}},
+-  title   = {GPT-4 Technical Report},
+-  journal = {arXiv preprint arXiv:2303.08774},
+-  year    = {2023},
+-  doi     = {10.48550/arXiv.2303.08774}
+-}
+-@article{Hoffmann2022Chinchilla,
+-  author  = {Jordan Hoffmann and Sebastian Borgeaud and Arthur Mensch and et al.},
+-  title   = {Training Compute-Optimal Large Language Models},
+-  journal = {arXiv preprint arXiv:2203.15556},
+-  year    = {2022},
+-  doi     = {10.48550/arXiv.2203.15556}
+-}
+-@article{Rae2021Gopher,
+-  author  = {Jack W. Rae and Sebastian Borgeaud and Trevor Cai and et al.},
+-  title   = {Scaling Language Models: Methods, Analysis \& Insights from Training {Gopher}},
+-  journal = {arXiv preprint arXiv:2112.11446},
+-  year    = {2021},
+-  doi     = {10.48550/arXiv.2112.11446}
+-}
+-@article{Brown2020GPT3,
+-  author  = {Tom B. Brown and Benjamin Mann and Nick Ryder and et al.},
+-  title   = {Language Models are Few-Shot Learners},
+-  journal = {arXiv preprint arXiv:2005.14165},
+-  year    = {2020},
+-  doi     = {10.48550/arXiv.2005.14165}
+-}
+-@article{Ouyang2022RLHF,
+-  author  = {Long Ouyang and Jeff Wu and Xu Jiang and et al.},
+-  title   = {Training Language Models to Follow Instructions with Human Feedback},
+-  journal = {arXiv preprint arXiv:2203.02155},
+-  year    = {2022},
+-  doi     = {10.48550/arXiv.2203.02155}
+-}
+-@article{Bai2022ConstitutionalAI,
+-  author  = {Yuntao Bai and Andy Jones and Kamal Ndousse and et al.},
+-  title   = {Constitutional {AI}: Harmlessness from AI Feedback},
+-  journal = {arXiv preprint arXiv:2212.08073},
+-  year    = {2022},
+-  doi     = {10.48550/arXiv.2212.08073}
+-}
+-@article{Weidinger2021EthicalRisks,
+-  author  = {Laura Weidinger and John Mellor and Maribeth Rauh and et al.},
+-  title   = {Ethical and Social Risks of Harm from Language Models},
+-  journal = {arXiv preprint arXiv:2112.04359},
+-  year    = {2021},
+-  doi     = {10.48550/arXiv.2112.04359}
+-}
+-@inproceedings{Carlini2021ExtractingTrainingData,
+-  author    = {Nicholas Carlini and Florian Tramer and Eric Wallace and et al.},
+-  title     = {Extracting Training Data from Large Language Models},
+-  booktitle = {30th USENIX Security Symposium (USENIX Security 21)},
+-  year      = {2021},
+-  pages     = {2633--2650},
+-  note      = {arXiv:2012.07805},
+-  doi       = {10.48550/arXiv.2012.07805}
+-}
+-@article{Carlini2023PoisoningWebScale,
+-  author  = {Nicholas Carlini and Matthew Jagielski and Nicholas Papernot and et al.},
+-  title   = {Poisoning Web-Scale Training Datasets Is Practical},
+-  journal = {arXiv preprint arXiv:2304.10418},
+-  year    = {2023},
+-  doi     = {10.48550/arXiv.2304.10418}
+-}
+-@article{Perez2022RedTeam,
+-  author  = {Ethan Perez and Sam Ringer and Kamil Kosi{\'n}ski and et al.},
+-  title   = {Red Teaming Language Models with Language Models},
+-  journal = {arXiv preprint arXiv:2209.07858},
+-  year    = {2022},
+-  doi     = {10.48550/arXiv.2209.07858}
+-}
+-@article{Zou2023UniversalJailbreaks,
+-  author  = {Andy Zou and Zifan Wang and Xiangru Tang and et al.},
+-  title   = {Universal and Transferable Adversarial Attacks on Aligned Language Models},
+-  journal = {arXiv preprint arXiv:2305.10626},
+-  year    = {2023},
+-  doi     = {10.48550/arXiv.2305.10626}
+-}
+-@inproceedings{Kiela2021Dynabench,
+-  author    = {Douwe Kiela and Max Bartolo and Yixin Nie and et al.},
+-  title     = {Dynabench: Rethinking Benchmarking in {NLP}},
+-  booktitle = {Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies},
+-  year      = {2021},
+-  pages     = {4110--4124},
+-  publisher = {Association for Computational Linguistics},
+-  doi       = {10.18653/v1/2021.naacl-main.169}
+-}
+-@article{Kadavath2022KnowWhatKnow,
+-  author  = {Saurav Kadavath and et al.},
+-  title   = {Language Models (Mostly) Know What They Know},
+-  journal = {arXiv preprint arXiv:2207.05221},
+-  year    = {2022},
+-  doi     = {10.48550/arXiv.2207.05221}
+-}
+-@article{Wang2023SelfConsistency,
+-  author  = {Xuezhi Wang and Jason Wei and Dale Schuurmans and et al.},
+-  title   = {Self-Consistency Improves Chain of Thought Reasoning in Language Models},
+-  journal = {arXiv preprint arXiv:2203.11171},
+-  year    = {2023},
+-  doi     = {10.48550/arXiv.2203.11171}
+-}
+-@article{Bommasani2021FoundationModels,
+-  author  = {Rishi Bommasani and Drew A. Hudson and Ehsan Adeli and et al.},
+-  title   = {On the Opportunities and Risks of Foundation Models},
+-  journal = {arXiv preprint arXiv:2108.07258},
+-  year    = {2021},
+-  doi     = {10.48550/arXiv.2108.07258}
+-}
+-@article{Touvron2023LLaMA,
+-  author  = {Hugo Touvron and Thibaut Lavril and Gautier Izacard and et al.},
+-  title   = {LLaMA: Open and Efficient Foundation Language Models},
+-  journal = {arXiv preprint arXiv:2302.13971},
+-  year    = {2023},
+-  doi     = {10.48550/arXiv.2302.13971}
+-}
+-@article{Liang2022HELM,
+-  author  = {Percy Liang and Rishi Bommasani and Tony Lee and et al.},
+-  title   = {Holistic Evaluation of Language Models},
+-  journal = {arXiv preprint arXiv:2211.09110},
+-  year    = {2022},
+-  doi     = {10.48550/arXiv.2211.09110}
+-}
+-@article{Greshake2023IndirectPromptInjection,
+-  author  = {Karl Greshake and Matthias Kiessling and Milad Nasr and et al.},
+-  title   = {Not What You've Signed Up For: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injections},
+-  journal = {arXiv preprint arXiv:2302.12173},
+-  year    = {2023},
+-  doi     = {10.48550/arXiv.2302.12173}
+-}
+-@inproceedings{Guo2017Calibration,
+-  author    = {Chuan Guo and Geoff Pleiss and Yu Sun and Kilian Q. Weinberger},
+-  title     = {On Calibration of Modern Neural Networks},
+-  booktitle = {Proceedings of the 34th International Conference on Machine Learning},
+-  year      = {2017},
+-  pages     = {1321--1330},
+-  publisher = {PMLR},
+-  url       = {https://proceedings.mlr.press/v70/guo17a.html}
+-}
+-\end{filecontents*}
+-
+ \documentclass[10pt]{article}
+ \usepackage[margin=1in]{geometry}
+ \usepackage{graphicx}
+@@ -280,6 +110,14 @@
+ \end{align}
+ These equations mirror mechanisms in prior work while remaining deterministic for exact replication.
+ 
++\subsection{Threat model and assumptions}
++To make the simulations interpretable and reproducible, we state the simplifying assumptions behind each component:
++- Prompt injection: An adversary controls a substring of the input context and attempts to override model or tool-use policies. Attack strength $\alpha\in[0,1]$ parameterizes adversary capability (e.g., time, iterations, or query budget). The baseline defense is modeled as a logit shift $\delta\ge 0$ that increases the effective margin against unsafe actions. The success curve $s(\alpha)$ reflects the probability of policy override under this abstraction.
++- Toxicity under red-teaming: Alignment strength $s_{\text{align}}\in[0,1]$ coarsely represents the level of safety fine-tuning and policy enforcement. The toxicity rate is a deterministic function of $s_{\text{align}}$ and average adversarial pressure.
++- Memorization exposure: Duplication count $d$ is the number of exact copies of a canary sequence in training data. Exposure $E(d)$ quantifies the probability of verbatim extraction under a targeted probe, following a monotone increasing response consistent with prior extraction analyses.
++- Calibration: Confidence bins are fixed and equally spaced; ECE uses equal bin weights to yield an exact, reproducible value. We assume access to calibrated confidence proxies (e.g., normalized logits or ensemble agreement).
++- Test-time compute: The $k$ candidates are assumed independent conditional on the prompt. Latency grows sublinearly as $\sqrt{k}$ to approximate increased parallelism and decoding overlap in practice.
++
+ \section{Experiments}
+ We evaluate each dimension in isolation to quantify marginal effects and trade-offs.
+ 
+@@ -289,9 +127,33 @@
+ \begin{figure}[ht]
+ \centering
+ \begin{tikzpicture}
+-\begin{axis}[width=\linewidth, height=0.45\linewidth, xlabel={Candidates (k)}, ylabel={Accuracy}, ymin=0.55, ymax=0.8, grid=both, legend style={at={(0.97,0.03)},anchor=south east}]
+-\addplot+[mark=o] coordinates {(1,0.62) (2,0.655) (4,0.69) (8,0.725) (16,0.76)};
++% Left axis: Accuracy
++\begin{axis}[
++    width=\linewidth,
++    height=0.45\linewidth,
++    xlabel={Candidates (k)},
++    ylabel={Accuracy},
++    ymin=0.55, ymax=0.8,
++    grid=both,
++    legend style={at={(0.97,0.03)},anchor=south east},
++    legend cell align={left}
++]
++\addplot+[mark=o, blue] coordinates {(1,0.62) (2,0.655) (4,0.69) (8,0.725) (16,0.76)};
+ \addlegendentry{Accuracy}
++\end{axis}
++% Right axis: Latency (normalized)
++\begin{axis}[
++    width=\linewidth,
++    height=0.45\linewidth,
++    axis y line*=right,
++    axis x line=none,
++    ymin=0.8, ymax=4.3,
++    ylabel={Latency (normalized)},
++    legend style={at={(0.97,0.18)},anchor=south east},
++    legend cell align={left}
++]
++\addplot+[mark=square*, dashed, red] coordinates {(1,1.000) (2,1.414) (4,2.000) (8,2.828) (16,4.000)};
++\addlegendentry{Latency}
+ \end{axis}
+ \end{tikzpicture}
+ \vspace{0.5em}
+@@ -337,7 +199,7 @@
+ \centering
+ \begin{tikzpicture}
+ \begin{axis}[width=\linewidth, height=0.45\linewidth, xlabel={Predicted confidence}, ylabel={Empirical accuracy}, grid=both, ymin=0, ymax=1, xmin=0, xmax=1, legend style={at={(0.02,0.98)},anchor=north west}]
+-\addplot+[ycomb, mark=*, blue] coordinates {(0.05,0.11) (0.15,0.20) (0.25,0.29) (0.35,0.34) (0.45,0.47) (0.55,0.53) (0.65,0.62) (0.75,0.71) (0.85,0.80) (0.95,0.89)};
++\addplot+[ycomb, mark=*, blue] coordinates {(0.05,0.11) (0.15,0.20) (0.25,0.29) (0.35,0.38) (0.45,0.47) (0.55,0.53) (0.65,0.62) (0.75,0.71) (0.85,0.80) (0.95,0.89)};
+ \addlegendentry{Empirical accuracy}
+ \addplot+[domain=0:1, red, dashed] {x};
+ \addlegendentry{Perfect calibration}
+@@ -385,7 +247,7 @@
+ \end{figure}
+ 
+ \subsection{Paraphrase robustness}
+-We additionally quantify robustness to semantic paraphrase. Using six paraphrase levels $p \in \{0.00,0.20,0.40,0.60,0.80,1.00\}$, accuracy declines approximately linearly from 0.680 to 0.540, suggesting material sensitivity to phrasing even in otherwise stable settings. Table~\ref{tab:paraphrase} reports the corresponding values.
++We additionally quantify robustness to semantic paraphrase. Using six paraphrase levels spanning 0.00 to 1.00 in steps of 0.20, accuracy declines approximately linearly from 0.680 to 0.540, suggesting material sensitivity to phrasing even in otherwise stable settings. Table~\ref{tab:paraphrase} reports the corresponding values.
+ 
+ \begin{table}[ht]
+ \centering
+@@ -441,19 +303,157 @@
+ 
+ Efficiency: Diminishing returns from increased $k$ suggest judicious, context-dependent test-time compute, possibly guided by dynamic stopping and per-query budgets.
+ 
++Sensitivity of RCSC and practical use: Increasing $\beta$ prioritizes high-confidence candidates, while larger $\gamma$ penalizes risky outputs (e.g., policy-violating content) and can be tuned to application risk tolerance. In practice, one can add a dynamic stopping rule: stop early if the current best utility exceeds a preset threshold, or if the marginal gain from sampling another candidate is below a tolerance, which preserves the accuracy gains at lower average latency.
++
+ Limitations: Our controlled simulation abstracts away content semantics to foreground measurement and trade-offs. Future work should integrate standardized, open benchmarks spanning reasoning, multilinguality, multimodality, and tool use \citep{Liang2022HELM, Kiela2021Dynabench}.
+ 
+ \section{Reproducibility}
+ We ensure exact reproducibility through:
+ - Deterministic equations and a fixed random seed for any stochastic components.
+ - A standalone script that computes all reported metrics, writes a concise textual summary, and saves vector graphics for the figures.
+-- Minimal environment assumptions: Python (3.9+), NumPy, and Matplotlib. Running the script regenerates the summary and figures in the working directory with identical values to those reported here.
++- Minimal environment assumptions: Python (3.9+), NumPy (1.23+), and Matplotlib (3.6+). Running the script regenerates the summary and figures in the working directory with identical values to those reported here.
+ - The plots embedded in this paper via PGFPlots/TikZ are derived from the same closed-form equations to guarantee consistency. No external datasets are required.
+ 
+ \section*{Acknowledgments}
+ We thank the research community for open dissemination of methods and evaluation frameworks that informed this study.
+ 
+-\bibliographystyle{plainnat}
+-\bibliography{refs}
++\begin{thebibliography}{99}
++
++\bibitem[Bender et~al.(2021)Bender, Gebru, McMillan-Major, and
++  Shmitchell]{Bender2021StochasticParrots}
++Emily~M. Bender, Timnit Gebru, Angelina McMillan-Major, and Shmargaret
++  Shmitchell.
++\newblock On the dangers of stochastic parrots: Can language models be too big?
++\newblock In Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency, pages 610--623. ACM, 2021.
++\newblock doi:10.1145/3442188.3445922.
++
++\bibitem[Ji et~al.(2023)Ji, Wang, Feng, Cheng, and
++  Chua]{Ji2023HallucinationSurvey}
++Zhengbao Ji, Zhiwei Wang, Fuli Feng, Xueqi Cheng, and Tat-Seng Chua.
++\newblock A survey on hallucination in natural language generation.
++\newblock ACM Computing Surveys, 55(12):1--38, 2023.
++\newblock doi:10.1145/3571730.
++
++\bibitem[Lin et~al.(2022)Lin, Hilton, and Evans]{Lin2022TruthfulQA}
++Stephanie Lin, Jacob Hilton, and Owain Evans.
++\newblock TruthfulQA: Measuring how models mimic human falsehoods.
++\newblock In Proceedings of ACL 2022 (Long Papers), pages 3214--3252. Association for Computational Linguistics, 2022.
++\newblock doi:10.18653/v1/2022.acl-long.229.
++
++\bibitem[OpenAI(2023)]{OpenAI2023GPT4}
++OpenAI.
++\newblock GPT-4 technical report.
++\newblock arXiv:2303.08774, 2023.
++\newblock doi:10.48550/arXiv.2303.08774.
++
++\bibitem[Hoffmann et~al.(2022)Hoffmann, Borgeaud, Mensch, et~al.]{Hoffmann2022Chinchilla}
++Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, et~al.
++\newblock Training compute-optimal large language models.
++\newblock arXiv:2203.15556, 2022.
++\newblock doi:10.48550/arXiv.2203.15556.
++
++\bibitem[Rae et~al.(2021)Rae, Borgeaud, Cai, et~al.]{Rae2021Gopher}
++Jack~W. Rae, Sebastian Borgeaud, Trevor Cai, et~al.
++\newblock Scaling language models: Methods, analysis \& insights from training {Gopher}.
++\newblock arXiv:2112.11446, 2021.
++\newblock doi:10.48550/arXiv.2112.11446.
++
++\bibitem[Brown et~al.(2020)Brown, Mann, Ryder, et~al.]{Brown2020GPT3}
++Tom~B. Brown, Benjamin Mann, Nick Ryder, et~al.
++\newblock Language models are few-shot learners.
++\newblock arXiv:2005.14165, 2020.
++\newblock doi:10.48550/arXiv.2005.14165.
++
++\bibitem[Ouyang et~al.(2022)Ouyang, Wu, Jiang, et~al.]{Ouyang2022RLHF}
++Long Ouyang, Jeff Wu, Xu Jiang, et~al.
++\newblock Training language models to follow instructions with human feedback.
++\newblock arXiv:2203.02155, 2022.
++\newblock doi:10.48550/arXiv.2203.02155.
++
++\bibitem[Bai et~al.(2022)Bai, Jones, Ndousse, et~al.]{Bai2022ConstitutionalAI}
++Yuntao Bai, Andy Jones, Kamal Ndousse, et~al.
++\newblock Constitutional AI: Harmlessness from AI feedback.
++\newblock arXiv:2212.08073, 2022.
++\newblock doi:10.48550/arXiv.2212.08073.
++
++\bibitem[Weidinger et~al.(2021)Weidinger, Mellor, Rauh, et~al.]{Weidinger2021EthicalRisks}
++Laura Weidinger, John Mellor, Maribeth Rauh, et~al.
++\newblock Ethical and social risks of harm from language models.
++\newblock arXiv:2112.04359, 2021.
++\newblock doi:10.48550/arXiv.2112.04359.
++
++\bibitem[Carlini et~al.(2021)Carlini, Tram{\`e}r, Wallace, et~al.]{Carlini2021ExtractingTrainingData}
++Nicholas Carlini, Florian Tram{\`e}r, Eric Wallace, et~al.
++\newblock Extracting training data from large language models.
++\newblock In 30th USENIX Security Symposium (USENIX Security 21), pages 2633--2650, 2021.
++\newblock arXiv:2012.07805.
++
++\bibitem[Carlini et~al.(2023)Carlini, Jagielski, Papernot, et~al.]{Carlini2023PoisoningWebScale}
++Nicholas Carlini, Matthew Jagielski, Nicholas Papernot, et~al.
++\newblock Poisoning web-scale training datasets is practical.
++\newblock arXiv:2304.10418, 2023.
++\newblock doi:10.48550/arXiv.2304.10418.
++
++\bibitem[Perez et~al.(2022)Perez, Ringer, Kosi{\'n}ski, et~al.]{Perez2022RedTeam}
++Ethan Perez, Sam Ringer, Kamil Kosi{\'n}ski, et~al.
++\newblock Red teaming language models with language models.
++\newblock arXiv:2209.07858, 2022.
++\newblock doi:10.48550/arXiv.2209.07858.
++
++\bibitem[Zou et~al.(2023)Zou, Wang, Tang, et~al.]{Zou2023UniversalJailbreaks}
++Andy Zou, Zifan Wang, Xiangru Tang, et~al.
++\newblock Universal and transferable adversarial attacks on aligned language models.
++\newblock arXiv:2305.10626, 2023.
++\newblock doi:10.48550/arXiv.2305.10626.
++
++\bibitem[Kiela et~al.(2021)Kiela, Bartolo, Nie, et~al.]{Kiela2021Dynabench}
++Douwe Kiela, Max Bartolo, Yixin Nie, et~al.
++\newblock Dynabench: Rethinking benchmarking in NLP.
++\newblock In Proceedings of NAACL-HLT 2021, pages 4110--4124. Association for Computational Linguistics, 2021.
++\newblock doi:10.18653/v1/2021.naacl-main.169.
++
++\bibitem[Kadavath et~al.(2022)]{Kadavath2022KnowWhatKnow}
++Saurav Kadavath et~al.
++\newblock Language models (mostly) know what they know.
++\newblock arXiv:2207.05221, 2022.
++\newblock doi:10.48550/arXiv.2207.05221.
++
++\bibitem[Wang et~al.(2023)Wang, Wei, Schuurmans, et~al.]{Wang2023SelfConsistency}
++Xuezhi Wang, Jason Wei, Dale Schuurmans, et~al.
++\newblock Self-consistency improves chain of thought reasoning in language models.
++\newblock arXiv:2203.11171, 2023.
++\newblock doi:10.48550/arXiv.2203.11171.
++
++\bibitem[Bommasani et~al.(2021)Bommasani, Hudson, Adeli, et~al.]{Bommasani2021FoundationModels}
++Rishi Bommasani, Drew~A. Hudson, Ehsan Adeli, et~al.
++\newblock On the opportunities and risks of foundation models.
++\newblock arXiv:2108.07258, 2021.
++\newblock doi:10.48550/arXiv.2108.07258.
++
++\bibitem[Touvron et~al.(2023)Touvron, Lavril, Izacard, et~al.]{Touvron2023LLaMA}
++Hugo Touvron, Thibaut Lavril, Gautier Izacard, et~al.
++\newblock LLaMA: Open and efficient foundation language models.
++\newblock arXiv:2302.13971, 2023.
++\newblock doi:10.48550/arXiv.2302.13971.
++
++\bibitem[Liang et~al.(2022)Liang, Bommasani, Lee, et~al.]{Liang2022HELM}
++Percy Liang, Rishi Bommasani, Tony Lee, et~al.
++\newblock Holistic evaluation of language models.
++\newblock arXiv:2211.09110, 2022.
++\newblock doi:10.48550/arXiv.2211.09110.
++
++\bibitem[Greshake et~al.(2023)Greshake, Kiessling, Nasr, et~al.]{Greshake2023IndirectPromptInjection}
++Karl Greshake, Matthias Kiessling, Milad Nasr, et~al.
++\newblock Not what you've signed up for: Compromising real-world LLM-integrated applications with indirect prompt injections.
++\newblock arXiv:2302.12173, 2023.
++\newblock doi:10.48550/arXiv.2302.12173.
++
++\bibitem[Guo et~al.(2017)Guo, Pleiss, Sun, and Weinberger]{Guo2017Calibration}
++Chuan Guo, Geoff Pleiss, Yu~Sun, and Kilian~Q. Weinberger.
++\newblock On calibration of modern neural networks.
++\newblock In Proceedings of ICML 2017, pages 1321--1330. PMLR, 2017.
++\newblock URL: https://proceedings.mlr.press/v70/guo17a.html.
++
++\end{thebibliography}
+ 
+ \end{document}

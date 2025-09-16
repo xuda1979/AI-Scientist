@@ -1,0 +1,64 @@
+# Enhanced Prompt Template for Scientific Paper Writing (IEEE Style Option)
+
+Use this prompt template in your workflow when writing or modifying papers to ensure all formatting, appearance, and IEEE-style requirements are met:
+
+---
+
+**Prompt Template:**
+
+
+
+Write or modify this paper in clear, concise, and professional academic English. Strictly follow these formatting and appearance rules:
+
+**Formula Overflow Prevention and Fixes:**
+   - Ensure that all formulas (inline and display) fit within the page margins and do not stretch out of the border. For long display equations, break them into multiple lines using environments like align, multline, or split. Insert \allowbreak at logical breakpoints in inline math. Use concise notation and abbreviate where possible. For existing formulas that overflow, reformat them to fit within the margins, breaking them up or summarizing as needed. Avoid using overly long variable names or expressions in equations.
+
+**Abstract Math Overflow Prevention:**
+   - In the abstract, only use inline math (i.e., $...$), never display math. For long formulas, insert \allowbreak at logical breakpoints to allow line breaks, and use concise notation. If a formula is still too long, split it into shorter expressions or summarize it. If needed, wrap the abstract in \begin{sloppypar}...\end{sloppypar} to avoid overflow.
+
+1. **Numerical Formatting:**
+   - Use standard scientific/engineering notation for all numbers.
+   - Match the number of decimal places to the measurement’s significance; avoid excessive precision and padded zeros.
+   - Example: Write '100 km', '6.4 nm', '0.25 dB/km', not '1.0000e2 km' or '2.5000e-1 dB km-1'.
+
+2. **Typography and Symbols:**
+   - Typeset all math, subscripts, and superscripts in LaTeX math mode.
+   - Use proper minus signs (–) in math mode, not hyphens.
+   - Do not break math expressions or words across lines; preserve ligatures.
+
+3. **Tables:**
+   - Format tables with consistent decimal places per column and align numbers by decimal point.
+   - Avoid dense or overflowing tables; keep tables on one page if possible.
+   - Use sentence case for table captions, not all caps.
+
+4. **Figures:**
+   - Format figure captions in sentence case; ensure all inline equations are in math mode.
+   - Axis labels should use consistent font sizes and proper math notation (e.g., $10^{-3}$).
+   - Ensure schematics are large enough and visually clear.
+
+5. **Section Headings:**
+   - Use concise section headings; split long headings into subsections if needed.
+   - Apply consistent capitalization: use Title Case or sentence case, not all caps.
+
+6. **Algorithms and Pseudocode:**
+   - Format algorithms with consistent indentation and line breaks.
+   - Typeset all math symbols in math mode.
+   - Format 'Require:' and 'Ensure:' lines consistently.
+
+7. **References:**
+   - Format all references consistently: include DOIs where available, use standard abbreviations (e.g., 'Phys. Rev. A'), and format arXiv entries in line with other references.
+   - Ensure in-text citations are not split over lines and use consistent spacing.
+
+8. **General Layout:**
+   - Ensure margins are not crowded; avoid widows/orphans.
+   - Keep equations, tables, and figures with their context.
+   - Prevent in-text citations from splitting over lines.
+
+9. **IEEE Style (if applicable):**
+   - If the paper is a good fit for IEEE, use the IEEEtran LaTeX class and follow all IEEE formatting conventions for sections, references, captions, and layout.
+
+---
+
+**Instructions:**
+- Apply all the above rules when generating or editing the paper.
+- If the --ieee-style flag is set, ensure strict IEEE compliance in all formatting and structure.

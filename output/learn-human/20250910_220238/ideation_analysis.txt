@@ -1,0 +1,9 @@
+RESEARCH IDEATION ANALYSIS
+==================================================
+
+Original Topic: large models
+Original Question: how can LLM learn from humans brains
+Field: AI
+
+Specified Idea: Learn from human brain thinking patterns to improve LLM performance
+Note: Ideation phase was skipped because a specific idea was provided.

@@ -1,0 +1,235 @@
+RESEARCH IDEATION ANALYSIS
+==================================================
+
+Original Topic: large models
+Original Question: How to use today's LLM to support scientific research and software engineering
+Field: AI
+
+Selected Idea: Semantic Test-Driven Development (sTDD) with LLMs
+Refined Concept: From natural language requirements, the LLM generates property-based, metamorphic, and differential tests plus oracles, then iteratively codes against failing tests. Integrates specification mining from existing repos and generates test rationales for traceability. Evaluates on large industrial codebases.
+
+FULL IDEATION RESPONSE:
+------------------------------
+## Research Idea #1
+**Title**: Proof-Carrying Scientific Claims (PCSC)  
+**Core Concept**: Require LLM-generated scientific statements (theorems, data analysis conclusions, algorithm claims) to be coupled with machine-checkable proofs or derivations in systems like Lean/Coq/Isabelle or statistical proof checkers. The LLM proposes the claim and constructs a formal derivation; a verifier validates correctness and flags gaps for repair. This bridges natural language insights with rigorous, executable guarantees.  
+**Originality**: 8 - Few works enforce formal, machine-checkable proof payloads for LLM scientific outputs end-to-end.  
+**Impact**: 9 - Could dramatically increase trust and reproducibility for theory-heavy research and safety-critical software proofs.  
+**Feasibility**: 6 - Formalization coverage is limited, and authoring/repairing proofs remains challenging but tractable in specific domains.  
+**Pros**: 
+- Strong correctness guarantees and auditability
+- Aligns with growing formal methods ecosystems (Lean, Coq, SMT)  
+**Cons**:
+- High formalization burden; limited to domains with mature libraries
+- Natural language to formal mapping still brittle
+
+## Research Idea #2
+**Title**: Closed-Loop LLM Lab Partner for Instrument-Oriented Science  
+**Core Concept**: An agentic LLM orchestrates hypothesis generation, experiment design, and instrument control (via safe APIs, simulators, or digital twins), then analyzes results to refine hypotheses. Integrates safety constraints, access control, and human-in-the-loop checkpoints to ensure responsible execution. Demonstrate on microscopy, materials, or bioassays.  
+**Originality**: 7 - Agentic LLMs exist, but end-to-end lab control with safety and design-of-experiments optimization is underexplored.  
+**Impact**: 9 - Accelerates empirical science cycles; can reduce cost/time to discovery.  
+**Feasibility**: 6 - Requires robust APIs, simulators, and rigorous safety protocols; feasible in constrained domains.  
+**Pros**: 
+- Automates high-value, iterative lab workflows
+- Encourages standardized experiment documentation and provenance  
+**Cons**:
+- Risk and compliance hurdles for real instruments
+- Domain calibration and failure handling are complex
+
+## Research Idea #3
+**Title**: Semantic Test-Driven Development (sTDD) with LLMs  
+**Core Concept**: From natural language requirements, the LLM generates property-based, metamorphic, and differential tests plus oracles, then iteratively codes against failing tests. Integrates specification mining from existing repos and generates test rationales for traceability. Evaluates on large industrial codebases.  
+**Originality**: 7 - Moves beyond unit tests to semantic properties orchestrated by LLMs.  
+**Impact**: 8 - Improves code quality and developer productivity; reduces regressions.  
+**Feasibility**: 9 - Works with current test frameworks and code assistants; measurable via CI pipelines.  
+**Pros**:
+- Immediate, practical adoption in SE workflows
+- Produces reusable test assets that outlive the model  
+**Cons**:
+- Hard to produce accurate oracles for nondeterministic systems
+- Risk of tests overfitting to LLM-generated code
+
+## Research Idea #4
+**Title**: LLM-Assisted Systematic Literature Reviews with Evidence Graphs  
+**Core Concept**: Build a pipeline where LLMs extract claims, methods, datasets, and effect sizes into a provenance-rich knowledge graph. Quantify confidence via citation strength, replication status, and contradiction detection; enable queryable, living SLRs.  
+**Originality**: 6 - Literature mining is known, but end-to-end evidence graphs with contradiction and strength modeling are less common.  
+**Impact**: 9 - Dramatically compresses time to survey fields and find gaps/reproducibility issues.  
+**Feasibility**: 8 - RAG, schema design, and entity linking are mature; evaluation datasets exist.  
+**Pros**:
+- Transparent provenance supports trust
+- Reusable across many scientific domains  
+**Cons**:
+- Citation/context hallucinations remain a risk
+- Ground-truth labeling for contradictions is costly
+
+## Research Idea #5
+**Title**: Prompt Compiler: From Domain Specs to Robust LLM Pipelines  
+**Core Concept**: Design a compiler that transforms structured specs (schemas, SLAs, edge cases) into robust prompts, tool-use plans, and guardrails. Includes “prompt unit tests,” coverage metrics, and adversarial stress testing to certify reliability across distributions.  
+**Originality**: 7 - Formalizes prompt engineering as compilation with coverage-driven testing.  
+**Impact**: 8 - Standardizes and hardens LLM use in science/SE prod systems.  
+**Feasibility**: 8 - Builds on current tool-use APIs and evaluation harnesses.  
+**Pros**:
+- Improves reliability and maintainability of LLM workflows
+- Facilitates CI/CD for prompts and toolchains  
+**Cons**:
+- Spec quality determines outcomes; garbage in/out
+- Hard to define universal coverage metrics for language tasks
+
+## Research Idea #6
+**Title**: Codebase-Graph RAG for Monorepos and Polyglot Systems  
+**Core Concept**: Construct semantic program graphs across services (ASTs, call graphs, dataflow, ADRs, tickets) for retrieval-augmented code generation and review. The LLM navigates cross-repo dependencies and architectural contexts, leveraging ephemeral fine-tuning on internal patterns.  
+**Originality**: 6 - RAG exists, but graph-structured, multi-artifact integration at monorepo scale is emergent.  
+**Impact**: 8 - Reduces onboarding time, improves refactoring and cross-cutting changes.  
+**Feasibility**: 8 - Uses existing parsers/indexers; operational at many orgs today.  
+**Pros**:
+- Contextual answers grounded in architecture
+- Better long-horizon modifications across services  
+**Cons**:
+- Index freshness and cost at scale
+- Security/privacy concerns for proprietary code
+
+## Research Idea #7
+**Title**: LLM-Guided Symbolic Regression and Law Discovery  
+**Core Concept**: Combine LLM priors (from literature and domain heuristics) with symbolic regression/evolutionary search to discover interpretable equations governing data. LLM proposes functional forms and constraints; search tunes parameters and validates out-of-sample.  
+**Originality**: 8 - Hybridizing LLM priors with symbolic regression for interpretable science is nascent.  
+**Impact**: 9 - Can reveal compact, explanatory models in physics, biology, and materials.  
+**Feasibility**: 7 - Requires careful bias control and rigorous validation, but components exist.  
+**Pros**:
+- Produces human-interpretable, falsifiable models
+- Leverages literature knowledge as priors  
+**Cons**:
+- Susceptible to literature biases and overfitting
+- Validation pipelines must be stringent to avoid spurious laws
+
+## Research Idea #8
+**Title**: Executable Papers: From PDFs to Reproducible Notebooks via LLMs  
+**Core Concept**: LLMs parse methods and code snippets from papers, resolve environment/dependency gaps, and produce containerized, executable notebooks with data stubs or synthetic substitutes. A verifier checks result parity and flags missing details for author feedback.  
+**Originality**: 7 - PDF-to-notebook is attempted, but end-to-end reproducibility with parity checks and containerization is novel.  
+**Impact**: 8 - Increases reproducibility and accelerates learning/extension of prior work.  
+**Feasibility**: 8 - Strong alignment with current tools (nbdev, Docker, package managers).  
+**Pros**:
+- Tangible reproducibility improvements
+- Eases onboarding to complex research code  
+**Cons**:
+- Ambiguous or proprietary data/methods limit success
+- Parsing LaTeX/PDF variability causes brittleness
+
+## Research Idea #9
+**Title**: Autonomous Bug Bounty Agent for Scientific Software  
+**Core Concept**: LLM-driven agents integrate static analysis, fuzzing, and symbolic execution to find defects in numerical and scientific pipelines; they generate PoCs, tests, and candidate patches with risk assessments. Targets are open-source libraries and lab pipelines.  
+**Originality**: 7 - Combines multiple analyzers with LLM planning and patch synthesis for science-specific stacks.  
+**Impact**: 8 - Improves reliability of widely used research software; real-world OSS impact.  
+**Feasibility**: 7 - Each component exists; orchestration and scalability are challenging.  
+**Pros**:
+- Concrete, measurable outcomes (bugs found/fixed)
+- Benefits the broader research community  
+**Cons**:
+- High false positive rate without careful triage
+- Hard to validate numerical correctness vs. mere crashes
+
+## Research Idea #10
+**Title**: LLM-Designed Experiments with Power, Cost, and Bias Optimization  
+**Core Concept**: Use LLMs to translate research aims into experimental designs while optimizing statistical power, sample size, cost, and bias minimization. Simulator-in-the-loop evaluates design robustness; outputs include preregistration-ready protocols.  
+**Originality**: 7 - Brings multi-objective optimization and prereg workflows into LLM-co-designed experiments.  
+**Impact**: 8 - Better experimental rigor and efficiency across disciplines.  
+**Feasibility**: 7 - Needs domain-specific simulators and robust statistical tools.  
+**Pros**:
+- Encourages reproducible, preregistered research
+- Reduces underpowered or biased studies  
+**Cons**:
+- LLM misunderstanding of domain-specific constraints
+- Simulator fidelity dictates reliability
+
+## Research Idea #11
+**Title**: Verifiable Toolformer: LLM Orchestration with Formal and Empirical Checkers  
+**Core Concept**: A planning LLM delegates subproblems to specialized verifiers (SMT solvers, type checkers, unit tests, citation verifiers, data validators), composes results back into solutions, and iteratively repairs failures. Provides structured justifications with pass/fail traces.  
+**Originality**: 7 - Tool use is known; systematic orchestration with multi-verifier feedback for research/SE tasks is emerging.  
+**Impact**: 9 - Reduces hallucinations, improves correctness for code, math, and literature tasks.  
+**Feasibility**: 7 - Tooling exists; needs robust planning and failure handling.  
+**Pros**:
+- Stronger guarantees without full formalization
+- General-purpose across many tasks  
+**Cons**:
+- Latency and cost from tool calls
+- Planner brittleness in long-horizon tasks
+
+## Research Idea #12
+**Title**: Human–AI Co-Theorizing Protocols with Argument Maps and Falsifiable Predictions  
+**Core Concept**: Design deliberation protocols where LLMs and scientists co-create candidate theories, enumerate assumptions, generate testable predictions, and map arguments/counterarguments. Evaluate epistemic gains via prediction markets or pre-registered forecasting tasks.  
+**Originality**: 9 - Formal co-theorizing protocols with measurable epistemic outcomes are rare.  
+**Impact**: 8 - Could reshape early-stage theory formation in multiple sciences.  
+**Feasibility**: 6 - Requires careful study design and domain expert buy-in.  
+**Pros**:
+- Encourages rigor and falsifiability
+- Produces structured artifacts for citation and critique  
+**Cons**:
+- Measuring “epistemic gain” is nontrivial
+- Risk of LLM anchoring bias influencing humans
+
+## Research Idea #13
+**Title**: LLM-Powered Software Architecture Synthesis and Conformance  
+**Core Concept**: From requirements and nonfunctional constraints, the LLM proposes architectures, ADRs, threat models, and infrastructure diagrams; a conformance checker monitors drift via static/dynamic analysis. Updates are suggested as ADR diffs with justifications.  
+**Originality**: 6 - Architecture generation exists, but continuous conformance with ADR tracking is less explored.  
+**Impact**: 7 - Improves design quality for complex systems; reduces architecture decay.  
+**Feasibility**: 8 - Leverages existing IaC, linters, and SAST tools.  
+**Pros**:
+- Maintains living documentation
+- Bridges design intent and implementation reality  
+**Cons**:
+- Hard to capture tacit architectural constraints
+- False positives in drift detection can cause alert fatigue
+
+## Research Idea #14
+**Title**: Benchmarking Trust: Reproducibility, Attribution, and Correctness for LLM Research Assistants  
+**Core Concept**: Create a benchmark suite that measures reproducibility of LLM-assisted analyses, citation fidelity, code correctness under dependency changes, and evidence attribution quality. Provide leaderboards and standardized audit trails for methods.  
+**Originality**: 6 - Benchmarks exist, but trust/reproducibility-focused, multi-axis evaluation for research assistants is limited.  
+**Impact**: 8 - Guides the field toward trustworthy deployments with clear metrics.  
+**Feasibility**: 9 - Dataset curation and evaluation harnesses are well within reach.  
+**Pros**:
+- Establishes common metrics and baselines
+- Encourages responsible model development  
+**Cons**:
+- Risk of overfitting to benchmark specifics
+- Maintaining benchmark freshness is labor-intensive
+
+## Research Idea #15
+**Title**: Privacy-Preserving Personalized Research Copilot with Continual Learning  
+**Core Concept**: Build a local or edge-deployed copilot that learns project conventions, notation, and datasets via private RAG and on-device adapters, with differential privacy for shared improvements. Evaluate productivity and leak risk in real labs/teams.  
+**Originality**: 6 - Personalized assistants exist, but rigorous privacy and continual learning for research contexts are less mature.  
+**Impact**: 8 - Unlocks adoption in sensitive environments (biotech, pharma, defense).  
+**Feasibility**: 8 - Uses today’s small adapters, vector DBs, and DP techniques.  
+**Pros**:
+- Strong privacy posture suitable for regulated domains
+- Tangible productivity gains from personalization  
+**Cons**:
+- DP can reduce personalization quality
+- Device/resource constraints limit model size
+
+## RANKING ANALYSIS
+Ranking criteria:
+- Impact: Potential to transform scientific research and software engineering practices broadly.
+- Feasibility: Can be meaningfully executed with today’s tools and data.
+- Originality: Novelty beyond incremental improvements.
+
+Top 5 ideas:
+1) Verifiable Toolformer (Idea #11)
+- High impact through broad applicability and correctness improvements; feasible orchestration with existing verifiers; solid originality.
+
+2) LLM-Guided Symbolic Regression and Law Discovery (Idea #7)
+- High scientific impact via interpretable discoveries; good originality; moderate feasibility with existing SR and LLMs.
+
+3) LLM-Assisted SLR with Evidence Graphs (Idea #4)
+- Very high practical impact and adoption potential; strong feasibility; moderate originality.
+
+4) Semantic Test-Driven Development with LLMs (Idea #3)
+- Immediate SE impact, high feasibility; originality is good due to semantic properties and metamorphic tests.
+
+5) Executable Papers via LLMs (Idea #8)
+- Strong reproducibility impact; high feasibility; reasonably original in end-to-end, containerized parity-checked conversion.
+
+Close contenders: Proof-Carrying Scientific Claims (Idea #1) and Privacy-Preserving Personalized Copilot (Idea #15) score high but either face feasibility hurdles (formalization) or narrower scope.
+
+## RECOMMENDATION
+Best single idea: Verifiable Toolformer (Idea #11)
+
+Why: It balances high impact, originality, and feasibility. By systematically integrating LLM planning with formal and empirical verifiers, it directly addresses correctness, hallucinations, and trust—core barriers to using LLMs in science and software engineering. It can be demonstrated across multiple tasks (code synthesis with tests/type checks, math with SMT, literature with citation verification), enabling a compelling research paper with strong empirical results and ablation studies. This framework is extensible, measurable, and immediately valuable to practitioners.

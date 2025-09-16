@@ -9,5 +9,6 @@ fwm_term,1.27137543e-06,,,,,distributed FWM integral contribution
 alpha_nepers_per_km,2.50000000e-02,,,,,attenuation in nepers/km
 p_eff_sum,1.78198995e-02,,,,,state-averaged per-qubit error probability (diagnostic)
 P_L_BDD_rho=0.60,9.08000000e-04,8.50853371e-04,9.68981097e-04,908,1000000,BDD (n=255, t=10); trials=1000000; seed=42; kappa=0.100000000; beta=2.00
-runtime_sec_rho=0.60,73.559,,,,,wall-clock seconds for previous BDD run
-throughput_rho=0.60,13594.61,,,,,trials per second for previous BDD run
+runtime_sec_rho=0.60,70.555,,,,,wall-clock seconds for previous BDD run
+throughput_rho=0.60,14173.24,,,,,trials per second for previous BDD run
+expected_run_length_rho=0.60,2.50000000e+00,,,,,E[run length]=1/(1-rho)

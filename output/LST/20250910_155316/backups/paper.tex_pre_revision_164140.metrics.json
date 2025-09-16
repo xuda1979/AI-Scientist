@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-10T16:41:40.008755",
+  "file": "output\\LST\\20250910_155316\\paper.tex",
+  "backup": "output\\LST\\20250910_155316\\backups\\paper.tex_pre_revision_164140",
+  "metrics": {
+    "word_count": 3797,
+    "char_count": 35337,
+    "section_count": 14,
+    "subsection_count": 9,
+    "figure_count": 2,
+    "table_count": 1,
+    "equation_count": 0,
+    "citation_count": 0,
+    "paragraph_count": 72,
+    "page_estimate": 15.188
+  }
+}

@@ -1,0 +1,36 @@
+# IEEE Style Workflow/Config Flag Implementation
+
+To enable IEEE-style formatting in your paper-writing software, add a CLI/config flag (e.g., --ieee-style) that triggers the following changes:
+
+1. **LaTeX Template:**
+   - Switch the document class to `IEEEtran` (or another IEEE-compliant class) when the flag is set.
+   - Example: `\documentclass[journal]{IEEEtran}`
+
+2. **Prompt/Instruction Injection:**
+   - When the flag is set, inject the enhanced prompt template (see enhanced_paper_prompt_template.txt) with explicit IEEE-style instructions.
+
+3. **Reference Formatting:**
+   - Use an IEEE BibTeX style file (e.g., `IEEEtran.bst`) for references.
+   - Enforce consistent abbreviations and DOI inclusion.
+
+4. **Section, Table, and Figure Formatting:**
+   - Apply sentence case to captions and section headings.
+   - Ensure all tables and figures follow IEEE layout and caption rules.
+
+5. **Validation:**
+   - Add a validation step to check for IEEE compliance (e.g., correct document class, reference style, caption formatting).
+
+6. **CLI Example:**
+   - `python sciresearch_workflow_refactored.py --ieee-style ...`
+
+7. **Config Example:**
+   - In a YAML or JSON config: `ieee_style: true`
+
+**Implementation Steps:**
+- Update CLI parser to accept `--ieee-style` flag.
+- In the workflow, conditionally set the LaTeX template, prompt, and reference style based on this flag.
+- Add post-processing/validation scripts to enforce IEEE rules.
+
+---
+
+This approach ensures that, when the flag is set, all generated papers are formatted to IEEE standards automatically.

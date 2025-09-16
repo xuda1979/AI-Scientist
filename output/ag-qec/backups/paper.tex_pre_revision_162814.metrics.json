@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-14T16:28:14.440235",
+  "file": "output\\ag-qec\\paper.tex",
+  "backup": "output\\ag-qec\\backups\\paper.tex_pre_revision_162814",
+  "metrics": {
+    "word_count": 8568,
+    "char_count": 91568,
+    "section_count": 19,
+    "subsection_count": 17,
+    "figure_count": 6,
+    "table_count": 14,
+    "equation_count": 2,
+    "citation_count": 19,
+    "paragraph_count": 154,
+    "page_estimate": 34.272
+  }
+}

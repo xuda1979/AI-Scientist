@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-10T22:27:02.278297",
+  "file": "output\\learn-human\\20250910_220238\\paper.tex",
+  "backup": "output\\learn-human\\20250910_220238\\backups\\paper.tex_pre_revision_222702",
+  "metrics": {
+    "word_count": 3390,
+    "char_count": 30479,
+    "section_count": 6,
+    "subsection_count": 5,
+    "figure_count": 4,
+    "table_count": 1,
+    "equation_count": 0,
+    "citation_count": 0,
+    "paragraph_count": 41,
+    "page_estimate": 13.56
+  }
+}

@@ -1,0 +1,4 @@
+Model,Phase 1 Accuracy,Post-Shift Nadir,Recovery Speed (steps to 90%)
+LLM (Monolithic),91.5,25.0,>10000
+Static 2-layer,93.1,35.0,>10000
+"ARH (Ours, Principled)",93.0,60.0,898

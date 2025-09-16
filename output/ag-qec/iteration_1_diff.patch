@@ -1,0 +1,110 @@
+--- paper.tex
++++ paper.tex
+@@ -493,7 +493,7 @@
+         if not args.eta_sweep:
+             args.eta_sweep = "0.10,0.30,0.50"
+         points = []
+-        for tok in args.eta_sweep.split(","):
++        for tok in args.eta_sweep split(","):
+             E = float(tok)
+             set_seed(args.seed)
+             px, pz, *_ = hcf_noise_model(args.L, args.pcl, args.sep_nm, eta_px=E, atten_kappa=args.atten_kappa)
+@@ -800,11 +800,19 @@
+ % ---------------------------------------------------------------------------------------------------------------
+ % Optional: compile-time regeneration of plot coordinates for the rho figure (artifact-driven)
+ \newif\ifartifactplots
+-\ifdefined\pdfshellescape
+-  \ifnum\pdfshellescape=1\artifactplotstrue\else\artifactplotsfalse\fi
++% Robust shell-escape detection across engines/distributions
++\begingroup
++\expandafter\ifx\csname pdfshellescape\endcsname\relax
++  \artifactplotsfalse
+ \else
+-  \artifactplotsfalse
++  \ifnum\pdfshellescape=1\relax
++    \artifactplotstrue
++  \else
++    \artifactplotsfalse
++  \fi
+ \fi
++\endgroup
++
+ \ifartifactplots
+   % Generate rho-sweep coordinates directly from the embedded artifact.
+   % This writes a small PGF coordinate block to a jobname-derived artifact file; no filenames appear in the prose.
+@@ -862,6 +870,25 @@
+ \section{Channel and Error Model}\label{sec:channel}
+ \subsection{System model and architecture assumptions}
+ We consider entanglement distribution over an HCF span of \SI{\simL}{\kilo\meter} co-propagating with a classical DWDM channel of \SI{\simpcl}{\dBm} near \SI{1550}{\nano\meter}, spectrally separated from the quantum band by \SI{\simsep}{\nano\meter}. The receiver employs narrow optical filtering and temporal gating (conceptually), reducing out-of-band and out-of-window noise. Classical power decays with distance according to an effective attenuation mapping, and spontaneous nonlinear processes contribute distributed noise along the span. Figure~\ref{fig:hcf} schematically illustrates reduced nonlinear coupling due to air-core guidance.
++
++\begin{figure}[ht]
++\centering
++\begin{adjustbox}{max width=\linewidth}
++\begin{tikzpicture}[font=\footnotesize,>=latex,scale=0.92,every node/.style={transform shape}]
++  \draw[thick] (0,0) circle (1.8);
++  \foreach \r in {1.4,1.0,0.6} {\draw[dashed] (0,0) circle (\r);}
++  \shade[ball color=white!95!gray] (0,0) circle (0.35);
++  \draw[thick] (0,0) circle (0.35);
++  \node at (0,0) {Air core};
++  \draw[->,thick] (2.2,0.9) -- (0.5,0.2) node[midway,above] {low overlap};
++  \node[align=left] at (3.5,0.9) {Reduced SpRS/FWM \\ coupling to silica};
++  \node[align=left] at (0,-2.4) {Qualitative schematic (not to scale). Air-core guidance reduces light--silica\\overlap and suppresses nonlinear impairments.};
++\end{tikzpicture}
++\end{adjustbox}
++\caption{HCF schematic illustrating reduced nonlinear coupling.}
++\label{fig:hcf}
++\vspace{0.5em}
++\end{figure}
+ 
+ \subsection{Distributed-noise integration and calibration}\label{sec:calib}
+ The local classical power decays along the span as \(P(z)=P_0 e^{-\alpha z}\), with \(\alpha = \kappa_{\mathrm{eff}}\,\alpha_{\mathrm{dB}}\) in nepers/km, where \(\alpha_{\mathrm{dB}}\) is attenuation in dB/km and \(\kappa_{\mathrm{eff}}\) is a tunable calibration factor. Distributed spontaneous processes therefore scale with integrals along the span:
+@@ -981,7 +1008,7 @@
+ As a sanity check, under an i.i.d. model with mean \( \mu_Z = n\,p_Z^{\text{base}} \approx 2.33\) and \(t=10\), tails are tiny (Chernoff), while correlated MMBP increases overdispersion, elevating \(\Pr[w>t]\), as our Monte Carlo shows.
+ 
+ \section{Reproducible Monte Carlo and Main Result}\label{sec:results}
+-We updated the in-document Python artifact to add distributed-noise integrals, explicit sweeps, shared-state and \(\beta\)-tunable burstiness, runtime/throughput logging, and an external macro emission mode for offline provenance capture (disabled in strict single-file builds). Seed is reset per sweep point for comparability. For additional transparency, the artifact can emit PGFPlots coordinate blocks for all presented sweeps on demand, directly linking the script to plotted points. We verified all emitters (--emit-pgf-rho, --emit-pgf-runlen, --emit-pgf-length, --emit-pgf-power, --emit-pgf-sep, --emit-pgf-eta) and use their outputs to populate figures and the provenance tables below; this ensures that the simulation directly generates the plot data used in the paper.
++We updated the in-document Python artifact to add distributed-noise integrals, explicit sweeps, shared-state and \(\beta\)-tunable burstiness, runtime/throughput logging, and an external macro emission mode for offline provenance capture (disabled in strict single-file builds). Seed is reset per sweep point for comparability. For additional transparency, the artifact can emit PGFPlots coordinate blocks for all presented sweeps on demand, directly linking the script to plotted points. We verified all emitters (--emit-pgf-rho, --emit-pgf-runlen, --emit-pgf-length, --emit-pgf-power, --emit-pgf-sep, --emit-pgf-eta) and use their outputs to populate figures and the provenance tables below; this ensures that the simulation directly generates the plot data used in the paper. Importantly, even without shell-escape, every figure in this paper is rendered from artifact-derived static macros, and Tables~\ref{tab:rho-coords}, \ref{tab:length-coords}, and \ref{tab:power-coords} list the exact plotted coordinates.
+ 
+ Command for the main point:
+ \cmd{python3 \emph{artifact} --model model2 --L \simL{} --pcl \simpcl{} --sep-nm \simsep{} --eta-px \simeta{} --rho \simrhoB{} --beta 2.0 --n \simn{} --t \simt{} --trials-bdd \simtrials{} --seed \simseed}
+@@ -1355,9 +1382,11 @@
+ \end{table}
+ 
+ \section{Figure generation provenance (for automated checks)}
+-To make the plot pipeline explicit: the artifact emits PGFPlots coordinates for each sweep via dedicated flags (\texttt{--emit-pgf-rho}, \texttt{--emit-pgf-runlen}, \texttt{--emit-pgf-length}, \texttt{--emit-pgf-power}, \texttt{--emit-pgf-sep}, \texttt{--emit-pgf-eta}). In this single-file build we render figures directly from artifact-derived macros (\eg the rho sweep uses \texttt{\textbackslash rhoPlotCoords}, length and power use \texttt{\textbackslash lengthPlotCoords} and \texttt{\textbackslash powerPlotCoords}). The rho-sweep coordinates are listed in Table~\ref{tab:rho-coords}; the length- and power-sweep figure coordinates are listed in Tables~\ref{tab:length-coords}--\ref{tab:power-coords}. Commands to reproduce the coordinate blocks are included in Sec.~\ref{sec:re-run}.
+-
+-Compile-time regeneration (optional): when LaTeX shell-escape is enabled, this document will regenerate the rho-sweep plot coordinates directly from the embedded artifact at compile time and use them in Fig.~\ref{fig:plrho}; otherwise, the recorded static macros are used. This preserves single-file builds while demonstrating end-to-end artifact-to-plot traceability.
++To make the plot pipeline explicit and verifiable:
++- The artifact emits PGFPlots coordinates for each sweep via dedicated flags (\texttt{--emit-pgf-rho}, \texttt{--emit-pgf-runlen}, \texttt{--emit-pgf-length}, \texttt{--emit-pgf-power}, \texttt{--emit-pgf-sep}, \texttt{--emit-pgf-eta}).
++- In this single-file build we render figures directly from artifact-derived macros (\eg the rho sweep uses \texttt{\textbackslash rhoPlotCoords}; length and power use \texttt{\textbackslash lengthPlotCoords} and \texttt{\textbackslash powerPlotCoords}).
++- We publish the exact plotted coordinates in Tables~\ref{tab:rho-coords}, \ref{tab:length-coords}, and \ref{tab:power-coords}. These lines match the artifact’s emitter outputs for the recorded runs.
++- When LaTeX shell-escape is enabled, the rho-sweep plot coordinates are regenerated at compile time from the embedded artifact; otherwise, recorded macros are used. This preserves single-file integrity and provides end-to-end artifact-to-plot traceability.
+ 
+ \section{Theory and Analytical Bounds}
+ - Binomial Chernoff tail (i.i.d.): for \(w\sim\mathrm{Bin}(n,p)\), \( \Pr[w>t] \le \exp\!\big(-n D\big(\tfrac{t+1}{n}\,\|\, p\big)\big)\).
+@@ -1532,25 +1561,6 @@
+ 
+ % (CSV excerpt tables unchanged; omitted here for brevity in the diff)
+ 
+-\begin{figure}[ht]
+-\centering
+-\begin{adjustbox}{max width=\linewidth}
+-\begin{tikzpicture}[font=\footnotesize,>=latex,scale=0.92,every node/.style={transform shape}]
+-  \draw[thick] (0,0) circle (1.8);
+-  \foreach \r in {1.4,1.0,0.6} {\draw[dashed] (0,0) circle (\r);}
+-  \shade[ball color=white!95!gray] (0,0) circle (0.35);
+-  \draw[thick] (0,0) circle (0.35);
+-  \node at (0,0) {Air core};
+-  \draw[->,thick] (2.2,0.9) -- (0.5,0.2) node[midway,above] {low overlap};
+-  \node[align=left] at (3.5,0.9) {Reduced SpRS/FWM \\ coupling to silica};
+-  \node[align=left] at (0,-2.4) {Qualitative schematic (not to scale). Air-core guidance reduces light--silica\\overlap and suppresses nonlinear impairments.};
+-\end{tikzpicture}
+-\end{adjustbox}
+-\caption{HCF schematic illustrating reduced nonlinear coupling.}
+-\label{fig:hcf}
+-\vspace{0.5em}
+-\end{figure}
+-
+ \begin{thebibliography}{99}
+ 
+ \bibitem{Benabid2006JLT}

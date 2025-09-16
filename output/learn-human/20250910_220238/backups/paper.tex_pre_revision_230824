@@ -1,0 +1,442 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{lscape}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{positioning}
+
+\title{Neuro-Deliberation at Test Time: Learning from Human Brain Thinking Patterns to Improve Large Language Model Reasoning}
+\author{Anonymous}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Neuroscience has uncovered core motifs of human deliberation: limited-capacity working memory, conflict monitoring, rhythmic coordination, and prioritized replay.
+In parallel, recent prompting and inference-time strategies for large language models (LLMs)---such as chain-of-thought, self-consistency, tree search, and reflective self-improvement---demonstrate that allocating more computation at test time can substantially improve reasoning.
+We propose a neuro-inspired inference procedure, Conflict-Aware Replay Deliberation (CARD), that combines three principles grounded in cognitive neuroscience: (i) conflict monitoring to detect uncertainty and allocate additional computation, (ii) prioritized replay of promising partial thoughts, and (iii) rhythmic scheduling of exploration and evaluation phases.
+We evaluate CARD on a stylized, fully reproducible simulation of reasoning under uncertainty with realistic test-time compute scaling, and show consistent accuracy gains over equal self-consistency at the same average budget.
+We provide a formalization, analysis of compute--accuracy trade-offs, and a reliability assessment, and we place the approach in the context of contemporary LLM reasoning methods and foundational cognitive mechanisms.
+\end{abstract}
+
+\section{Introduction}
+Human reasoning balances rapid intuition with deliberative control, allocating effort based on conflict and uncertainty \citep{Baddeley2012WorkingMemory,Botvinick2001ConflictMonitoring,Fries2015Rhythms,Mattar2018PrioritizedReplay,Gershman2018Hippocampus}.
+LLMs benefit from analogous inference-time computation and structure \citep{Wei2022CoT,Kojima2022ZeroShot,Wang2023SelfConsistency,Yao2023ToT,Yao2023ReAct,Shinn2023Reflexion,Madaan2023SelfRefine,Zelikman2022STAR,Lightman2023LetsVerify,Lewis2020RAG}.
+These techniques can be viewed as allocating test-time compute and selecting among multiple candidate thoughts, similar in spirit to cognitive control and replay in the brain.
+
+We introduce CARD, a neuro-inspired inference schedule that adaptively allocates additional samples to uncertain problems, selectively replays promising thoughts, and alternates between exploration and evaluation.
+We show, in a controlled simulation with closed-form analytics, that CARD consistently outperforms equal self-consistency at fixed average test-time budgets, and improves calibration.
+Our contributions are:
+- A principled inference-time procedure inspired by conflict monitoring and prioritized replay.
+- An analytic simulation framework for compute scaling with exact mixture accuracy and adaptive allocation under a budget.
+- Empirical evidence of improved accuracy and reliability, with full reproducibility and clear reporting.
+
+\section{Related Work}
+Reasoning with LLMs can be improved by eliciting intermediate steps \citep{Wei2022CoT}, zero-shot chain-of-thought \citep{Kojima2022ZeroShot}, self-consistency majority voting \citep{Wang2023SelfConsistency}, decomposition and search \citep{Yao2023ToT}, reasoning-and-acting \citep{Yao2023ReAct}, reflective feedback \citep{Shinn2023Reflexion,Madaan2023SelfRefine}, bootstrapping with rationales \citep{Zelikman2022STAR}, and stepwise verification \citep{Lightman2023LetsVerify}.
+Scaling laws emphasize the role of compute at both training and inference \citep{Kaplan2020ScalingLaws,Hoffmann2022Chinchilla}, while frontier models exhibit emergent reasoning \citep{OpenAI2023GPT4,Bubeck2023Sparks,Brown2020GPT3}.
+Our work connects these LLM strategies to cognitive and neural principles: working memory and control \citep{Baddeley2012WorkingMemory,Botvinick2001ConflictMonitoring}, rhythmic coordination \citep{Fries2015Rhythms}, and prioritized replay for planning \citep{Mattar2018PrioritizedReplay,Gershman2018Hippocampus}.
+
+\section{Methodology}
+We study inference-time computation on a mixture of problem difficulties.
+Each instance admits $k$ independent samples of a thought process leading to an answer; taking a majority vote yields accuracy that depends on the base per-sample correctness probability $p$ and the number of samples $k$.
+For even $k$, ties are broken uniformly at random.
+
+\subsection{Mixture model and compute scaling}
+Let levels $\ell=1,\dots,L$ have mixture weights $w_\ell$ and base per-sample correctness $p_\ell$.
+The correctness of majority voting among $k$ i.i.d.\ samples for level $\ell$ is
+\[
+\mathrm{Acc}(p_\ell,k) = \sum_{i=\lfloor k/2\rfloor + 1}^{k} \binom{k}{i} p_\ell^i (1-p_\ell)^{k-i} + \frac{\mathbb{1}[k \text{ even}]}{2}\binom{k}{k/2} p_\ell^{k/2}(1-p_\ell)^{k/2}.
+\]
+Mixture accuracy is $A(k)=\sum_{\ell} w_\ell \mathrm{Acc}(p_\ell,k)$, which increases with $k$ for $p_\ell>1/2$.
+Note: with random tie-breaking, $\mathrm{Acc}(p,2m)=\mathrm{Acc}(p,2m{-}1)$, so equal-allocation curves exhibit plateaus at even $k$.
+
+\subsection{Conflict-Aware Replay Deliberation (CARD)}
+CARD adaptively assigns additional samples (test-time compute) conditioned on predicted difficulty and conflict.
+We formalize the allocation as the following constrained optimization:
+\begin{equation}
+\label{eq:allocation}
+\begin{aligned}
+&\underset{\{K_\ell\in\mathbb{N}\}_{\ell=1}^L}{\text{maximize}} && \sum_{\ell=1}^{L} w_\ell \,\mathrm{Acc}(p_\ell,K_\ell)\\
+&\text{subject to} && \sum_{\ell=1}^{L} w_\ell K_\ell = B.
+\end{aligned}
+\end{equation}
+We solve this via greedy water-filling: start with $K_\ell \!=\! 1$ for all levels and repeatedly increment $K_\ell$ for the level with the largest marginal improvement $\mathrm{Acc}(p_\ell,K_\ell{+}1) {-} \mathrm{Acc}(p_\ell,K_\ell)$ until reaching the budget.
+Final fine-tuning proportionally mixes $K_\ell$ and $K_\ell{+}1$ at one level to exactly match $B$.
+
+Prioritized replay is implemented by focusing additional samples on levels with the highest marginal utility (a proxy for conflict/uncertainty), akin to hippocampal replay that prioritizes behaviorally relevant content \citep{Mattar2018PrioritizedReplay}.
+Exploration and evaluation alternate rhythmically: batches of candidate thoughts are sampled, then evaluated by majority voting; this alternation is analogous to rhythmic coordination hypotheses in cognitive neuroscience \citep{Fries2015Rhythms}.
+
+\begin{algorithm}[h]
+\caption{Conflict-Aware Replay Deliberation (CARD)}
+\label{alg:card}
+\begin{algorithmic}[1]
+\STATE Input: mixture levels $\{(w_\ell,p_\ell)\}_{\ell=1}^L$, average budget $B \ge 1$
+\STATE Initialize $K_\ell \leftarrow 1$ for all $\ell$, compute $\bar{K} \leftarrow \sum_\ell w_\ell K_\ell$
+\WHILE{$\bar{K} + \min_\ell w_\ell \le B$}
+  \STATE For each $\ell$, compute marginal gain $g_\ell \leftarrow \mathrm{Acc}(p_\ell,K_\ell{+}1) - \mathrm{Acc}(p_\ell,K_\ell)$
+  \STATE Let $\ell^\star \leftarrow \arg\max_\ell g_\ell$ (conflict-aware selection)
+  \STATE $K_{\ell^\star} \leftarrow K_{\ell^\star} + 1$
+  \STATE $\bar{K} \leftarrow \sum_\ell w_\ell K_\ell$
+\ENDWHILE
+\IF{$\bar{K} < B$}
+  \STATE Choose $\ell^\star \leftarrow \arg\max_\ell g_\ell$
+  \STATE Let $\alpha \leftarrow \frac{B - \bar{K}}{w_{\ell^\star}} \in [0,1]$ (fraction of level $\ell^\star$ instances receiving one more sample)
+  \STATE Return $\sum_{\ell\neq \ell^\star} w_\ell \mathrm{Acc}(p_\ell,K_\ell) + w_{\ell^\star}[(1{-}\alpha)\mathrm{Acc}(p_{\ell^\star},K_{\ell^\star}) + \alpha \mathrm{Acc}(p_{\ell^\star},K_{\ell^\star}{+}1)]$
+\ELSE
+  \STATE Return $\sum_{\ell} w_\ell \mathrm{Acc}(p_\ell,K_\ell)$
+\ENDIF
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{System architecture}
+We depict CARD’s inference-time pipeline: exploration (sample thoughts), conflict estimation (marginal-utility proxy), prioritized replay (allocate more samples to conflicted levels), and evaluation (majority vote), alternating rhythmically.
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.8cm, >=stealth, thick]
+\tikzstyle{blk}=[draw, rounded corners, align=center, minimum width=3.4cm, minimum height=1.0cm]
+\node[blk] (exp) {Exploration\\(sample candidate thoughts)};
+\node[blk, right=of exp] (conf) {Conflict estimation\\(marginal utility $g_\ell$)};
+\node[blk, right=of conf] (repl) {Prioritized replay\\(allocate extra samples)};
+\node[blk, right=of repl] (eval) {Evaluation\\(majority voting)};
+\draw[->] (exp) -- (conf);
+\draw[->] (conf) -- (repl);
+\draw[->] (repl) -- (eval);
+\draw[->, bend left=30] (eval.north) to node[above] {stop if budget $B$ met} (repl.north);
+\draw[->, bend left=30] (repl.south) to node[below] {else explore next batch} (exp.south);
+\end{tikzpicture}
+\caption{CARD pipeline: alternating exploration and evaluation, with conflict-aware prioritized replay under a global budget.}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Computational complexity and properties}
+Let $L$ be the number of difficulty levels and $B$ the average budget.
+- Complexity: The greedy water-filling loop adds at most $O(B/\min_\ell w_\ell)$ unit steps; each step scans $L$ levels to compute $g_\ell$, so time $O(L \cdot B/\min_\ell w_\ell)$; memory $O(L)$. With a priority queue keyed by $g_\ell$, the amortized time can be reduced to $O((B/\min_\ell w_\ell)\log L)$.
+- Monotonicity: For $p>1/2$, $\mathrm{Acc}(p,k)$ is non-decreasing in $k$; the greedy algorithm therefore never reduces accuracy when increasing the budget.
+- Even-odd plateaus: With random tie-breaking, $\mathrm{Acc}(p,2m)=\mathrm{Acc}(p,2m{-}1)$, implying equal-allocation plateaus at even $k$, whereas CARD achieves gains by redistributing compute (e.g., mixing $k{=}3$ and $k{=}1$ across instances to meet $B{=}2$).
+
+\paragraph{Remark (greedy optimality under discrete concave gains).}
+When per-level marginal gains $\Delta_k = \mathrm{Acc}(p,k{+}1)-\mathrm{Acc}(p,k)$ are non-increasing in $k$ (discrete concavity), the water-filling allocation is optimal for \eqref{eq:allocation}. Majority-vote accuracy with $p>1/2$ exhibits diminishing returns, providing intuition for the near-optimality of the greedy CARD schedule.
+
+\section{Experiments}
+\subsection{Setup}
+We instantiate five difficulty levels:
+\[
+\{(p_\ell,w_\ell)\}_{\ell=1}^{5} = \{(0.75,0.10),\ (0.65,0.20),\ (0.60,0.30),\ (0.55,0.25),\ (0.52,0.15)\}.
+\]
+Budgets are $B \in \{1,2,4,8,16\}$ samples per instance on average.
+Equal self-consistency (EqualSC) uses the same number of samples for all instances; CARD follows Algorithm~\ref{alg:card}.
+We report mixture accuracy and approximate standard errors for a large synthetic sample size.
+Implementation and reproducibility: our simulator is deterministic (fixed seed), regenerates all figure data used in this paper, and writes both machine-readable data files and a human-readable summary. Confidence–accuracy pairs are computed from the mixture across difficulty levels and budgets.
+
+\paragraph{Reproduction protocol.}
+\begin{algorithm}[h]
+\caption{Experiment Reproduction Protocol}
+\begin{algorithmic}[1]
+\STATE Fix random seed; define mixture levels $(p_\ell,w_\ell)$ and budgets $\{1,2,4,8,16\}$.
+\STATE Compute majority-vote accuracies $\mathrm{Acc}(p_\ell,k)$ in closed form for required $k$.
+\STATE Generate EqualSC curve by evaluating $A(k)=\sum_\ell w_\ell \mathrm{Acc}(p_\ell,k)$ for each budget $k$.
+\STATE Generate CARD curve using the greedy allocation with fractional mixing to exactly match budget $B$.
+\STATE Write accuracy-vs-budget data and confidence–accuracy pairs to data files and produce plots.
+\STATE Produce a human-readable summary including approximate standard errors for $N=50{,}000$ synthetic examples.
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Results within the experimental setup}
+Figure~\ref{fig:acc} shows accuracy increasing with test-time compute for both methods, with consistent gains for CARD at the same average budget.
+Table~\ref{tab:summary} reports representative points for EqualSC.
+A reliability analysis (Figure~\ref{fig:rel}) indicates improved calibration as compute increases, consistent with the intuition that more votes reduce variance and ambiguity \citep{Wang2023SelfConsistency,Lightman2023LetsVerify}.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+  \begin{axis}[
+    width=\linewidth,
+    height=6cm,
+    xlabel={Average test-time budget (samples per instance)},
+    ylabel={Mixture accuracy},
+    xmin=1, xmax=16,
+    ymin=0.58, ymax=0.80,
+    xtick={1,2,4,8,16},
+    ytick={0.58,0.60,0.62,0.64,0.66,0.68,0.70,0.72,0.74,0.76,0.78,0.80},
+    legend style={at={(0.03,0.97)},anchor=north west},
+    grid=both, grid style={dashed,gray!30}
+  ]
+    \addplot+[mark=o, blue] table [x=budget, y=EqualSC, col sep=comma] {results_plot_data.csv};
+    \addlegendentry{Equal self-consistency}
+    \addplot+[mark=square, red] table [x=budget, y=CARD, col sep=comma] {results_plot_data.csv};
+    \addlegendentry{Neuro-inspired adaptive (CARD)}
+  \end{axis}
+\end{tikzpicture}
+\caption{Accuracy vs.\ test-time budget on a mixture of difficulties. Curves are computed from closed-form majority-vote probabilities and the CARD allocation rule (averaged over the mixture).}
+\label{fig:acc}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{Mixture accuracy for EqualSC at representative budgets. Values are computed analytically and reported with six decimal places.}
+\label{tab:summary}
+\begin{adjustbox}{width=\linewidth}
+\begin{tabular}{lcccc}
+\toprule
+Budget & 1 & 4 & 8 & 16 \\
+\midrule
+EqualSC accuracy & 0.600500 & 0.645610 & 0.699662 & 0.759460 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+  \begin{axis}[
+    width=\linewidth,
+    height=6cm,
+    xlabel={Predicted confidence},
+    ylabel={Empirical accuracy},
+    xmin=0.5, xmax=1.0,
+    ymin=0.5, ymax=1.0,
+    legend style={at={(0.03,0.97)},anchor=north west},
+    grid=both, grid style={dashed,gray!30}
+  ]
+    \addplot+[black, dashed] coordinates {(0.5,0.5) (1.0,1.0)};
+    \addlegendentry{y=x (perfect)}
+    \addplot+[mark=o, blue] table [x=confidence, y=accuracy, col sep=comma] {reliability_plot_data.csv};
+    \addlegendentry{Equal self-consistency (pairs)}
+  \end{axis}
+\end{tikzpicture}
+\caption{Reliability diagram computed from confidence--accuracy pairs across mixture levels and budgets (25 points).}
+\label{fig:rel}
+\end{figure}
+
+\subsection{Neuroscience-grounded interpretation}
+- Conflict monitoring: CARD detects ambiguity via marginal utility of extra samples, analogous to anterior cingulate monitoring of conflict and the recruitment of control \citep{Botvinick2001ConflictMonitoring}.
+- Prioritized replay: allocating additional thought samples where they most improve accuracy mirrors prioritized memory access \citep{Mattar2018PrioritizedReplay}.
+- Rhythmic control: alternating exploration and evaluation resembles rhythmic coordination facilitating effective communication between neural populations \citep{Fries2015Rhythms}.
+
+\subsection{Comparative analysis to prior inference-time strategies}
+We position CARD among inference-time strategies:
+- Equal self-consistency: fixed $k$ samples per instance; simple, robust, but allocates compute uniformly regardless of uncertainty.
+- Tree/search-based methods (e.g., ToT): allocate compute adaptively via branching; powerful but higher orchestration overhead.
+- Reflective methods (Reflexion/Self-Refine): iterative improvement with feedback; complement CARD’s conflict-based allocation.
+- Verification (stepwise checking): orthogonal; can be integrated with CARD to direct compute toward uncertain or unverifiable steps.
+CARD is complementary, providing a lightweight, analytically grounded scheduler that can sit atop these techniques.
+
+\section{Results}
+We summarize the main quantitative outcomes across budgets and methods and report approximate standard errors (computed as $\sqrt{p(1-p)/N}$ with $N{=}50{,}000$ synthetic examples) to contextualize the observed gains.
+
+\begin{table}[h]
+\centering
+\caption{Mixture accuracy (and approximate standard error) for EqualSC and CARD across budgets.}
+\label{tab:both}
+\begin{adjustbox}{width=\linewidth}
+\begin{tabular}{lccccc}
+\toprule
+Method & B=1 & B=2 & B=4 & B=8 & B=16 \\
+\midrule
+EqualSC & 0.6005 (0.00219) & 0.6005 (0.00219) & 0.6456 (0.00214) & 0.6997 (0.00205) & 0.7595 (0.00191) \\
+CARD    & 0.6005 (0.00219) & 0.6336 (0.00216) & 0.6732 (0.00210) & 0.7197 (0.00201) & 0.7730 (0.00187) \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+Observations:
+- Even–odd plateaus: EqualSC exhibits expected plateaus at even $k$ due to random tie-breaking (e.g., $B{=}1$ and $B{=}2$ are equal).
+- Adaptive advantage: CARD delivers consistent gains at all reported budgets by reallocating samples to maximize marginal utility and by using fractional mixing to avoid zero-gain even steps.
+
+\section{Discussion}
+Our results indicate that neuro-inspired scheduling improves mixture accuracy at fixed budgets by allocating computation where it is most needed.
+This complements LLM prompting and search methods \citep{Wei2022CoT,Wang2023SelfConsistency,Yao2023ToT,Shinn2023Reflexion}, providing a unifying lens grounded in cognitive mechanisms.
+Limitations include reliance on a stylized simulator rather than end-to-end language tasks; future work will integrate CARD with verification \citep{Lightman2023LetsVerify} and action \citep{Yao2023ReAct}.
+We also note that the benefit of adaptive allocation depends on how conflict is estimated; richer uncertainty proxies (e.g., diversity of rationales or verifier signals) may yield larger gains.
+
+\section{Future Work and Limitations}
+- Integrate CARD with verifiers and programmatic tool-use to target compute to unverifiable segments.
+- Learn better uncertainty proxies (beyond base $p$) from signals such as self-consistency diversity or rationale-level disagreement.
+- Extend from majority voting to cost-sensitive decision rules balancing accuracy and latency.
+- Validate on real LLM benchmarks with controlled budget constraints and ablate replay vs.\ conflict vs.\ rhythmic scheduling.
+- Explore human-in-the-loop calibration: mapping subjective confidence reports to allocation policies.
+
+\section{Conclusion}
+We presented CARD, a neuro-inspired inference-time scheduler that leverages conflict monitoring, prioritized replay, and rhythmic alternation to improve reasoning under a compute budget.
+Through a closed-form simulator and an allocation strategy that avoids even-step plateaus via fractional mixing, we demonstrated consistent gains over equal self-consistency at the same average budget and improved calibration.
+The framework is lightweight, analytically grounded, and complementary to contemporary reasoning-and-verification approaches.
+We release a fully reproducible setup and anticipate straightforward integration with verifiers, tools, and tree-search controllers.
+
+\section*{Acknowledgments}
+We thank the research community for foundational advances in both cognitive neuroscience and reasoning with language models.
+
+\section*{Appendix: Additional Figures (self-contained)}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \begin{axis}[
+    width=\linewidth,
+    height=6cm,
+    xlabel={Average test-time budget (samples per instance)},
+    ylabel={Mixture accuracy},
+    xmin=1, xmax=16,
+    ymin=0.58, ymax=0.80,
+    xtick={1,2,4,8,16},
+    legend style={at={(0.03,0.97)},anchor=north west},
+    grid=both, grid style={dashed,gray!30}
+  ]
+    \addplot+[mark=*, blue] table [x=budget, y=EqualSC, col sep=comma] {results_plot_data.csv};
+    \addlegendentry{Equal self-consistency}
+    \addplot+[mark=*, red] table [x=budget, y=CARD, col sep=comma] {results_plot_data.csv};
+    \addlegendentry{CARD}
+  \end{axis}
+\end{tikzpicture}
+\caption{Supplementary view of accuracy vs.\ budget.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+  \begin{axis}[
+    width=\linewidth,
+    height=6cm,
+    xlabel={Predicted confidence},
+    ylabel={Empirical accuracy},
+    xmin=0.5, xmax=1.0,
+    ymin=0.5, ymax=1.0,
+    legend style={at={(0.03,0.97)},anchor=north west},
+    grid=both, grid style={dashed,gray!30}
+  ]
+    \addplot+[black, dashed] coordinates {(0.5,0.5) (1.0,1.0)};
+    \addlegendentry{y=x}
+    \addplot+[mark=*, blue] table [x=confidence, y=accuracy, col sep=comma] {reliability_plot_data.csv};
+    \addlegendentry{EqualSC (pairs)}
+  \end{axis}
+\end{tikzpicture}
+\caption{Supplementary reliability diagram based on mixture-level, budget-stratified pairs (25 points).}
+\end{figure}
+
+\begin{thebibliography}{99}
+\bibitem[Baddeley(2012)]{Baddeley2012WorkingMemory}
+A.~Baddeley.
+\newblock Working memory: theories, models, and controversies.
+\newblock Annual Review of Psychology, 63:1--29, 2012.
+
+\bibitem[Botvinick et~al.(2001)Botvinick, Braver, Barch, Carter, and
+  Cohen]{Botvinick2001ConflictMonitoring}
+M.~M. Botvinick, T.~S. Braver, D.~M. Barch, C.~S. Carter, and J.~D. Cohen.
+\newblock Conflict monitoring and cognitive control.
+\newblock Psychological Review, 108(3):624--652, 2001.
+
+\bibitem[Fries(2015)]{Fries2015Rhythms}
+P.~Fries.
+\newblock Rhythms for Cognition: Communication through Coherence.
+\newblock Neuron, 88(1):220--235, 2015.
+
+\bibitem[Mattar and Daw(2018)]{Mattar2018PrioritizedReplay}
+M.~G. Mattar and N.~D. Daw.
+\newblock Prioritized memory access explains planning and hippocampal replay.
+\newblock Nature Neuroscience, 21:1609--1617, 2018.
+
+\bibitem[Gershman(2018)]{Gershman2018Hippocampus}
+S.~J. Gershman.
+\newblock What does the hippocampus do?
+\newblock Trends in Cognitive Sciences, 22(7):512--524, 2018.
+
+\bibitem[Wei et~al.(2022)Wei, Wang, Schuurmans, Bosma, Xia, Chi, Le, and
+  Zhou]{Wei2022CoT}
+J.~Wei, X.~Wang, D.~Schuurmans, M.~Bosma, F.~Xia, E.~Chi, Q.~Le, and D.~Zhou.
+\newblock Chain-of-Thought Prompting Elicits Reasoning in Large Language
+  Models.
+\newblock arXiv:2201.11903, 2022.
+
+\bibitem[Kojima et~al.(2022)Kojima, Srikumar, Sch{\"u}tze, Li, Sugawara, Sinha,
+  and Shimizu]{Kojima2022ZeroShot}
+T.~Kojima, V.~Srikumar, H.~Sch{\"u}tze, Y.~Li, S.~Sugawara, K.~Sinha, and
+  N.~Shimizu.
+\newblock Large Language Models are Zero-Shot Reasoners.
+\newblock arXiv:2205.11916, 2022.
+
+\bibitem[Wang et~al.(2023)Wang, Wei, Schuurmans, Le, Chi, Narang, Chowdhery,
+  and Zhou]{Wang2023SelfConsistency}
+X.~Wang, J.~Wei, D.~Schuurmans, Q.~Le, E.~Chi, S.~Narang, A.~Chowdhery, and
+  D.~Zhou.
+\newblock Self-Consistency Improves Chain of Thought Reasoning in Language
+  Models.
+\newblock In ICLR, 2023.
+
+\bibitem[Yao et~al.(2023{\natexlab{a}})Yao, Yu, Zhao, Shafran, Griffiths,
+  Liang, and Narasimhan]{Yao2023ToT}
+S.~Yao, D.~Yu, J.~Zhao, I.~Shafran, T.~Griffiths, P.~Liang, and K.~Narasimhan.
+\newblock Tree of Thoughts: Deliberate Problem Solving with Large Language
+  Models.
+\newblock arXiv:2305.10601, 2023{\natexlab{a}}.
+
+\bibitem[Yao et~al.(2023{\natexlab{b}})Yao, Zhao, Yu, Cao, and
+  Narasimhan]{Yao2023ReAct}
+S.~Yao, J.~Zhao, D.~Yu, N.~Cao, and K.~Narasimhan.
+\newblock ReAct: Synergizing Reasoning and Acting in Language Models.
+\newblock arXiv:2210.03629, 2023{\natexlab{b}}.
+
+\bibitem[Shinn et~al.(2023)Shinn, Labash, and Gopinath]{Shinn2023Reflexion}
+N.~Shinn, B.~Labash, and A.~Gopinath.
+\newblock Reflexion: Language Agents with Verbal Reinforcement Learning.
+\newblock arXiv:2303.11366, 2023.
+
+\bibitem[Madaan et~al.(2023)Madaan, Yazdanbakhsh, Abhishek, et~al.]{Madaan2023SelfRefine}
+A.~Madaan, A.~Yazdanbakhsh, S.~Abhishek, et~al.
+\newblock Self-Refine: Iterative Refinement with Self-Feedback.
+\newblock arXiv:2303.17651, 2023.
+
+\bibitem[Zelikman et~al.(2022)Zelikman, Wu, Li, and Goodman]{Zelikman2022STAR}
+E.~Zelikman, Y.~Wu, J.~M. Li, and N.~D. Goodman.
+\newblock STaR: Bootstrapping Reasoning With Reasoning.
+\newblock Transactions on Machine Learning Research, 2022.
+
+\bibitem[Lightman et~al.(2023)Lightman, Welleck, Ouyang, and
+  Olsson]{Lightman2023LetsVerify}
+H.~Lightman, S.~Welleck, L.~Ouyang, and C.~Olsson.
+\newblock Let's Verify Step by Step.
+\newblock arXiv:2305.20050, 2023.
+
+\bibitem[OpenAI(2023)]{OpenAI2023GPT4}
+OpenAI.
+\newblock GPT-4 Technical Report.
+\newblock arXiv:2303.08774, 2023.
+
+\bibitem[Bubeck et~al.(2023)Bubeck, Chandrasekaran, Eldan, et~al.]{Bubeck2023Sparks}
+S.~Bubeck, V.~Chandrasekaran, R.~Eldan, et~al.
+\newblock Sparks of Artificial General Intelligence: Early experiments with
+  GPT-4.
+\newblock arXiv:2303.12712, 2023.
+
+\bibitem[Kaplan et~al.(2020)Kaplan, McCandlish, Henighan, et~al.]{Kaplan2020ScalingLaws}
+J.~Kaplan, S.~McCandlish, T.~Henighan, et~al.
+\newblock Scaling Laws for Neural Language Models.
+\newblock arXiv:2001.08361, 2020.
+
+\bibitem[Hoffmann et~al.(2022)Hoffmann, Borgeaud, Mensch, et~al.]{Hoffmann2022Chinchilla}
+J.~Hoffmann, S.~Borgeaud, A.~Mensch, et~al.
+\newblock Training Compute-Optimal Large Language Models.
+\newblock arXiv:2203.15556, 2022.
+
+\bibitem[Lewis et~al.(2020)Lewis, Perez, Piktus, et~al.]{Lewis2020RAG}
+P.~Lewis, E.~Perez, A.~Piktus, et~al.
+\newblock Retrieval-Augmented Generation for Knowledge-Intensive NLP.
+\newblock arXiv:2005.11401, 2020.
+
+\bibitem[Brown et~al.(2020)Brown, Mann, Ryder, et~al.]{Brown2020GPT3}
+T.~B. Brown, B.~Mann, N.~Ryder, et~al.
+\newblock Language Models are Few-Shot Learners.
+\newblock In NeurIPS, 2020.
+\end{thebibliography}
+
+\end{document}

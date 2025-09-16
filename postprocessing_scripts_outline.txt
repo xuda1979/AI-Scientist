@@ -1,0 +1,47 @@
+# Post-Processing Scripts/Functions for Paper Formatting
+
+To fully automate appearance and formatting fixes, implement the following post-processing scripts/functions in your workflow:
+
+---
+
+1. **Numeric Formatting Script**
+   - Scan for numbers in scientific notation or with excessive precision.
+   - Reformat to standard notation with appropriate significant digits (e.g., 1.0000e2 → 100, 2.5000e-1 → 0.25).
+   - Python: Use regex to find and replace patterns in .tex files.
+
+2. **Math Symbol Correction**
+   - Replace hyphens in numbers with proper LaTeX minus signs in math mode.
+   - Ensure all subscripts/superscripts are in math mode.
+   - Python: Regex and string replacement.
+
+3. **Table Formatter**
+   - Align decimal points in tables using the `siunitx` LaTeX package.
+   - Enforce consistent decimal places per column.
+   - Convert all-caps captions to sentence case.
+
+4. **Figure and Caption Formatter**
+   - Ensure all figure/table captions are in sentence case.
+   - Check axis labels for proper math notation and font size.
+   - Enlarge schematics if too small.
+
+5. **Section Heading Formatter**
+   - Convert all-caps headings to Title Case or sentence case.
+   - Split long headings into subsections if needed.
+
+6. **Algorithm Formatter**
+   - Use a LaTeX package (e.g., algorithm2e) for consistent pseudocode.
+   - Ensure math symbols in pseudocode are in math mode.
+
+7. **Reference Style Checker**
+   - Enforce use of IEEE BibTeX style.
+   - Check for missing DOIs, inconsistent abbreviations, and arXiv formatting.
+
+8. **Layout and Widow/Orphan Fixer**
+   - Use LaTeX packages (`microtype`, `widows-and-orphans`) and adjust spacing to avoid crowded margins and widows/orphans.
+
+---
+
+**Implementation:**
+- Integrate these scripts as post-processing steps after paper generation.
+- Run them automatically if the --ieee-style flag is set.
+- Optionally, add a validation script to flag any remaining issues for manual review.

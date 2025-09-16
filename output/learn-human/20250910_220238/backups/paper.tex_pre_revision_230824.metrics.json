@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-09-10T23:08:24.437621",
+  "file": "C:\\Users\\Lenovo\\software\\simple-sciresearch-workflow\\output\\learn-human\\20250910_220238\\paper.tex",
+  "backup": "C:\\Users\\Lenovo\\software\\simple-sciresearch-workflow\\output\\learn-human\\20250910_220238\\backups\\paper.tex_pre_revision_230824",
+  "metrics": {
+    "word_count": 2610,
+    "char_count": 25529,
+    "section_count": 8,
+    "subsection_count": 8,
+    "figure_count": 5,
+    "table_count": 2,
+    "equation_count": 1,
+    "citation_count": 0,
+    "paragraph_count": 53,
+    "page_estimate": 10.44
+  }
+}
