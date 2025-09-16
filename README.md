@@ -64,7 +64,7 @@ See `CHANGELOG.md` for detailed changes.
 
 ## Legacy Files
 
-- `legacy_monolithic_workflow.py`: Original monolithic version (kept for reference)
+- `src/legacy/legacy_monolithic_workflow.py`: Original monolithic version (kept for reference)
 - `docs/archive/`: Detailed implementation documentation
 
 ## License
