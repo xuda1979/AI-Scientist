@@ -140,11 +140,16 @@ However, still maintain critical technical requirements (single file, embedded r
 ```bash
 --quality-threshold FLOAT     # Minimum quality score (0.0-1.0, default: 0.8)
 --check-references           # Enable DOI validation (default: true)
---validate-figures          # Enable figure validation (default: true)  
+--validate-figures          # Enable figure validation (default: true)
 --skip-reference-check       # Disable DOI validation (faster)
 --skip-figure-validation     # Disable figure validation (faster)
 --user-prompt STRING         # Custom prompt with priority over standard requirements
 ```
+
+### Gemini API Credentials
+- Configure Gemini access by setting the `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) environment variable, or by placing a `google_api_key` entry in your workflow configuration JSON.
+- Optional HTTPS proxies can be provided through the `GOOGLE_API_PROXY` environment variable or the `google_api_proxy` configuration field.
+- Missing credentials now trigger a clear runtime error before attempting a Gemini request.
 
 ### Temperature Configuration by Prompt Type
 - **Initial Draft**: 0.7 (creative)
