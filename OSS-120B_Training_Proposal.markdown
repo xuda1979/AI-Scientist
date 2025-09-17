@@ -10,7 +10,7 @@
 3) **预期成效（首年，基于科学依据）**：
    - **电信网络**：5G/6G网络能耗下降15–35%（参考KDDI/Nokia案例，AI优化基站休眠/功率自适应，结合QAOA量子优化提升10%效率）[12]; 网络切片SLA违约率下降25–45%（DRL与MoE推理增强，O-RAN基准）[12]; 客服一次解决率提升7–15%（基于LLaMA-3.1客服任务SFT成果）[13].
    - **软件工程**：研发提效（代码/运维自动化）提升25–45%（参考CodeLLaMA与StarCoder，MoE降低幻觉率10%）[13]; 生成式质检/安全审查贯通上线流程。
-   - **量子计算**：加速量子算法开发（如QAOA、VQE），实现Qiskit-on-Ascend量子仿真框架，缩短量子电路设计周期30%（基于Qiskit与MindSpore量子模块）[6]; 生成量子算法代码（如纠错码、QKD协议），提升开发效率20%（参考Qiskit开源社区）[6].
+   - **量子计算**：加速量子算法开发（如QAOA、VQE），基于MindQuantum/MindSpore原生仿真框架并构建Qiskit电路至MindQuantum的转译适配层，打通Ascend集群上的量子—AI混合工作流；生成量子算法代码（如纠错码、QKD协议），将量子电路设计周期目标压缩至现有流程的80%以内。[6][27]
    - **资产**：形成电信+科研两栖开源数据集（网络日志、量子仿真数据）、评测体系与算子优化库。
 4) **训练路线**：先密集模型（Dense）热身，再引入稀疏MoE扩大容量；采用Compute-Optimal数据规模（Chinchilla范式）、长上下文增强（LongRoPE/YaRN）与对齐技术（SFT+DPO/RLAIF）。**创新**：提出“动态MoE路由与量子增强对齐”（DMR-QEA），结合量子优化（QAOA）动态调整MoE专家分配，提升训练效率15%与推理准确率10%[11].
 5) **风险与对策**：数据合规——分级脱敏与闭环审计；训练时长与通信瓶颈——3D并行、流水/张量并行与FlashAttention-2；生态兼容——优先开源方案（torch_npu、vLLM-Ascend），确保无美国芯片依赖。
@@ -19,7 +19,7 @@
 - **计算**：≥512×昇腾910B；节点内≥8×910B，节点间100GbE RoCE/HCCS互联；
 - **存储**：热存≥1.5PB（NVMe+分布式文件系统，如Ceph），冷存≥4PB（对象存储，如MinIO）；单次检查点≈1.5–2.5TB；
 - **数据**：开源通用语料（CommonCrawl、Wikipedia）+电信/科研专用（网络KPI、量子仿真、代码/论文），总Token~2.5万亿；
-- **软件**：开源框架MindSpore 2.x、torch_npu、DeepSpeed-NPU、vLLM-Ascend，Qiskit-Ascend量子模块。
+- **软件**：开源框架MindSpore 2.x、torch_npu、DeepSpeed-NPU、vLLM-Ascend，MindQuantum/MindSpore量子模块（当前Qiskit缺乏官方Ascend后端，规划自研接口）。
 
 **里程碑（建议）**：
 - M1（30天）：数据治理与工程基线；
@@ -41,7 +41,7 @@
 **总体目标**：
 - 构建≥120B参数（MoE，36层、128专家、4激活）的中文优先、英中文兼容基座模型，支持256K上下文与多模态；
 - 开发可复用Agent，覆盖网络切片、能效优化、故障定位、客服自动化、量子算法生成；
-- 加速量子 computing科研，基于Qiskit-Ascend实现QAOA、VQE等算法，生成量子纠错/QKD代码；
+- 加速量子computing科研，依托MindQuantum/MindSpore在Ascend上的仿真能力并开发Qiskit互操作层，实现QAOA、VQE等算法验证与量子纠错/QKD代码生成；[6][27]
 - 打造开源模型服务栈（训练—对齐—评测—服务—安全合规），兼容Pangu 5.5快慢思考代理[11].
 
 ## 二、算力与规模估算
@@ -56,7 +56,7 @@
 ## 三、软件栈与工程实现（开源、Ascend优先）
 - **训练框架**：MindSpore 2.x（开源，自动并行）、torch_npu（PyTorch Ascend适配）、DeepSpeed-NPU（支持ZeRO-3/MoE），避免美国芯片依赖[3][4].
 - **服务框架**：vLLM-Ascend（开源PagedAttention KV-Cache），支持长上下文与代理推理[5].
-- **量子模块**：Qiskit-Ascend（开源量子计算框架适配昇腾），支持QAOA、VQE仿真与代码生成[6].
+- **量子模块**：MindQuantum/MindSpore量子计算框架（Ascend原生），在缺乏官方Qiskit Ascend后端的情况下，通过自研Qiskit电路→MindQuantum适配层复用生态，支持QAOA、VQE仿真与代码生成。[6][27]
 - **通信**：HCCS/NPU Mesh（节点内），100GbE RoCE（节点间），开源调度平台（如KubeFlow）分簇+弹性队列。
 - **模型结构**：Decoder-only Transformer（参考LLaMA），集成检索、工具使用、结构化输出（JSON/SQL/Graph）[13].
 - **长上下文**：LongRoPE/YaRN（开源），目标≥256K上下文[5].
@@ -66,7 +66,7 @@
 
 ## 四、数据治理与语料建设
 - **通用语料**：开源CommonCrawl、Wikipedia、RedPajama（40+语言，~2万亿Token）。
-- **行业语料**：网络KPI/RAN日志、告警/工单、客服转写、代码仓（GitHub开源）、量子仿真数据（Qiskit生成）。
+- **行业语料**：网络KPI/RAN日志、告警/工单、客服转写、代码仓（GitHub开源）、量子仿真数据（MindQuantum生成并兼容Qiskit电路转译）。[6][27]
 - **合规与隐私**：分级脱敏（差分隐私，OpenDP）、用途受限标签、敏感域隔离（开源审计工具）。
 - **清洗与去重**：MinHash/SimHash（开源）、LLaMA-3.1噪声识别，版权审查（白/黑名单）。
 - **分布平衡**：任务权重抽样，平衡电信/科研/量子任务，优化MoE专家负载。
@@ -79,7 +79,7 @@
 
 **阶段B：指令/多任务SFT**
 - **SOTA**：混合指令池（参考LLaMA-3.1 SFT），覆盖电信（告警归因、切片策略）、量子（QAOA代码生成）[13].
-- **创新**：结构化输出协议（JSON/Graph），强制函数调用，集成Qiskit-Ascend生成量子电路代码.
+- **创新**：结构化输出协议（JSON/Graph），强制函数调用，集成MindQuantum工作流并通过Qiskit→MindQuantum转译工具生成量子电路代码。[6][27]
 
 **阶段C：偏好对齐与推理增强**
 - **SOTA**：DPO/RLAIF（Orca），Chain-of-Thought/Tree-of-Thought（LLaMA-3.1），Speculative Decoding（vLLM）[5].
@@ -101,12 +101,12 @@
    - 代码生成/迁移（CodeLLaMA），CI/CD自动化（Jenkins），提效25–45%[13].
 5) **量子融合**：
    - QKD网络标准对接（ITU-T Y.3800），城域试点[17].
-   - QAOA/VQE实现（Qiskit-Ascend），生成量子纠错/QKD代码，缩短设计周期30%[6].
+   - QAOA/VQE实现（MindQuantum/MindSpore，配合Qiskit互操作适配层），生成量子纠错/QKD代码，支撑Ascend集群上的量子安全仿真[6][27].
 
 ## 七、评测与KPI
 **技术侧**：
 - 困惑度、长上下文基准（AIME2024 81.3%、MMLU 91.5%）[13].
-- 量子任务：QAOA/VQE仿真准确率↑20%（Qiskit）[6].
+- 量子任务：完成MindQuantum/MindSpore QAOA/VQE仿真基准，并验证Qiskit电路转译误差≤1e-3，支撑后续量子安全应用。[6][27]
 - MFU 30%（Pangu Ultra MoE）[11].
 
 **业务侧**（科学依据）：
@@ -115,24 +115,24 @@
 - 客服：一次解决率↑7–15%（LLaMA-3.1 SFT）[13].
 - AIOps：MTTR下降20%（LangChain）[13].
 - 研发：交付周期缩短25%（CodeLLaMA）[13].
-- 量子：算法设计周期缩短30%，代码生成效率↑20%（Qiskit）[6].
+- 量子：MindQuantum仿真与Qiskit互操作使量子算法设计周期目标缩短至≤8周，量子代码生成流程全自动化比例≥80%。[6][27]
 
 ## 八、实施计划与组织
 - **治理**：业务—算法—平台双周例会，参考China Telecom-HKUST量子-AI模式[22].
 - **里程碑**：M1数据/工程基线→M2热身模型→M3≥120B MoE→M4商用试点.
-- **供给保障**：昇腾910B驱动/固件、torch_npu/DeepSpeed-NPU回归，Qiskit-Ascend联调.
+- **供给保障**：昇腾910B驱动/固件、torch_npu/DeepSpeed-NPU回归，MindQuantum/MindSpore量子模块联调与Qiskit适配层研发。[6][27]
 - **风险应对**：数据合规（OpenDP）、算力瓶颈（DMR-QEA）、量子噪声（ML纠错）[24].
 
 ## 九、与“类GPT-5”方法的启示
 - **推理增强**：思维树/自一致/Verifier（LLaMA-3.1），量子增强Verifier提升10%准确率[13].
 - **动态MoE**：DMR优化路由，平衡吞吐/质量[8].
 - **诚实性**：DPO+负样本（Orca），降低幻觉10%[13].
-- **量子工具化**：Qiskit-Ascend生成量子代码，提升落地价值[6].
+- **量子工具化**：MindQuantum/MindSpore工作流结合Qiskit互操作适配层生成量子代码，提升落地价值。[6][27]
 
 ## 十、资源需求清单
 - **计算**：≥512×昇腾910B，节点内8×910B，100GbE RoCE/HCCS；
 - **存储与网络**：热存≥1.5PB（Ceph），冷存≥4PB（MinIO），带宽≥1Tbps；
-- **软件**：MindSpore 2.x、torch_npu、DeepSpeed-NPU、vLLM-Ascend、Qiskit-Ascend.
+- **软件**：MindSpore 2.x、torch_npu、DeepSpeed-NPU、vLLM-Ascend、MindQuantum及Qiskit互操作适配工具。[6][27]
 
 ## 十一、参考文献（节选）
 [1] Ascend 910B集群：https://www.hiascend.com/en/hardware/cluster  
@@ -140,7 +140,7 @@
 [3] MindSpore并行训练：https://www.mindspore.cn/docs/parallel  
 [4] torch_npu：https://github.com/Ascend/pytorch  
 [5] vLLM/PagedAttention：https://arxiv.org/abs/2309.06180  
-[6] Qiskit-Ascend：https://qiskit.org/documentation  
+[6] MindQuantum Documentation：https://www.mindspore.cn/mindquantum/docs/en/master/index.html
 [7] Chinchilla：https://arxiv.org/abs/2203.15556  
 [8] Switch Transformer：https://arxiv.org/abs/2101.03961  
 [9] Megatron-LM：https://arxiv.org/abs/1909.08053  
@@ -155,3 +155,4 @@
 [24] 量子通信与ML综述：https://www.sciencedirect.com/science/article/pii/S2773186325000131  
 [25] PNAS Nexus LLM局限：https://www.pnas.org/doi/10.1073/pnas.2210483120  
 [26] CSET数据偏置：https://cset.georgetown.edu/publication/data-bias-in-chinese-llms/
+[27] Qiskit Providers Overview：https://quantum.ibm.com/docs/guides/providers
