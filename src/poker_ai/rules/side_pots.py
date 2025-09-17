@@ -57,10 +57,12 @@ def distribute_showdown(
     total_seats = max(all_seats) + 1 if all_seats else 0
 
     for pot_amt, eligible in pots:
+        ranked_eligible = [s for s in eligible if s in ranks]
+        if not ranked_eligible:
+            continue
         # Find best rank among eligible seats
-        best = min((ranks[s], s) for s in eligible if s in ranks)
-        best_rank = best[0]
-        winners = [s for s in eligible if ranks.get(s, 10**9) == best_rank]
+        best_rank = min(ranks[s] for s in ranked_eligible)
+        winners = [s for s in ranked_eligible if ranks[s] == best_rank]
         share, rem = divmod(pot_amt, len(winners))
         for s in winners:
             payouts[s] += share

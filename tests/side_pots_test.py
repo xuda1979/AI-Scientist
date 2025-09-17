@@ -19,3 +19,10 @@ def test_default_order_without_button():
     ranks = {0: 1, 1: 1}
     assert distribute_showdown(pots, ranks) == {0: 3, 1: 2}
 
+
+def test_pot_without_ranked_eligible_is_skipped():
+    """Pots with no ranked eligible seats should be ignored."""
+    pots = [(10, [1, 2]), (6, [0, 2])]
+    ranks = {0: 1}
+    assert distribute_showdown(pots, ranks) == {0: 6}
+
