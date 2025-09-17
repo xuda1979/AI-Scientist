@@ -12,7 +12,7 @@
    - **软件工程**：研发提效（代码/运维自动化）提升25–45%（参考CodeLLaMA与StarCoder，MoE降低幻觉率10%）[13]; 生成式质检/安全审查贯通上线流程。
    - **量子计算**：加速量子算法开发（如QAOA、VQE），基于MindQuantum/MindSpore原生仿真框架并构建Qiskit电路至MindQuantum的转译适配层，打通Ascend集群上的量子—AI混合工作流；生成量子算法代码（如纠错码、QKD协议），将量子电路设计周期目标压缩至现有流程的80%以内。[6][27]
    - **资产**：形成电信+科研两栖开源数据集（网络日志、量子仿真数据）、评测体系与算子优化库。
-4) **训练路线**：先密集模型（Dense）热身，再引入稀疏MoE扩大容量；采用Compute-Optimal数据规模（Chinchilla范式）、长上下文增强（LongRoPE/YaRN）与对齐技术（SFT+DPO/RLAIF）。**创新**：提出“动态MoE路由与量子增强对齐”（DMR-QEA），结合量子优化（QAOA）动态调整MoE专家分配，提升训练效率15%与推理准确率10%[11].
+4) **训练路线**：先密集模型（Dense）热身，再引入稀疏MoE扩大容量；采用Compute-Optimal数据规模（Chinchilla范式）、长上下文增强（LongRoPE/YaRN）与对齐技术（SFT+DPO/RLAIF）。**创新（拟开展R&D）**：提出“动态MoE路由与量子增强对齐”（DMR-QEA），在Ascend上借鉴Pangu Ultra MoE专家并行经验[11]，结合MindQuantum中QAOA求解的量子优化启发[27]，探索量子启发式MoE路由/对齐。当前尚无公开在Ascend硬件上验证该方案的成果，计划以小规模原型评估1–3%的吞吐或对齐收益后再决定量产化。
 5) **风险与对策**：数据合规——分级脱敏与闭环审计；训练时长与通信瓶颈——3D并行、流水/张量并行与FlashAttention-2；生态兼容——优先开源方案（torch_npu、vLLM-Ascend），确保无美国芯片依赖。
 
 **资源与预算（摘要）**：
@@ -50,7 +50,7 @@
 **技术路线（科学、可行、创新）**：
 - **3D并行**：数据并行（DP）、张量并行（TP）、流水并行（PP），基于Megatron-LM开源实现，提升MFU至30%[9].
 - **MoE优化**：参考Switch Transformer，动态专家路由减少计算开销[8].
-- **创新-DMR-QEA**：动态MoE路由与量子增强对齐（Dynamic MoE Routing with Quantum-Enhanced Alignment），利用QAOA优化专家分配，降低通信开销15%，提升推理准确率10%（基于量子优化对神经网络超参的启发）[11].
+- **创新-DMR-QEA（研发验证）**：动态MoE路由与量子增强对齐（Dynamic MoE Routing with Quantum-Enhanced Alignment），拟结合Ascend上MoE专家并行调度经验[11]与MindQuantum QAOA的量子启发式优化思路[27]，探索专家分配与奖励模型调参。目标是在8–16专家的原型中观察≤3%的通信或对齐增益，若未达到则暂缓大规模推广。
 - **存储**：热存≥1.5PB（Ceph开源分布式FS），冷存≥4PB（MinIO对象存储）；检查点≈1.5–2.5TB（MXFP4量化），每周快照+增量保存。
 
 ## 三、软件栈与工程实现（开源、Ascend优先）
@@ -83,7 +83,7 @@
 
 **阶段C：偏好对齐与推理增强**
 - **SOTA**：DPO/RLAIF（Orca），Chain-of-Thought/Tree-of-Thought（LLaMA-3.1），Speculative Decoding（vLLM）[5].
-- **创新-QEA**：量子增强对齐，用QAOA优化偏好奖励模型，减少10%幻觉，提升复杂任务准确率10%[11].
+- **创新-QEA（研发验证）**：量子增强对齐，参考MindQuantum中QAOA的量子启发式优化[27]，在Ascend奖励模型上试验小样本调参与Verifier协同。该方向尚无公开基准，计划以≤3%的指标改善（幻觉率或复杂任务准确率）作为是否继续推进的门槛。
 
 **阶段D：安全与合规对齐**
 - **SOTA**：红队测试（Anthropic），差分隐私（OpenDP）[17].
@@ -152,7 +152,8 @@
 [20] CSET中国LLM评估：https://cset.georgetown.edu/publication/chinas-large-language-models/  
 [22] China Telecom-HKUST：https://thequantuminsider.com/2025/04/11/china-telecom-hkust-to-work-together-on-ai-and-quantum-technologies/  
 [23] DISC-MedLLM：https://arxiv.org/abs/2308.14346  
-[24] 量子通信与ML综述：https://www.sciencedirect.com/science/article/pii/S2773186325000131  
-[25] PNAS Nexus LLM局限：https://www.pnas.org/doi/10.1073/pnas.2210483120  
+[24] 量子通信与ML综述：https://www.sciencedirect.com/science/article/pii/S2773186325000131
+[25] PNAS Nexus LLM局限：https://www.pnas.org/doi/10.1073/pnas.2210483120
 [26] CSET数据偏置：https://cset.georgetown.edu/publication/data-bias-in-chinese-llms/
-[27] Qiskit Providers Overview：https://quantum.ibm.com/docs/guides/providers
+[27] MindQuantum QAOA：https://arxiv.org/abs/2404.14101
+ 
