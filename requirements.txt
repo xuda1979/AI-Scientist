@@ -5,3 +5,4 @@ google-generativeai>=0.3.0
 # Additional dependencies that might be needed
 requests>=2.25.0
 urllib3>=1.26.0
+reportlab>=4.4.3
