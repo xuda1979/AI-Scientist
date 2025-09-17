@@ -61,6 +61,8 @@ class WorkflowConfig:
     top_brainstorm_ideas: int = 3
     oss120b_endpoint: Optional[str] = None
     oss120b_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
+    google_api_proxy: Optional[str] = None
     latex_auto_fix: bool = False
     fast_ref_check: bool = False
     qa_model: Optional[str] = None
@@ -140,6 +142,9 @@ logger = setup_workflow_logging()
 
 # Optional OSS 120B client
 OSS_CLIENT: Optional[OSS120BClient] = None
+
+# Active workflow configuration (populated when available)
+CURRENT_WORKFLOW_CONFIG: Optional[WorkflowConfig] = None
 
 class APIError(Exception):
     """Custom exception for API-related errors"""
@@ -393,19 +398,59 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     """
     Google AI chat wrapper with similar interface to OpenAI chat.
     Based on working reference implementation.
-    Sets HTTPS_PROXY specifically for Gemini API calls.
+    Uses configured API key and optional HTTPS proxy for Gemini API calls.
     """
     if not GOOGLE_AI_AVAILABLE:
         raise APIError("Google AI SDK not available. Please install with: pip install google-generativeai")
-    
-    # Set proxy specifically for Google AI API (not needed for OpenAI)
+
+    # Retrieve API key from environment or configuration
+    api_key: Optional[str] = None
+    for env_var in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        value = os.environ.get(env_var)
+        if value and value.strip():
+            api_key = value.strip()
+            break
+
+    if not api_key and CURRENT_WORKFLOW_CONFIG is not None:
+        config_key = (CURRENT_WORKFLOW_CONFIG.google_api_key or "").strip()
+        if config_key:
+            api_key = config_key
+
+    if not api_key:
+        raise APIError(
+            "Google API key not configured. Set GOOGLE_API_KEY (or GEMINI_API_KEY) in your environment "
+            "or provide 'google_api_key' in the workflow configuration file."
+        )
+
+    # Determine proxy configuration (optional)
+    proxy_value: Optional[str] = None
+    for env_var in ("GOOGLE_API_PROXY", "GEMINI_API_PROXY", "GOOGLE_HTTPS_PROXY"):
+        value = os.environ.get(env_var)
+        if value and value.strip():
+            proxy_value = value.strip()
+            break
+
+    if not proxy_value and CURRENT_WORKFLOW_CONFIG is not None:
+        config_proxy = (CURRENT_WORKFLOW_CONFIG.google_api_proxy or "").strip()
+        if config_proxy:
+            proxy_value = config_proxy
+
     original_proxy = os.environ.get("HTTPS_PROXY")
-    os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7078"
-    print(f"🌐 Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
-    
+    proxy_applied = False
+
+    if proxy_value:
+        if original_proxy != proxy_value:
+            os.environ["HTTPS_PROXY"] = proxy_value
+            proxy_applied = True
+            print(f"🌐 Set proxy for Gemini API: {proxy_value}")
+        else:
+            print(f"🌐 Using existing HTTPS proxy for Gemini API: {proxy_value}")
+    elif original_proxy:
+        print(f"🌐 Using existing HTTPS proxy for Gemini API: {original_proxy}")
+    else:
+        logger.info("No Gemini-specific HTTPS proxy configured; connecting directly.")
+
     try:
-        # Configure API key - use hardcoded key as in reference
-        api_key = "AIzaSyCXhoRyRmp_6Rpbp9eZjjwEvE11KrKIJII"
         genai.configure(api_key=api_key)
         
         logger.info(f"Making Google AI API call to {model} for {prompt_type}")
@@ -461,12 +506,14 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                     if fallback_model.startswith(('gemini', 'models/gemini')):
                         return _google_chat(messages, fallback_model, request_timeout, prompt_type, None)
                     else:
-                        # For OpenAI fallback, restore original proxy
-                        if original_proxy is not None:
-                            os.environ["HTTPS_PROXY"] = original_proxy
-                        elif "HTTPS_PROXY" in os.environ:
-                            del os.environ["HTTPS_PROXY"]
-                        print("🔄 Removed proxy for OpenAI fallback")
+                        # For OpenAI fallback, restore original proxy if we changed it
+                        if proxy_applied:
+                            if original_proxy is not None:
+                                os.environ["HTTPS_PROXY"] = original_proxy
+                            else:
+                                os.environ.pop("HTTPS_PROXY", None)
+                            proxy_applied = False
+                            print("🔄 Restored original proxy for OpenAI fallback")
                         return _openai_chat(messages, fallback_model, request_timeout, prompt_type, None)
                 except Exception as fallback_error:
                     print(f"⚠️ Fallback model {fallback_model} also failed: {fallback_error}")
@@ -475,12 +522,13 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         raise APIError(f"Google AI model {model} failed: {error_msg}")
     
     finally:
-        # Restore original proxy setting after Google AI call
-        if original_proxy is not None:
-            os.environ["HTTPS_PROXY"] = original_proxy
-        elif "HTTPS_PROXY" in os.environ:
-            del os.environ["HTTPS_PROXY"]
-        print("🔄 Restored original proxy settings")
+        # Restore original proxy setting after Google AI call if we changed it here
+        if proxy_applied:
+            if original_proxy is not None:
+                os.environ["HTTPS_PROXY"] = original_proxy
+            else:
+                os.environ.pop("HTTPS_PROXY", None)
+            print("🔄 Restored original proxy settings")
 
 def _nowstamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1431,7 +1479,10 @@ def run_workflow(
         config.reference_validation = check_references
     if validate_figures is not True:
         config.figure_validation = validate_figures
-    
+
+    global CURRENT_WORKFLOW_CONFIG
+    CURRENT_WORKFLOW_CONFIG = config
+
     logger.info(f"Starting workflow with config: quality_threshold={config.quality_threshold}, max_iterations={config.max_iterations}")
     
     project_dir = _prepare_project_dir(output_dir, modify_existing)
@@ -2440,6 +2491,8 @@ if __name__ == "__main__":
         config.latex_auto_fix = ns.latex_auto_fix
         config.fast_ref_check = ns.fast_ref_check
         config.qa_model = config.review_model
+
+        CURRENT_WORKFLOW_CONFIG = config
 
         if config.oss120b_endpoint and config.oss120b_api_key:
             OSS_CLIENT = OSS120BClient(config.oss120b_endpoint, config.oss120b_api_key)
