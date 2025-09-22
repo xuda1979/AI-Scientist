@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sciresearch-workflow"
+version = "0.1.0"
+description = "A streamlined, modular research paper generation workflow with AI assistance."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "SciResearch Workflow Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+keywords = ["research", "workflow", "automation", "latex", "ai"]
+dependencies = [
+    "openai>=1.0.0",
+    "google-generativeai>=0.3.0",
+    "requests>=2.25.0",
+    "urllib3>=1.26.0"
+]
+
+[project.scripts]
+sciresearch-workflow = "main:main"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = [
+    "acceptance_readiness",
+    "custom_prompt_examples",
+    "document_prompts",
+    "document_types",
+    "fix_latex_overflow",
+    "legacy_monolithic_workflow",
+    "main",
+    "modify_ag_qec",
+    "original_file",
+    "run_pdflatex_capture",
+    "sciresearch_workflow",
+    "sciresearch_workflow_clean",
+    "sciresearch_workflow_compat",
+    "sciresearch_workflow_refactored",
+    "sciresearch_workflow_v2"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = [
+    "docs*",
+    "out*",
+    "output*",
+    "logs*",
+    "pptt*",
+    "restored_repo*",
+    "workflow_backup*"
+]

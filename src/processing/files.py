@@ -9,6 +9,9 @@ from typing import Tuple, Optional
 from pathlib import Path
 
 
+logger = logging.getLogger(__name__)
+
+
 # Compatibility function to replace utils.sim_runner.ensure_single_tex_py
 def ensure_single_tex_py(project_dir: Path, strict: bool = True, preserve_original_filename: bool = False) -> Tuple[Path, Path]:
     """Compatibility wrapper for ensure_single_tex_file."""
@@ -25,7 +28,7 @@ class FileManager:
     def prepare_project_directory(self, output_dir: Path, modify_existing: bool = False) -> Path:
         """Prepare project directory for workflow."""
         if modify_existing and output_dir.exists():
-            print(f"Using existing project directory: {output_dir}")
+            logger.info("Using existing project directory: %s", output_dir)
             return output_dir
         
         # Create new project directory
@@ -38,7 +41,7 @@ class FileManager:
                 counter += 1
         
         output_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Created project directory: {output_dir}")
+        logger.info("Created project directory: %s", output_dir)
         
         return output_dir
     
@@ -156,7 +159,7 @@ class FileManager:
         with open(diff_path, 'w', encoding='utf-8') as f:
             f.writelines(diff)
         
-        logging.info(f"Diff saved: {diff_path.name}")
+        logger.info("Diff saved: %s", diff_path.name)
     
     def cleanup_temp_files(self, project_dir: Path) -> None:
         """Clean up temporary files."""

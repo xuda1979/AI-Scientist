@@ -1,28 +1,22 @@
-"""
-Main workflow orchestrator for SciResearch Workflow.
-"""
+"""Main workflow orchestrator for SciResearch Workflow."""
 from __future__ import annotations
-import sys
+
 import logging
-from typing import Optional
-from pathlib import Path
-
-# Import modular components
-from core.config import WorkflowConfig, DEFAULT_MODEL
-from core.quality import QualityAssessment
-from ai.chat import AIChat
-from ai.prompts import PromptTemplates
-from processing.latex import LaTeXProcessor
-from processing.files import FileManager
-
-# Import existing workflow functions from legacy workflow
 import sys
 from pathlib import Path
-# Add the parent directory to the path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from typing import Optional
 
-# Import functions from legacy workflow
-from legacy_monolithic_workflow import _initial_draft_prompt, run_simulation_step, run_optimized_review_revision_step
+from src.ai.chat import AIChat
+from src.ai.prompts import PromptTemplates
+from src.core.config import DEFAULT_MODEL, WorkflowConfig
+from src.core.quality import QualityAssessment
+from src.legacy.legacy_monolithic_workflow import (
+    _initial_draft_prompt,
+    run_simulation_step,
+    run_optimized_review_revision_step,
+)
+from src.processing.files import FileManager
+from src.processing.latex import LaTeXProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +91,7 @@ class SciResearchWorkflow:
                 enable_ideation, num_ideas, project_dir
             )
         else:
-            print(f"📖 Using existing paper ({len(paper_content)} characters)")
+            logger.info("📖 Using existing paper (%d characters)", len(paper_content))
         
         # Main iteration loop
         return self._run_iteration_loop(
@@ -110,15 +104,21 @@ class SciResearchWorkflow:
         if not (sys.stdin and sys.stdin.isatty()):
             return None
         
-        print("\n" + "="*60)
-        print("CUSTOM PROMPT INPUT")
-        print("="*60)
-        print("Provide a custom prompt for AI interactions (optional):")
-        print("Examples:")
-        print("  - 'Focus on mathematical rigor and formal proofs'")
-        print("  - 'Emphasize practical applications'")
-        print("  - 'Use conversational writing style'")
-        print("-" * 60)
+        prompt_message = "\n".join(
+            [
+                "",
+                "=" * 60,
+                "CUSTOM PROMPT INPUT",
+                "=" * 60,
+                "Provide a custom prompt for AI interactions (optional):",
+                "Examples:",
+                "  - 'Focus on mathematical rigor and formal proofs'",
+                "  - 'Emphasize practical applications'",
+                "  - 'Use conversational writing style'",
+                "-" * 60,
+            ]
+        )
+        logger.info(prompt_message)
         
         user_input = input("Enter custom prompt (or press Enter to skip): ").strip()
         return user_input if user_input else None
@@ -251,10 +251,10 @@ This work contributes to the understanding of neural network optimization strate
     ) -> Path:
         """Run the main iteration loop."""
         
-        print(f"🔄 Starting {self.config.max_iterations} iteration(s)")
-        
+        logger.info("🔄 Starting %d iteration(s)", self.config.max_iterations)
+
         for i in range(1, self.config.max_iterations + 1):
-            print(f"\n--- Iteration {i}/{self.config.max_iterations} ---")
+            logger.info("\n--- Iteration %d/%d ---", i, self.config.max_iterations)
             
             # Run simulation if code changed
             sim_summary = self._run_simulation_if_needed(
@@ -323,9 +323,9 @@ This work contributes to the understanding of neural network optimization strate
         logger.info(f"Iteration {iteration} Summary:")
         logger.info(f"Quality Score: {quality_result['quality_score']:.3f}")
         logger.info(f"LaTeX: {'Success' if latex_success else 'Failed'}")
-        logger.info(f"Issues: {len(quality_result['issues'])}")
+        logger.info("Issues: %d", len(quality_result['issues']))
         if quality_result['issues']:
-            print(f"   Top Issues: {', '.join(quality_result['issues'][:3])}")
+            logger.info("   Top Issues: %s", ", ".join(quality_result['issues'][:3]))
     
     def _run_review_revision(
         self,
@@ -341,7 +341,7 @@ This work contributes to the understanding of neural network optimization strate
         request_timeout: int
     ) -> None:
         """Run optimized review and revision."""
-        print("🔍 Running comprehensive review & revision...")
+        logger.info("🔍 Running comprehensive review & revision...")
         
         # Create comprehensive prompt
         prompt = self.prompts.comprehensive_review_revision(
