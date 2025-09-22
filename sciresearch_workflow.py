@@ -49,6 +49,22 @@ from workflow_steps.review_revision import run_review_revision_step
 from document_types import DocumentType, get_document_template, infer_document_type, get_available_document_types
 from document_prompts import DocumentPromptGenerator
 
+# Quality enhancement system
+from prompts.experimental_rigor_prompts import (
+    detect_paper_type, 
+    enhance_prompt_with_rigor,
+    get_statistical_rigor_requirements,
+    get_theoretical_rigor_requirements
+)
+from quality_enhancements.quality_validator import PaperQualityValidator
+
+# Review-driven enhancements  
+from prompts.review_driven_enhancements import (
+    enhance_prompt_for_review_quality,
+    detect_review_issues,
+    get_review_driven_requirements
+)
+
 def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
     """
     Get user input with a timeout. If no input is received within the timeout,
@@ -1648,7 +1664,7 @@ def _generate_best_revision_candidate(
         
         try:
             # Create varied revision prompts to encourage diversity
-            base_prompt = _revise_prompt(current_tex, sim_summary, review_text, latex_errors, project_dir, user_prompt)
+            base_prompt = _revise_prompt(current_tex, sim_summary, review_text, latex_errors, project_dir, user_prompt, enable_quality_enhancements=config.enable_quality_enhancements)
             
             # Add MUCH MORE AGGRESSIVE variation instructions to force different approaches
             if i > 0:
@@ -1953,7 +1969,7 @@ def _generate_best_initial_draft_candidate(
         
         try:
             # Create varied initial draft prompts to encourage diversity
-            base_prompt = _initial_draft_prompt(topic, field, question, user_prompt)
+            base_prompt = _initial_draft_prompt(topic, field, question, user_prompt, config.enable_quality_enhancements)
             
             # Add variation instructions to encourage different approaches
             if i > 0:
@@ -2106,7 +2122,7 @@ def _evaluate_initial_draft_quality(draft_text: str, topic: str, field: str, que
     
     return metrics
 
-def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
+def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Optional[str] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
     sys_prompt = (
         "You are a meticulous scientist writing a LaTeX paper suitable for a top journal. "
         
@@ -2299,6 +2315,34 @@ def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Op
         )
     
     user_content = f"Topic: {topic}\nField: {field}\nResearch Question: {question}\n\nDraft the COMPLETE self-contained LaTeX paper with authentic references, proper results documentation, and appropriate figure generation code."
+    
+    # Enhance with quality requirements if enabled
+    if enable_quality_enhancements:
+        try:
+            paper_type = detect_paper_type(question, field, topic)
+            
+            # Apply experimental/theoretical rigor enhancements
+            enhanced_prompt = enhance_prompt_with_rigor(sys_prompt, paper_type)
+            
+            # Apply review-driven enhancements
+            enhanced_prompt = enhance_prompt_for_review_quality(enhanced_prompt, paper_type)
+            sys_prompt = enhanced_prompt
+            
+            # Add paper-type-specific requirements to user content
+            if paper_type == "experimental":
+                user_content += f"\n\nSTATISTICAL RIGOR REQUIREMENTS:\n{get_statistical_rigor_requirements()}"
+            elif paper_type == "theoretical":
+                user_content += f"\n\nTHEORETICAL RIGOR REQUIREMENTS:\n{get_theoretical_rigor_requirements()}"
+                
+            # Add review-driven requirements
+            review_requirements = get_review_driven_requirements(paper_type)
+            user_content += f"\n\n🔬 CRITICAL FOR POSITIVE REVIEWS - EMPIRICAL VALIDATION:\n" + "\n".join([f"• {req}" for req in review_requirements["empirical_validation"][:3]])
+            user_content += f"\n\n📊 MANDATORY FIGURE REQUIREMENTS (0 FIGURES = REJECTION):\n" + "\n".join([f"• {req}" for req in review_requirements["figure_requirements"][:3]])
+            
+        except Exception as e:
+            # Continue with standard prompt if enhancement fails
+            print(f"Warning: Quality enhancement failed: {e}")
+    
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_content}]
 
 def _collect_project_files(project_dir: Path) -> str:
@@ -2701,7 +2745,7 @@ def _apply_file_changes(file_changes: dict, project_dir: Path, config=None) -> b
     
     return True
 
-def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None) -> List[Dict[str, str]]:
+def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
     sys_prompt = (
         "Act as a top-tier journal reviewer (Nature, Science, Cell level) with expertise in LaTeX formatting and scientific programming. "
         "Your review must meet the highest academic standards. Be constructive but demanding. "
@@ -3042,7 +3086,7 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
         print(f" {error_msg}")
         return False, None, error_msg
 
-def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None) -> List[Dict[str, str]]:
+def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
     sys_prompt = (
         "You are the paper author making revisions based on peer review. Your goal is to address ALL reviewer concerns "
         "while maintaining scientific integrity and clarity. Produce a COMPLETE revised LaTeX file.\n\n"
