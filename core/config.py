@@ -53,6 +53,7 @@ class WorkflowConfig:
     auto_approve_changes: bool = False
     fallback_models: List[str] = None
     max_quality_history_size: int = 100
+    enable_blueprint_planning: bool = True
     
     def __post_init__(self):
         """Initialize default fallback models if not provided."""
