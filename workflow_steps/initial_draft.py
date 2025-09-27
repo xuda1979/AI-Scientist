@@ -10,6 +10,7 @@ def generate_initial_draft(
     model: str,
     request_timeout: int,
     config,
+    planning_brief: Optional[str] = None,
 ) -> str:
     """Generate the initial paper draft."""
     from sciresearch_workflow import (
@@ -28,10 +29,11 @@ def generate_initial_draft(
             request_timeout,
             config,
             config.initial_draft_candidates,
+            planning_brief=planning_brief,
         )
 
     return _universal_chat(
-        _initial_draft_prompt(topic, field, question, user_prompt),
+        _initial_draft_prompt(topic, field, question, user_prompt, planning_brief=planning_brief),
         model=model,
         request_timeout=request_timeout,
         prompt_type="initial_draft",

@@ -45,6 +45,7 @@ from core.config import WorkflowConfig
 
 # Workflow step modules
 from workflow_steps.initial_draft import generate_initial_draft
+from workflow_steps.research_plan import generate_research_blueprint
 from workflow_steps.simulation import run_simulation_step
 from workflow_steps.review_revision import run_review_revision_step
 
@@ -1886,14 +1887,15 @@ def _evaluate_simulation_content(text: str) -> float:
     return min(score, 1.0)  # Cap at 1.0
 
 def _generate_best_initial_draft_candidate(
-    topic: str, 
-    field: str, 
-    question: str, 
-    user_prompt: Optional[str], 
-    model: str, 
-    request_timeout: int, 
-    config: Any, 
-    candidate_count: int = 3
+    topic: str,
+    field: str,
+    question: str,
+    user_prompt: Optional[str],
+    model: str,
+    request_timeout: int,
+    config: Any,
+    candidate_count: int = 3,
+    planning_brief: Optional[str] = None
 ) -> str:
     """
     Generate multiple initial draft candidates and select the best one using test-time compute scaling.
@@ -1926,7 +1928,14 @@ def _generate_best_initial_draft_candidate(
         
         try:
             # Create varied initial draft prompts to encourage diversity
-            base_prompt = _initial_draft_prompt(topic, field, question, user_prompt, config.enable_quality_enhancements)
+            base_prompt = _initial_draft_prompt(
+                topic,
+                field,
+                question,
+                user_prompt,
+                enable_quality_enhancements=config.enable_quality_enhancements,
+                planning_brief=planning_brief,
+            )
             
             # Add variation instructions to encourage different approaches
             if i > 0:
@@ -2146,7 +2155,8 @@ def _initial_draft_prompt(
     field: str,
     question: str,
     user_prompt: Optional[str] = None,
-    enable_quality_enhancements: bool = True
+    enable_quality_enhancements: bool = True,
+    planning_brief: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """Build the initial draft prompt with document-type-aware guidance."""
 
@@ -2186,6 +2196,16 @@ def _initial_draft_prompt(
 
     system_prompt = f"{system_prompt}\n\n{global_requirements}"
     user_content = f"{user_content}\n\n{deliverable_instructions}"
+
+    if planning_brief:
+        sanitized_brief = planning_brief.strip()
+        if sanitized_brief:
+            system_prompt += "\n\nYou have been provided with a research blueprint. Treat all items marked [CRITICAL] as hard constraints and explicitly cover each [IMPORTANT] item."  # noqa: E501
+            user_content += (
+                "\n\nRESEARCH BLUEPRINT (MANDATORY GUIDANCE):\n"
+                f"{sanitized_brief}\n"
+                "Confirm adherence by mirroring the outlined section order and addressing every checklist item."
+            )
 
     if enable_quality_enhancements:
         try:
@@ -3267,6 +3287,7 @@ def run_workflow(
     num_ideas: int = 15,             # Number of ideas to generate
     output_diffs: bool = False,       # Optional diff output for each review/revision cycle
     document_type: str = "auto",     # Document type to generate
+    enable_blueprint_planning: Optional[bool] = None,  # Pre-draft planning toggle
     cancel_event: Optional[threading.Event] = None  # Optional cancellation signal from GUI
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
@@ -3286,6 +3307,11 @@ def run_workflow(
         config.reference_validation = check_references
     if validate_figures is not True:
         config.figure_validation = validate_figures
+
+    if enable_blueprint_planning is not None:
+        config.enable_blueprint_planning = enable_blueprint_planning
+    elif not hasattr(config, "enable_blueprint_planning"):
+        config.enable_blueprint_planning = True
     
     logger.info(f"Starting workflow with config: quality_threshold={config.quality_threshold}, max_iterations={config.max_iterations}")
     
@@ -3439,6 +3465,28 @@ def run_workflow(
         
         print(f"\nCreating paper draft for: {final_topic}")
 
+        planning_brief = None
+        if getattr(config, "enable_blueprint_planning", True):
+            _check_cancellation(cancel_event, "blueprint planning")
+            print(" Generating research blueprint to guide the draft...")
+            try:
+                planning_brief = generate_research_blueprint(
+                    final_topic,
+                    field,
+                    final_question,
+                    model,
+                    request_timeout or config.request_timeout,
+                    config,
+                )
+            except Exception as planning_error:
+                print(f"  Blueprint generation failed: {planning_error}")
+                planning_brief = None
+
+            if planning_brief:
+                blueprint_path = project_dir / "research_blueprint.md"
+                blueprint_path.write_text(planning_brief, encoding="utf-8")
+                print(f"  Blueprint saved to: {blueprint_path}")
+
         _check_cancellation(cancel_event, "initial draft generation")
 
         draft = generate_initial_draft(
@@ -3449,6 +3497,7 @@ def run_workflow(
             model,
             request_timeout,
             config,
+            planning_brief=planning_brief,
         )
         paper_path.write_text(draft, encoding="utf-8")
         
@@ -3790,10 +3839,17 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--modify-existing", action="store_true", help="If output dir already has paper.tex, modify in place")
     p.add_argument("--strict-singletons", action="store_true", default=True, help="Keep only paper.tex & simulation.py (others archived)")
     p.add_argument("--python-exec", default=None, help="Python interpreter for running simulation.py")
-    
+
     # Configuration file support
     p.add_argument("--config", type=str, default=None, help="Path to configuration JSON file")
     p.add_argument("--save-config", type=str, default=None, help="Save current configuration to JSON file")
+
+    # Planning controls
+    p.add_argument(
+        "--disable-blueprint-planning",
+        action="store_true",
+        help="Skip the research blueprint planning step before drafting",
+    )
     
     # New quality control parameters
     p.add_argument("--quality-threshold", type=float, default=1.0, help="Minimum quality score required for acceptance (0.0-1.0)")
@@ -3853,7 +3909,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         args.enable_content_protection = False
     else:
         args.enable_content_protection = True
-    
+
+    # Blueprint planning flag (default True unless explicitly disabled)
+    args.enable_blueprint_planning = not args.disable_blueprint_planning
+
     # Initialize topic, field, question, document_type attributes if they don't exist (modify-existing mode)
     if modify_existing:
         if not hasattr(args, 'topic'):
@@ -4636,7 +4695,8 @@ if __name__ == "__main__":
             specify_idea=ns.specify_idea,
             num_ideas=ns.num_ideas,
             output_diffs=ns.output_diffs,
-            document_type=ns.document_type
+            document_type=ns.document_type,
+            enable_blueprint_planning=ns.enable_blueprint_planning
         )
         print(f" Workflow completed! Results in: {result_dir}")
     except WorkflowCancelled as e:
