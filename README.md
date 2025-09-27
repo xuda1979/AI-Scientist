@@ -27,6 +27,25 @@ sciresearch-workflow "Quantum Computing" "Physics" "Quantum advantage?" --model 
 sciresearch-workflow --modify-existing --output-dir out/existing_paper --max-iterations 2
 ```
 
+### GUI Usage
+
+Prefer a graphical interface? Launch the desktop application after installation:
+
+```bash
+sciresearch-workflow-gui
+```
+
+The GUI provides forms for every workflow argument, including checkboxes for boolean flags
+(`--skip-ideation`, `--enable-pdf-review`, `--disable-content-protection`, and more), numeric
+spinboxes for iteration counts and thresholds, and dropdowns populated from
+`document_types.get_available_document_types()`. Use the directory pickers to choose an output
+location, then monitor progress in the live log viewer while the workflow runs on a background
+thread. A Cancel button signals the workflow to stop after the current phase completes.
+
+> **Note:** Tkinter ships with the standard Python distribution on Windows, macOS, and most
+> Linux environments. If your Python build omits Tkinter, install the appropriate package from
+> your system package manager (for example, `sudo apt install python3-tk`).
+
 ## Project Structure
 
 ```

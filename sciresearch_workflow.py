@@ -181,6 +181,21 @@ class ResourceExhaustionError(Exception):
     """Custom exception for resource exhaustion"""
     pass
 
+
+class WorkflowCancelled(Exception):
+    """Raised when the workflow is cancelled by the user."""
+    pass
+
+
+def _check_cancellation(cancel_event: Optional[threading.Event], stage: str = "") -> None:
+    """Raise ``WorkflowCancelled`` if the provided event has been signalled."""
+
+    if cancel_event is not None and cancel_event.is_set():
+        message = "Workflow cancelled"
+        if stage:
+            message += f" during {stage}"
+        raise WorkflowCancelled(message)
+
 def _classify_error(error: Exception) -> Tuple[str, Optional[int]]:
     """Classify error and return error type and recommended wait time"""
     error_str = str(error).lower()
@@ -3334,10 +3349,13 @@ def run_workflow(
     specify_idea: Optional[str] = None,  # Specify a research idea to use directly
     num_ideas: int = 15,             # Number of ideas to generate
     output_diffs: bool = False,       # Optional diff output for each review/revision cycle
-    document_type: str = "auto"      # Document type to generate
+    document_type: str = "auto",     # Document type to generate
+    cancel_event: Optional[threading.Event] = None  # Optional cancellation signal from GUI
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
-    
+
+    _check_cancellation(cancel_event, "initialization")
+
     # Use provided config or load default
     if config is None:
         config = WorkflowConfig()
@@ -3371,6 +3389,8 @@ def run_workflow(
     
     project_dir = _prepare_project_dir(output_dir, modify_existing)
     paper_path, sim_path = ensure_single_tex_py(project_dir, strict=strict_singletons)
+
+    _check_cancellation(cancel_event, "project preparation")
 
     # Progress tracking variables
     quality_history = []
@@ -3419,6 +3439,8 @@ def run_workflow(
     
     # If no real paper content yet (fresh), run ideation and then draft one.
     if is_minimal_template:
+        _check_cancellation(cancel_event, "ideation setup")
+
         if specify_idea:
             print(f"Using specified research idea: {specify_idea}")
             
@@ -3440,6 +3462,8 @@ def run_workflow(
             print(f"Specified idea saved to: {ideation_file}")
             
         elif enable_ideation:
+            _check_cancellation(cancel_event, "ideation phase")
+
             print("Starting Ideation Phase for new paper...")
             
             # Generate and analyze multiple research ideas
@@ -3497,7 +3521,9 @@ def run_workflow(
             final_question = question
         
         print(f"\nCreating paper draft for: {final_topic}")
-        
+
+        _check_cancellation(cancel_event, "initial draft generation")
+
         draft = generate_initial_draft(
             final_topic,
             field,
@@ -3520,13 +3546,19 @@ def run_workflow(
     # Extract/refresh simulation.py from LaTeX initially
     extract_simulation_from_tex(paper_path, sim_path)
 
+    _check_cancellation(cancel_event, "pre-iteration setup")
+
     # Review-Revise loop with quality tracking
     for i in range(1, config.max_iterations + 1):
+        _check_cancellation(cancel_event, f"iteration {i} start")
+
         print(f"Starting iteration {i} of {max_iterations}")
-        
+
         # ALWAYS run simulation before each review to get current results
         print(f"Running simulation before review {i}...")
-        
+
+        _check_cancellation(cancel_event, f"iteration {i} simulation")
+
         sim_summary, _ = run_simulation_step(
             paper_path,
             sim_path,
@@ -3635,6 +3667,8 @@ def run_workflow(
             quality_issues,
         )
 
+        _check_cancellation(cancel_event, f"iteration {i} post-review")
+
         print(f"Review completed")
         print(f"Review complete, applying revisions...")
 
@@ -3655,6 +3689,8 @@ def run_workflow(
         print(f"Iteration {i}: Combined review and revision completed")
     
     # Final quality report
+    _check_cancellation(cancel_event, "finalization")
+
     print(f"\nQuality progression: {[f'{q:.2f}' for q in quality_history]}")
     print(f"Best quality score achieved: {best_quality_score:.2f}")
 
@@ -4686,6 +4722,8 @@ if __name__ == "__main__":
             document_type=ns.document_type
         )
         print(f" Workflow completed! Results in: {result_dir}")
+    except WorkflowCancelled as e:
+        print(f" Workflow cancelled: {e}")
     except Exception as e:
         print(f" Workflow failed: {e}")
         import traceback
