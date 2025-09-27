@@ -21,6 +21,7 @@ import functools
 import logging
 import signal
 import threading
+from textwrap import dedent
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
@@ -2006,300 +2007,216 @@ def _generate_best_initial_draft_candidate(
         return valid_candidates[0][1] if valid_candidates else ""
 
 def _evaluate_initial_draft_quality(draft_text: str, topic: str, field: str, question: str) -> Dict[str, float]:
-    """
-    Evaluate the quality of an initial draft candidate.
-    
-    Args:
-        draft_text: The draft paper content
-        topic: Research topic
-        field: Research field  
-        question: Research question
-    
-    Returns:
-        Dictionary of quality metrics
-    """
-    metrics = {}
-    
-    # Length and completeness score
-    metrics['length_score'] = min(len(draft_text) / 12000, 1.0)  # Target ~12k chars for initial draft
-    
+    """Evaluate the quality of an initial draft candidate using structural heuristics."""
+
+    metrics: Dict[str, float] = {}
+
+    doc_type = infer_document_type(topic, field, question)
+    template = get_document_template(doc_type)
+
+    draft_text_lower = draft_text.lower()
+
+    def _normalize(text: str) -> str:
+        return re.sub(r'[^a-z0-9]+', ' ', text.lower()).strip()
+
+    normalized_text = _normalize(draft_text)
+    normalized_text_buffer = " " + " ".join(normalized_text.split()) + " "
+
+    # Length and completeness score (target around 12k chars for initial draft)
+    metrics['length_score'] = min(len(draft_text) / 12000, 1.0)
+
     # LaTeX structure quality
-    latex_indicators = ['\\documentclass', '\\begin{document}', '\\end{document}', 
-                       '\\section{', '\\subsection{', '\\begin{abstract}', '\\end{abstract}',
-                       '\\begin{filecontents}', '\\bibliography{', '\\cite{']
-    latex_count = sum(1 for indicator in latex_indicators if indicator in draft_text)
-    metrics['latex_structure'] = min(latex_count / 8, 1.0)
-    
-    # Academic sections presence
-    required_sections = ['abstract', 'introduction', 'related work', 'methodology', 
-                        'results', 'discussion', 'conclusion', 'references']
-    section_count = sum(1 for section in required_sections if section.lower() in draft_text.lower())
-    metrics['section_completeness'] = min(section_count / 6, 1.0)
-    
+    latex_indicators = [
+        '\\documentclass',
+        '\\begin{document}',
+        '\\end{document}',
+        '\\section{',
+        '\\subsection{',
+        '\\begin{abstract}',
+        '\\end{abstract}',
+        '\\begin{filecontents',
+        '\\bibliography{',
+        '\\begin{thebibliography}',
+        '\\cite{',
+    ]
+    latex_count = sum(1 for indicator in latex_indicators if indicator.lower() in draft_text_lower)
+    metrics['latex_structure'] = min(latex_count / 10, 1.0)
+
+    # Academic sections presence informed by the inferred document type
+    section_pattern = re.compile(r'\\(?:section|subsection|subsubsection)\*?\{([^}]*)\}', re.IGNORECASE)
+    document_sections = { _normalize(match.group(1)) for match in section_pattern.finditer(draft_text) }
+    if '\\begin{abstract' in draft_text_lower:
+        document_sections.add('abstract')
+
+    typical_sections = [_normalize(name) for name in template.typical_sections]
+
+    def _section_present(section_name: str) -> bool:
+        normalized_section = _normalize(section_name)
+        if not normalized_section:
+            return False
+        if normalized_section in document_sections:
+            return True
+        return f" {normalized_section} " in normalized_text_buffer
+
+    section_hits = sum(1 for section in typical_sections if _section_present(section))
+    metrics['section_completeness'] = min(section_hits / max(len(typical_sections), 1), 1.0)
+
     # Topic relevance (keyword matching)
     topic_keywords = topic.lower().split() if topic else []
     field_keywords = field.lower().split() if field else []
     question_keywords = question.lower().split() if question else []
-    
-    all_keywords = topic_keywords + field_keywords + question_keywords
-    keyword_matches = sum(1 for keyword in all_keywords if len(keyword) > 3 and keyword in draft_text.lower())
+
+    all_keywords = [kw for kw in topic_keywords + field_keywords + question_keywords if len(kw) > 3]
+    keyword_matches = sum(1 for keyword in all_keywords if f" {keyword.lower()} " in normalized_text_buffer)
     metrics['topic_relevance'] = min(keyword_matches / max(len(all_keywords), 1), 1.0)
-    
-    # Technical depth indicators
-    technical_terms = ['algorithm', 'methodology', 'analysis', 'evaluation', 'implementation',
-                      'experiment', 'validation', 'optimization', 'performance', 'framework']
-    tech_count = sum(1 for term in technical_terms if term.lower() in draft_text.lower())
+
+    # Technical depth indicators, expanded for document-type expectations
+    technical_terms = [
+        'algorithm',
+        'methodology',
+        'analysis',
+        'evaluation',
+        'implementation',
+        'experiment',
+        'validation',
+        'optimization',
+        'performance',
+        'framework',
+    ]
+    if template.requires_algorithms:
+        technical_terms.extend(['pseudocode', 'algorithmic', 'complexity'])
+    if template.requires_financial_data:
+        technical_terms.extend(['financial', 'portfolio', 'market', 'valuation'])
+
+    tech_count = sum(1 for term in set(technical_terms) if f" {term} " in normalized_text_buffer)
     metrics['technical_depth'] = min(tech_count / 8, 1.0)
-    
-    # Reference quality
+
+    # Reference quality with emphasis on bibliographic metadata
     citation_patterns = ['\\cite{', '\\citep{', '\\citet{', '\\citeauthor{']
     citation_count = sum(draft_text.count(pattern) for pattern in citation_patterns)
-    metrics['citation_quality'] = min(citation_count / 15, 1.0)
-    
+    bib_entry_count = len(re.findall(r'@\w+\{', draft_text, re.IGNORECASE))
+    doi_count = len(re.findall(r'10\.\d{4,9}/[-._;()/:A-Z0-9]+', draft_text, re.IGNORECASE))
+    metadata_bonus = 0.0
+    if bib_entry_count:
+        metadata_bonus = min(doi_count / bib_entry_count, 1.0) * 0.5
+    metrics['citation_quality'] = min((citation_count / 12) + metadata_bonus, 1.0)
+
+    # Embedded references check (encourages single-file bibliography)
+    has_filecontents_refs = bool(re.search(r'\\begin\{filecontents\*?\}\{refs\.bib\}', draft_text, re.IGNORECASE))
+    has_inline_bibliography = '\\begin{thebibliography}' in draft_text_lower
+    has_bibliography_command = '\\bibliography' in draft_text_lower
+    if has_filecontents_refs and (has_bibliography_command or has_inline_bibliography):
+        metrics['embedded_references'] = 1.0
+    elif has_inline_bibliography or has_bibliography_command:
+        metrics['embedded_references'] = 0.6
+    else:
+        metrics['embedded_references'] = 0.0
+
     # Mathematical content (for technical papers)
     math_indicators = ['\\begin{equation}', '\\begin{align}', '$', '\\(', 'theorem', 'proof', 'lemma']
-    math_count = sum(1 for indicator in math_indicators if indicator.lower() in draft_text.lower())
+    math_count = sum(1 for indicator in math_indicators if indicator.lower() in draft_text_lower)
     metrics['mathematical_content'] = min(math_count / 5, 1.0)
-    
+
     # Simulation quality assessment
     metrics['simulation_quality'] = _evaluate_simulation_content(draft_text)
-    
+
+    # Penalize placeholder language that suggests incomplete drafting
+    placeholder_patterns = ['lorem ipsum', 'todo', 'tbd', 'xxx', '???', 'fill in', 'add citation', 'add reference']
+    placeholder_hits = sum(draft_text_lower.count(pattern) for pattern in placeholder_patterns)
+    metrics['placeholder_penalty'] = max(0.0, 1.0 - placeholder_hits / 5)
+
     # Overall quality score (weighted combination)
     metrics['overall_quality'] = (
-        metrics['length_score'] * 0.14 +
-        metrics['latex_structure'] * 0.18 +
-        metrics['section_completeness'] * 0.18 +
-        metrics['topic_relevance'] * 0.14 +
+        metrics['length_score'] * 0.10 +
+        metrics['latex_structure'] * 0.15 +
+        metrics['section_completeness'] * 0.15 +
+        metrics['topic_relevance'] * 0.12 +
         metrics['technical_depth'] * 0.10 +
         metrics['citation_quality'] * 0.10 +
         metrics['mathematical_content'] * 0.08 +
-        metrics['simulation_quality'] * 0.08
+        metrics['simulation_quality'] * 0.08 +
+        metrics['embedded_references'] * 0.07 +
+        metrics['placeholder_penalty'] * 0.05
     )
-    
+
     return metrics
 
-def _initial_draft_prompt(topic: str, field: str, question: str, user_prompt: Optional[str] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
-    sys_prompt = (
-        "You are a meticulous scientist writing a LaTeX paper suitable for a top journal. "
-        
-        "CRITICAL REQUIREMENTS - NO EXCEPTIONS:\n"
-        "1. SINGLE FILE ONLY: Create ONE LaTeX file with NO separate bibliography files\n"
-        "2. EMBEDDED REFERENCES MANDATORY: Include ALL references directly in the paper.tex file using EITHER:\n"
-        "   - \\begin{filecontents*}{refs.bib}...\\end{filecontents*} at the TOP of the file, OR\n"
-        "   - \\begin{thebibliography}...\\end{thebibliography} at the END of the file\n"
-        "   - NO separate refs.bib files are allowed - everything must be in paper.tex\n"
-        "   - Use \\bibliography{refs} to reference the embedded filecontents\n"
-        "3. COMPILABLE: The file must compile successfully with pdflatex\n"
-        "4. NO FILENAMES IN TEXT: The paper text must NOT contain ANY references to specific filenames, code files, data files, or directory structures. Avoid:\n"
-        "   - Specific filenames like 'simulation.py', 'results.txt', 'data.csv', 'model.pkl', etc.\n"
-        "   - Directory paths like 'output/', 'src/', 'data/', etc.\n"
-        "   - File extensions like '.py', '.txt', '.csv', '.pkl', etc.\n"
-        "   - Use generic descriptions like 'our implementation', 'experimental setup', 'computational framework'\n"
-        "   - The paper should describe methods and results without revealing the underlying file structure\n"
-        "5. AUTHENTIC REFERENCES MANDATORY: All references must be real, published works with correct details:\n"
-        "   - Minimum 15-20 authentic references from reputable sources\n"
-        "   - Authors, titles, journals, years, DOIs must be accurate\n"
-        "   - NO FAKE or PLACEHOLDER references\n"
-        "   - All references must be cited in the text using \\cite{} commands\n"
-        "6. SELF-CONTAINED CONTENT: ALL tables, figures, diagrams must be defined within the LaTeX file using TikZ, tabular, or other LaTeX constructs. NO external image files.\n"
-        "7. DATA-DRIVEN RESULTS: All numerical values in tables/figures must come from actual simulation results, not made-up numbers.\n"
-        "8. SIMULATION REQUIREMENTS: If the paper needs numerical results, you MUST include a comprehensive simulation.py file with:\n"
-        "   - Complete, runnable Python code implementing the paper's main contribution\n"
-        "   - Proper experiment design with multiple trials, statistical analysis, and reproducible results\n"
-        "   - For ML/AI papers: Include test-time compute scaling where appropriate (generate multiple candidates, select best)\n"
-        "   - For optimization papers: Include proper algorithm implementation with convergence analysis\n"
-        "   - For system papers: Include performance benchmarks and comparative evaluation\n"
-        "   - All experimental parameters clearly documented and configurable\n"
-        "   - Results saved to 'results.txt' for verification and reproducibility\n"
-        "9. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
-        "8. APPROPRIATE STRUCTURE: The paper structure and sections must align with the paper type and field conventions:\n"
-        "   - Theoretical papers: Abstract, Introduction, Related Work, Theory/Methods, Analysis, Discussion, Conclusion\n"
-        "   - Experimental papers: Abstract, Introduction, Related Work, Methodology, Experiments, Results, Discussion, Conclusion\n"
-        "   - Survey papers: Abstract, Introduction, Background, Classification/Taxonomy, Comparative Analysis, Future Directions, Conclusion\n"
-        "   - Systems papers: Abstract, Introduction, Related Work, System Design, Implementation, Evaluation, Discussion, Conclusion\n"
-        "   - Algorithm papers: Abstract, Introduction, Related Work, Problem Definition, Algorithm Description, Analysis, Experiments, Conclusion\n"
-        "9. RESULTS DOCUMENTATION: The numerical results from running simulation.py MUST be saved in 'results.txt' in the project folder for reproducibility and verification.\n"
-        "10. FIGURE GENERATION: If the paper includes figures generated by code, ALL figure generation code must be included in simulation.py and figures must be saved in the local project folder.\n"
-        "11. SINGLE CODE FILE: ALL computational code must be consolidated into ONE simulation.py file - no additional .py files, scripts, or code fragments.\n\n"
-        
-        "STRUCTURE ALIGNMENT REQUIREMENTS:\n"
-        "- Identify the paper type based on the research question and field\n"
-        "- Use appropriate section names and organization for that paper type\n"
-        "- Include field-specific sections (e.g., 'Threat Model' for security papers, 'Clinical Validation' for medical papers)\n"
-        "- Follow established conventions for the target journal/conference\n"
-        "- Ensure logical flow appropriate for the paper's contribution type\n"
-        "- Include appropriate evaluation methodology for the paper type\n\n"
-        
-        "📋 PROFESSIONAL LAYOUT AND STRUCTURE REQUIREMENTS:\n"
-        "Design the paper with professional academic layout standards:\n"
-        "- SECTION ORGANIZATION: Ensure logical section flow with appropriate subsection hierarchy\n"
-        "- GLOSSARY PLACEMENT: If terminology section needed, place before references or as appendix\n"
-        "- APPENDIX PLANNING: Reserve appendix for supplementary material like detailed proofs, large tables, or extended algorithms\n"
-        "- PSEUDOCODE PLACEMENT: Keep essential algorithms in main text, move detailed implementations to appendix\n"
-        "- BALANCED SECTIONS: Ensure no section is disproportionately long or short relative to its importance\n"
-        "- REFERENCE ORGANIZATION: Place references at document end with consistent formatting\n"
-        "- ACKNOWLEDGMENTS: Include acknowledgments section before references if applicable\n"
-        "- PAGE FLOW: Design content flow to minimize awkward page breaks and orphaned elements\n"
-        "- VISUAL HIERARCHY: Use consistent heading styles and proper sectioning commands\n\n"
-        
-        "🎯 LATEX FLOAT POSITIONING REQUIREMENTS:\n"
-        "Use proper LaTeX positioning for all tables and figures from the start:\n"
-        "- USE [htbp] POSITIONING: Always use \\begin{figure}[htbp] and \\begin{table}[htbp] for optimal placement\n"
-        "  * NEVER use [H] which forces exact placement and creates poor page flow\n"
-        "  * [htbp] allows LaTeX to optimize: h=here, t=top, b=bottom, p=page\n"
-        "- PROPER SPACING: Add appropriate spacing around figures/tables using \\vspace{0.5em} if needed\n"
-        "- CAPTION POSITIONING: Place captions ABOVE tables and BELOW figures (academic standard)\n"
-        "- REFERENCE IN TEXT: Reference every figure/table in text using \\ref{} before it appears\n"
-        "- CENTERED CONTENT: Use \\centering inside figure/table environments (not \\begin{center})\n"
-        "- LOGICAL ORDERING: Ensure figures/tables appear in same order as referenced in text\n"
-        "- SIZE OPTIMIZATION: Design tables to fit page width using \\small or \\footnotesize if needed\n"
-        "- LABEL CONSISTENCY: Use consistent labeling scheme (fig:name, tab:name) for all floats\n\n"
-        
-        "📊 VISUAL QUALITY STANDARDS:\n"
-        "Ensure all visual elements meet professional standards:\n"
-        "- FIGURE SIZING: Design figures to fit properly within page margins without stretching\n"
-        "- TEXT LEGIBILITY: Ensure all figure text (labels, legends, annotations) is appropriately sized and positioned\n"
-        "- TABLE FORMATTING: Create tables that fit page width with readable font sizes\n"
-        "- CONSISTENT STYLING: Maintain uniform visual style across all figures and tables\n"
-        "- MARGIN COMPLIANCE: Ensure no content extends beyond standard page margins\n"
-        "- CAPTION QUALITY: Write informative captions that explain figures/tables completely\n"
-        "- REFERENCE INTEGRATION: Ensure smooth integration between text and visual elements\n\n"
-        
-        "RESULTS DOCUMENTATION REQUIREMENTS:\n"
-        "- Ensure simulation.py writes key numerical results to 'results.txt'\n"
-        "- Include timestamps, parameter values, and computed metrics\n"
-        "- Format results clearly for easy reference and verification\n"
-        "- Results file should be human-readable and well-structured\n"
-        "- All numbers cited in the paper must be traceable to results.txt\n\n"
-        
-        "FIGURE GENERATION REQUIREMENTS:\n"
-        "- If paper includes computational figures/plots, include generation code in simulation.py\n"
-        "- Save generated figures to the local project folder (not external dependencies)\n"
-        "- Use standard formats (PNG, PDF, SVG) that can be referenced in LaTeX\n"
-        "- Include proper figure generation with matplotlib, seaborn, or similar libraries\n"
-        "- Ensure figure files are saved with descriptive names\n"
-        "- Reference saved figures in LaTeX using \\includegraphics with proper paths\n"
-        "- GRAPH DRAWING CONSTRAINTS: For any graph, chart, or plot generation, ensure at least 5 data samples are included and use appropriate sizing (minimum 6x4 inches or equivalent)\n"
-        "- DATA ADEQUACY: Graphs must contain sufficient data points to demonstrate meaningful patterns and trends\n"
-        "- VISUALIZATION QUALITY: Use proper axis labels, legends, grid lines, and appropriate scaling for clarity\n\n"
-        
-        "REFERENCE REQUIREMENTS:\n"
-        "- Minimum 15-20 authentic, recently published references (prefer 2018-2025)\n"
-        "- Include proper DOIs where available\n"
-        "- Verify all author names, journal names, and publication details\n"
-        "- References must be directly relevant to the research topic\n"
-        "- Use proper citation style throughout the paper\n\n"
-        
-        "CONTENT SELF-CONTAINMENT:\n"
-        "- Figures: Use TikZ, PGFPlots, or pure LaTeX constructs for diagrams; \\includegraphics for generated plots\n"
-        "- Tables: Create with tabular environment, populate with simulation data from results.txt\n"
-        "- Diagrams: Use TikZ or similar LaTeX-native tools\n"
-        "- Generated plots: Include generation code in simulation.py, save locally, reference properly\n"
-        "- ALL visual content must either be LaTeX-generated or traceable to simulation.py\n\n"
-        
-        "TABLE/FIGURE POSITIONING REQUIREMENTS:\n"
-        "- Use contextual positioning: [h] (here if possible), [ht] (here or top of section), or [H] (force here)\n"
-        "- NEVER use [t] or [!t] positioning which forces floats to page tops regardless of context\n"
-        "- Place tables/figures in relevant subsections immediately after first text mention\n"
-        "- Ensure visual self-containment with comprehensive, descriptive captions\n"
-        "- Each float must appear in logical context, not forced to arbitrary page positions\n"
-        "- Tables/figures should enhance understanding within their specific subsection context\n"
-        "- CRITICAL: Place **all figures and tables either inline in the main text where they are first cited, or at the very end of the document but strictly before the references section**\n"
-        "- **Do not place any figures or tables after the references or between references**\n"
-        "- If LaTeX floats push figures out of order, use [H] positioning (requires \\usepackage{float}) to force placement where cited\n"
-        "- For figures/tables at document end, place them immediately before \\bibliography{} or \\begin{thebibliography}\n"
-        "- CRITICAL: Table formatting for large tables that exceed page borders:\n"
-        "  * Split long tables into multiple parts using \\begin{longtable} or manual splitting\n"
-        "  * Repeat table headers/keys in each part: 'Table X (continued)' or 'Table X (part 2 of 3)'\n"
-        "  * Add '(continued)' text between table parts to maintain continuity\n"
-        "  * Use \\multicolumn spanning for section breaks in large tables\n"
-        "  * Ensure each table part is self-explanatory with repeated column headers\n"
-        "  * Consider landscape orientation (\\begin{landscape}) for very wide tables\n\n"
-        
-        "STRUCTURE REQUIREMENTS:\n"
-        "- Start with \\begin{filecontents*}{refs.bib}...\\end{filecontents*} containing ALL bibliography entries\n"
-        "- Follow with standard LaTeX document structure\n"
-        "- Organize sections according to paper type and field conventions\n"
-        "- End with \\bibliography{refs} to use the embedded references\n\n"
-        
-        "FORMATTING REQUIREMENTS:\n"
-        "- All content must use width=\\linewidth constraints\n"
-        "- Wrap wide tables using adjustbox width=\\linewidth\n"
-        "- NO CODE BLOCKS: NEVER use \\begin{lstlisting}, \\begin{verbatim}, \\begin{code}, or any code listing environments\n"
-        "- ALGORITHMS ONLY: Use \\begin{algorithm}, \\begin{algorithmic}, or algorithm2e environments for pseudocode/algorithms\n"
-        "- Replace any existing code blocks with proper algorithm pseudocode descriptions\n"
-        "- NO PROMPT REPETITION: Do not repeat or reference the instructions/prompts given to you directly in the paper content\n"
-        "- SINGLE CODE FILE: Consolidate ALL computational code into simulation.py only\n"
-        "- Ensure all mathematical notation is properly formatted\n\n"
-        
-        "EXAMPLE STRUCTURE - ALL REFERENCES IN PAPER.TEX:\n"
-        "\\begin{filecontents*}{refs.bib}\n"
-        "@article{RealAuthor2024,\n"
-        "  author = {A. Real and B. Author},\n"
-        "  title = {Actual Published Title},\n"
-        "  journal = {Nature Communications},\n"
-        "  year = {2024},\n"
-        "  volume = {15},\n"
-        "  pages = {1234},\n"
-        "  doi = {10.1038/s41467-024-xxxxx}\n"
-        "}\n"
-        "% Add all 15-20 references here in paper.tex - NO separate .bib file!\n"
-        "\\end{filecontents*}\n"
-        "\\documentclass{...}\n"
-        "...\n"
-        "\\begin{document}\n"
-        "\\begin{tikzpicture} % For diagrams\n"
-        "...\n"
-        "\\end{tikzpicture}\n"
-        "\\includegraphics[width=\\linewidth]{generated_plot.pdf} % For simulation-generated figures\n"
-        "\\begin{tabular} % With real simulation data from results.txt\n"
-        "...\n"
-        "\\end{tabular}\n"
-        "\\bibliography{refs} % References the embedded filecontents above\n"
-        "\\end{document}\n"
-        "\n"
-        "CRITICAL: NO separate refs.bib files - everything in paper.tex!"
+def _initial_draft_prompt(
+    topic: str,
+    field: str,
+    question: str,
+    user_prompt: Optional[str] = None,
+    enable_quality_enhancements: bool = True
+) -> List[Dict[str, str]]:
+    """Build the initial draft prompt with document-type-aware guidance."""
+
+    doc_type = infer_document_type(topic, field, question)
+    messages = DocumentPromptGenerator.get_initial_draft_prompt(
+        doc_type,
+        topic,
+        field,
+        question,
+        user_prompt=user_prompt,
     )
-    
-    # Add custom user prompt if provided - it takes priority
-    if user_prompt:
-        sys_prompt = (
-            f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
-            "The above user instruction takes precedence over any conflicting requirements below. "
-            "However, still maintain the critical technical requirements (single file, embedded references, compilable LaTeX).\n\n"
-            + sys_prompt
-        )
-    
-    user_content = f"Topic: {topic}\nField: {field}\nResearch Question: {question}\n\nDraft the COMPLETE self-contained LaTeX paper with authentic references, proper results documentation, and appropriate figure generation code."
-    
-    # Enhance with quality requirements if enabled
+
+    system_prompt = messages[0]["content"].strip()
+    user_content = messages[1]["content"].strip()
+
+    global_requirements = dedent(
+        """
+        GLOBAL WORKFLOW REQUIREMENTS:
+        - Produce a single self-contained LaTeX document that compiles with pdflatex without manual fixes.
+        - Embed the complete bibliography using ``\begin{filecontents*}{refs.bib}`` at the top of the file and reference it with ``\bibliography{refs}`` or provide an inline ``thebibliography`` block.
+        - Cite only authentic, verifiable publications; every reference entry must be cited within the text using ``\cite{}`` commands.
+        - Describe resources generically in the prose—avoid mentioning local filenames or directory structures.
+        - When experiments or simulations are described, include executable Python code within a ``\begin{filecontents*}{simulation.py}`` block and summarize how the results support the narrative.
+        - Generate figures and tables directly in LaTeX or from the embedded simulation results, and reference each figure/table in the surrounding text.
+        """
+    ).strip()
+
+    deliverable_instructions = dedent(
+        """
+        DELIVERABLE CHECKLIST:
+        - Return the full LaTeX source for paper.tex, including all required ``filecontents`` environments.
+        - Follow the section ordering and conventions expected for this document type and field.
+        - Cross-reference every figure, table, and equation, ensuring they appear near their first textual mention.
+        - Report quantitative findings that are grounded in cited literature or in results produced by the embedded simulation code.
+        """
+    ).strip()
+
+    system_prompt = f"{system_prompt}\n\n{global_requirements}"
+    user_content = f"{user_content}\n\n{deliverable_instructions}"
+
     if enable_quality_enhancements:
         try:
             paper_type = detect_paper_type(question, field, topic)
-            
-            # Apply experimental/theoretical rigor enhancements
-            enhanced_prompt = enhance_prompt_with_rigor(sys_prompt, paper_type)
-            
-            # Apply review-driven enhancements
+
+            enhanced_prompt = enhance_prompt_with_rigor(system_prompt, paper_type)
             enhanced_prompt = enhance_prompt_for_review_quality(enhanced_prompt, paper_type)
-            sys_prompt = enhanced_prompt
-            
-            # Add paper-type-specific requirements to user content
+            system_prompt = enhanced_prompt
+
             if paper_type == "experimental":
                 user_content += f"\n\nSTATISTICAL RIGOR REQUIREMENTS:\n{get_statistical_rigor_requirements()}"
             elif paper_type == "theoretical":
                 user_content += f"\n\nTHEORETICAL RIGOR REQUIREMENTS:\n{get_theoretical_rigor_requirements()}"
-                
-            # Add review-driven requirements
+
             review_requirements = get_review_driven_requirements(paper_type)
-            user_content += f"\n\n🔬 CRITICAL FOR POSITIVE REVIEWS - EMPIRICAL VALIDATION:\n" + "\n".join([f"• {req}" for req in review_requirements["empirical_validation"][:3]])
-            user_content += f"\n\n📊 MANDATORY FIGURE REQUIREMENTS (0 FIGURES = REJECTION):\n" + "\n".join([f"• {req}" for req in review_requirements["figure_requirements"][:3]])
-            
+            user_content += (
+                "\n\n🔬 CRITICAL FOR POSITIVE REVIEWS - EMPIRICAL VALIDATION:\n"
+                + "\n".join(f"• {req}" for req in review_requirements["empirical_validation"][:3])
+            )
+            user_content += (
+                "\n\n📊 MANDATORY FIGURE REQUIREMENTS (0 FIGURES = REJECTION):\n"
+                + "\n".join(f"• {req}" for req in review_requirements["figure_requirements"][:3])
+            )
+
         except Exception as e:
-            # Continue with standard prompt if enhancement fails
             print(f"Warning: Quality enhancement failed: {e}")
-    
-    return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_content}]
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
 
 def _collect_project_files(project_dir: Path) -> str:
     """Collect all relevant files in the project directory for review context."""
