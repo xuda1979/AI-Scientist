@@ -29,6 +29,7 @@ dependencies = [
 
 [project.scripts]
 sciresearch-workflow = "main:main"
+sciresearch-workflow-gui = "ui.gui_app:main"
 
 [tool.setuptools]
 include-package-data = true
