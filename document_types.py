@@ -47,6 +47,9 @@ class DocumentTemplate:
     citation_style: str
     prompt_focus: str
     special_requirements: List[str]
+    requires_embedded_references: bool = True
+    min_references: int = 15
+    enforce_strict_sections: bool = True
 
 # Document Templates Configuration
 DOCUMENT_TEMPLATES = {
@@ -87,7 +90,7 @@ DOCUMENT_TEMPLATES = {
         prompt_focus="technical implementation and performance",
         special_requirements=["detailed algorithms", "performance benchmarks", "system diagrams"]
     ),
-    
+
     DocumentType.FINANCE_RESEARCH: DocumentTemplate(
         doc_type=DocumentType.FINANCE_RESEARCH,
         output_format=OutputFormat.LATEX_PDF,
@@ -104,9 +107,10 @@ DOCUMENT_TEMPLATES = {
         max_pages=20,
         citation_style="apa",
         prompt_focus="financial analysis and market insights",
-        special_requirements=["financial models", "market data", "risk metrics", "regulatory compliance"]
+        special_requirements=["financial models", "market data", "risk metrics", "regulatory compliance"],
+        min_references=12
     ),
-    
+
     DocumentType.EQUITY_RESEARCH: DocumentTemplate(
         doc_type=DocumentType.EQUITY_RESEARCH,
         output_format=OutputFormat.LATEX_PDF,
@@ -123,7 +127,8 @@ DOCUMENT_TEMPLATES = {
         max_pages=25,
         citation_style="financial",
         prompt_focus="investment analysis and valuation",
-        special_requirements=["DCF models", "comparable analysis", "price targets", "investment thesis"]
+        special_requirements=["DCF models", "comparable analysis", "price targets", "investment thesis"],
+        min_references=10
     ),
     
     DocumentType.PRESENTATION_SLIDES: DocumentTemplate(
@@ -142,7 +147,10 @@ DOCUMENT_TEMPLATES = {
         max_pages=30,
         citation_style="minimal",
         prompt_focus="clear communication and visual impact",
-        special_requirements=["concise bullet points", "visual emphasis", "speaker notes"]
+        special_requirements=["concise bullet points", "visual emphasis", "speaker notes"],
+        requires_embedded_references=False,
+        min_references=0,
+        enforce_strict_sections=False
     ),
     
     DocumentType.SURVEY_PAPER: DocumentTemplate(
@@ -161,7 +169,8 @@ DOCUMENT_TEMPLATES = {
         max_pages=25,
         citation_style="acm",
         prompt_focus="comprehensive literature coverage",
-        special_requirements=["extensive citations", "comparative tables", "classification schemes"]
+        special_requirements=["extensive citations", "comparative tables", "classification schemes"],
+        min_references=25
     )
 }
 

@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 
+from document_types import DocumentType, get_document_template
+from prompts.review_driven_enhancements import DomainReviewProfile, get_domain_review_profile
+
 
 @dataclass
 class QualityMetrics:
@@ -114,8 +117,12 @@ class FairPaperScorer:
             }
         }
     
-    def score_paper(self, paper_content: str, simulation_output: str = "", 
-                   metadata: Optional[Dict] = None) -> Tuple[QualityMetrics, List[str]]:
+    def score_paper(
+        self,
+        paper_content: str,
+        simulation_output: str = "",
+        metadata: Optional[Dict] = None,
+    ) -> Tuple[QualityMetrics, List[str]]:
         """
         Comprehensive paper scoring with realistic assessment.
         
@@ -126,18 +133,37 @@ class FairPaperScorer:
         issues = []
         
         # Score individual components
+        doc_type: Optional[DocumentType] = None
+        field = ""
+        if metadata:
+            doc_type_value = metadata.get("doc_type") or metadata.get("document_type")
+            field = metadata.get("field", "")
+            if isinstance(doc_type_value, DocumentType):
+                doc_type = doc_type_value
+            elif isinstance(doc_type_value, str):
+                normalized = doc_type_value.lower()
+                for candidate in DocumentType:
+                    if normalized in (candidate.value, candidate.name.lower()):
+                        doc_type = candidate
+                        break
+
+        template = get_document_template(doc_type) if doc_type else None
+        profile = get_domain_review_profile(doc_type, field)
+
         metrics.empirical_validation, emp_issues = self._score_empirical_validation(
-            paper_content, simulation_output)
+            paper_content, simulation_output, profile, template
+        )
         issues.extend(emp_issues)
-        
-        metrics.figure_quality, fig_issues = self._score_figure_quality(paper_content)
+
+        metrics.figure_quality, fig_issues = self._score_figure_quality(paper_content, template, profile)
         issues.extend(fig_issues)
         
         metrics.methodology_rigor, method_issues = self._score_methodology_rigor(paper_content)
         issues.extend(method_issues)
         
         metrics.experimental_design, exp_issues = self._score_experimental_design(
-            paper_content, simulation_output)
+            paper_content, simulation_output, template, profile
+        )
         issues.extend(exp_issues)
         
         metrics.writing_clarity, writing_issues = self._score_writing_clarity(paper_content)
@@ -167,104 +193,172 @@ class FairPaperScorer:
         
         return metrics, issues
     
-    def _score_empirical_validation(self, content: str, simulation: str) -> Tuple[float, List[str]]:
+    def _score_empirical_validation(
+        self,
+        content: str,
+        simulation: str,
+        profile: DomainReviewProfile,
+        template: Optional[DocumentTemplate] = None,
+    ) -> Tuple[float, List[str]]:
         """Score empirical validation quality (most important factor)."""
+
         score = 0.0
-        issues = []
-        
+        issues: List[str] = []
+        content_lower = content.lower()
+
+        requires_empirical = True
+        if template and not template.requires_simulation:
+            requires_empirical = False
+
+        if not requires_empirical:
+            issues.append(
+                f"INFO: Empirical benchmark expectations relaxed for {template.doc_type.value} template"
+                if template
+                else "INFO: Empirical benchmark expectations relaxed"
+            )
+            if any(keyword in content_lower for keyword in ["proof", "theorem", "analysis", "framework"]):
+                score = 0.7
+            else:
+                score = 0.5
+            return min(score, 1.0), issues
+
         # Check for real experiments vs analytical/theoretical only
         experimental_indicators = [
-            "experiment", "evaluation", "benchmark", "dataset", "test", 
-            "accuracy", "precision", "recall", "f1", "results"
+            "experiment",
+            "evaluation",
+            "benchmark",
+            "dataset",
+            "test",
+            "measurement",
+            "study",
         ]
-        
-        analytical_only_indicators = [
-            "analytical", "theoretical", "simulation only", "toy example",
-            "synthetic", "artificial", "hypothetical"
-        ]
-        
-        has_experiments = any(indicator in content.lower() for indicator in experimental_indicators)
-        is_analytical_only = any(indicator in content.lower() for indicator in analytical_only_indicators)
-        
-        if not has_experiments:
+
+        has_experiments = any(indicator in content_lower for indicator in experimental_indicators)
+
+        if not has_experiments and not simulation:
             issues.append("CRITICAL: No experimental validation found")
             return 0.0, issues
-        
-        if is_analytical_only and not has_experiments:
-            issues.append("CRITICAL: Appears to be analytical/theoretical only without empirical validation")
-            score = 0.1
-        
-        # Check for standard benchmarks
-        standard_benchmarks = [
-            "gsm8k", "math", "humaneval", "mbpp", "hellaswag", "mmlu", 
-            "superglue", "glue", "squad", "natural questions", "ms marco",
-            "imagenet", "cifar", "coco", "pascal voc", "ade20k"
-        ]
-        
-        benchmark_count = sum(1 for benchmark in standard_benchmarks 
-                             if benchmark.lower() in content.lower())
-        
-        if benchmark_count == 0:
-            issues.append("MAJOR: No standard benchmarks mentioned")
-            score = max(score, 0.2)
-        elif benchmark_count == 1:
-            issues.append("MINOR: Only one benchmark used - need more for robustness")
-            score = max(score, 0.4)
-        elif benchmark_count >= 2:
-            score = max(score, 0.6)
-        
-        # Check for measured vs simulated results
-        if "measured" in content.lower() or "empirical" in content.lower():
+
+        if has_experiments:
+            score = max(score, 0.3)
+
+        # Domain benchmarks and datasets
+        if profile.benchmark_terms:
+            benchmark_hits = sum(
+                1 for term in profile.benchmark_terms if term.lower() in content_lower
+            )
+            if benchmark_hits == 0:
+                example = profile.benchmark_terms[0]
+                issues.append(
+                    f"MAJOR: No {profile.name.lower()} benchmarks mentioned (e.g., {example})"
+                )
+                score = max(score, 0.2)
+            elif benchmark_hits == 1:
+                score = max(score, 0.4)
+            else:
+                score = max(score, 0.6)
+        else:
+            if any(keyword in content_lower for keyword in ["benchmark", "dataset", "evaluation"]):
+                score = max(score, 0.5)
+            else:
+                issues.append("MAJOR: No datasets or evaluation settings described")
+                score = max(score, 0.2)
+
+        # Baseline expectations
+        if profile.baseline_keywords:
+            if any(keyword in content_lower for keyword in profile.baseline_keywords):
+                score += 0.1
+            else:
+                issues.append(
+                    f"MAJOR: Missing baseline comparisons expected for {profile.name.lower()} studies"
+                )
+        else:
+            if "baseline" in content_lower or "comparison" in content_lower:
+                score += 0.1
+
+        # Measured vs simulated results
+        if "measured" in content_lower or "empirical" in content_lower:
             score += 0.1
-        
+
         if simulation and len(simulation) > 100:
             score += 0.1
-            
-        # Check for statistical significance
-        if "p-value" in content.lower() or "significance" in content.lower():
+
+        # Statistical significance
+        if "p-value" in content_lower or "significance" in content_lower or "p value" in content_lower:
             score += 0.1
         else:
             issues.append("MAJOR: No statistical significance testing mentioned")
-            
-        # Check for confidence intervals  
-        if "confidence interval" in content.lower() or "error bar" in content.lower():
+
+        # Confidence intervals
+        if "confidence interval" in content_lower or "error bar" in content_lower or "95%" in content_lower:
             score += 0.1
         else:
             issues.append("MINOR: No confidence intervals or error bars mentioned")
-            
+
         return min(score, 1.0), issues
     
-    def _score_figure_quality(self, content: str) -> Tuple[float, List[str]]:
+    def _score_figure_quality(
+        self,
+        content: str,
+        template: Optional[DocumentTemplate] = None,
+        profile: Optional[DomainReviewProfile] = None,
+    ) -> Tuple[float, List[str]]:
         """Score figure quality and quantity."""
         score = 0.0
         issues = []
-        
-        # Count figures
-        figure_count = len(re.findall(r'\\begin{figure}|\\includegraphics', content))
-        table_count = len(re.findall(r'\\begin{table}', content))
+
+        requires_figures = True
+        requires_tables = True
+        min_figures = 3
+        min_tables = 1
+
+        if template:
+            requires_figures = template.requires_figures
+            requires_tables = template.requires_tables
+        if profile:
+            min_figures = profile.min_figures
+            min_tables = profile.min_tables
+
+        figure_count = len(re.findall(r'\\begin{figure}|\\includegraphics', content)) if requires_figures else 0
+        table_count = len(re.findall(r'\\begin{table}', content)) if requires_tables else 0
         total_visuals = figure_count + table_count
-        
-        if total_visuals == 0:
-            issues.append("CRITICAL: No figures or tables found - papers with 0 visuals are often rejected")
-            return 0.0, issues
-        elif total_visuals < 3:
-            issues.append(f"MAJOR: Only {total_visuals} visual elements - need at least 3-4")
-            score = 0.3
-        elif total_visuals < 5:
-            issues.append(f"MINOR: Only {total_visuals} visual elements - could benefit from more")
-            score = 0.6
+
+        if requires_figures or requires_tables:
+            min_visuals = 0
+            if requires_figures:
+                min_visuals += min_figures
+            if requires_tables:
+                min_visuals += min_tables
+            min_visuals = max(min_visuals, 1 if requires_figures or requires_tables else 0)
+
+            if total_visuals == 0:
+                issues.append("CRITICAL: No figures or tables found - add visuals to support results")
+                return 0.0, issues
+            elif total_visuals < min_visuals:
+                issues.append(
+                    f"MAJOR: Only {total_visuals} visual elements - expected at least {min_visuals} for {profile.name if profile else 'this'} documents"
+                )
+                score = 0.3
+            elif total_visuals < max(min_visuals + 2, 3):
+                issues.append(
+                    f"MINOR: Only {total_visuals} visual elements - consider adding more to strengthen evidence"
+                )
+                score = 0.6
+            else:
+                score = 0.8
         else:
-            score = 0.8
-        
+            issues.append("INFO: Visual element requirements relaxed for this template")
+            score = 0.7
+
         # Check for figure quality indicators
         quality_indicators = [
-            "tikz", "pgfplot", "algorithm", "diagram", "architecture", 
+            "tikz", "pgfplot", "algorithm", "diagram", "architecture",
             "comparison", "ablation", "performance", "chart"
         ]
-        
-        quality_count = sum(1 for indicator in quality_indicators 
+
+        quality_count = sum(1 for indicator in quality_indicators
                            if indicator in content.lower())
-        
+
         if quality_count >= 3:
             score += 0.2
         elif quality_count >= 1:
@@ -314,16 +408,37 @@ class FairPaperScorer:
         
         return min(score, 1.0), issues
     
-    def _score_experimental_design(self, content: str, simulation: str) -> Tuple[float, List[str]]:
+    def _score_experimental_design(
+        self,
+        content: str,
+        simulation: str,
+        template: Optional[DocumentTemplate] = None,
+        profile: Optional[DomainReviewProfile] = None,
+    ) -> Tuple[float, List[str]]:
         """Score experimental design quality."""
+
         score = 0.0
         issues = []
-        
+        content_lower = content.lower()
+
+        requires_empirical = True
+        if template and not template.requires_simulation:
+            requires_empirical = False
+
+        if not requires_empirical:
+            issues.append(
+                f"INFO: Experimental design scoring relaxed for {template.doc_type.value} template"
+                if template
+                else "INFO: Experimental design scoring relaxed"
+            )
+            return 0.6, issues
+
         # Check for baseline comparisons
         baseline_indicators = ["baseline", "comparison", "vs", "versus", "compared to"]
-        baseline_count = sum(1 for indicator in baseline_indicators 
-                            if indicator in content.lower())
-        
+        if profile and profile.baseline_keywords:
+            baseline_indicators.extend(profile.baseline_keywords)
+        baseline_count = sum(1 for indicator in baseline_indicators if indicator in content_lower)
+
         if baseline_count == 0:
             issues.append("CRITICAL: No baseline comparisons found")
             return 0.1, issues
@@ -332,31 +447,32 @@ class FairPaperScorer:
             score = 0.3
         else:
             score = 0.5
-            
+
         # Check for ablation studies
-        if "ablation" in content.lower():
+        if "ablation" in content_lower:
             score += 0.2
         else:
             issues.append("MAJOR: No ablation study performed")
-            
+
         # Check for multiple datasets/settings
         dataset_indicators = ["dataset", "benchmark", "corpus", "collection"]
-        dataset_count = sum(1 for indicator in dataset_indicators 
-                           if indicator in content.lower())
-        
+        if profile and profile.dataset_terms:
+            dataset_indicators.extend([term.lower() for term in profile.dataset_terms])
+        dataset_count = sum(1 for indicator in set(dataset_indicators) if indicator in content_lower)
+
         if dataset_count >= 3:
             score += 0.2
         elif dataset_count >= 2:
             score += 0.1
         else:
             issues.append("MINOR: Limited dataset diversity")
-            
-        # Check for hyperparameter analysis  
-        if "hyperparameter" in content.lower() or "parameter" in content.lower():
+
+        # Check for hyperparameter analysis
+        if "hyperparameter" in content_lower or "parameter" in content_lower:
             score += 0.1
         else:
             issues.append("MINOR: No hyperparameter analysis mentioned")
-            
+
         return min(score, 1.0), issues
     
     def _score_writing_clarity(self, content: str) -> Tuple[float, List[str]]:

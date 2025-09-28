@@ -50,7 +50,13 @@ from workflow_steps.simulation import run_simulation_step
 from workflow_steps.review_revision import run_review_revision_step
 
 # Document type system
-from document_types import DocumentType, get_document_template, infer_document_type, get_available_document_types
+from document_types import (
+    DocumentTemplate,
+    DocumentType,
+    get_document_template,
+    infer_document_type,
+    get_available_document_types,
+)
 from document_prompts import DocumentPromptGenerator
 
 # Quality enhancement system
@@ -1886,6 +1892,36 @@ def _evaluate_simulation_content(text: str) -> float:
     
     return min(score, 1.0)  # Cap at 1.0
 
+def _extract_blueprint_requirements(planning_brief: Optional[str]) -> Dict[str, List[str]]:
+    """Parse CRITICAL and IMPORTANT requirements from a planning brief."""
+
+    requirements: Dict[str, List[str]] = {"critical": [], "important": []}
+
+    if not planning_brief:
+        return requirements
+
+    for raw_line in planning_brief.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        match = re.search(r"\[(CRITICAL|IMPORTANT)\]\s*(.+)", line, re.IGNORECASE)
+        if not match:
+            continue
+
+        priority = match.group(1).upper()
+        text = match.group(2).strip("-•: \t")
+        if not text:
+            continue
+
+        if priority == "CRITICAL":
+            requirements["critical"].append(text)
+        else:
+            requirements["important"].append(text)
+
+    return requirements
+
+
 def _generate_best_initial_draft_candidate(
     topic: str,
     field: str,
@@ -1990,12 +2026,33 @@ def _generate_best_initial_draft_candidate(
     for idx, (orig_idx, candidate) in enumerate(valid_candidates):
         try:
             # Calculate quality metrics for this candidate
-            metrics = _evaluate_initial_draft_quality(candidate, topic, field, question)
+            metrics = _evaluate_initial_draft_quality(
+                candidate,
+                topic,
+                field,
+                question,
+                planning_brief=planning_brief,
+            )
             score = metrics['overall_quality']
             candidate_scores.append((orig_idx, candidate, score, metrics))
-            
+
             print(f"    Candidate {orig_idx + 1}: Quality score {score:.3f}")
-            
+            if planning_brief:
+                critical_cov = metrics.get('blueprint_critical_coverage')
+                important_cov = metrics.get('blueprint_important_coverage')
+                if critical_cov is not None:
+                    print(
+                        f"      Blueprint alignment — critical: {critical_cov:.2f}, important: {important_cov:.2f}"
+                    )
+                missing_critical = metrics.get('missing_critical_items') or []
+                missing_important = metrics.get('missing_important_items') or []
+                if missing_critical:
+                    preview = '; '.join(missing_critical[:2])
+                    print(f"      Missing CRITICAL items: {preview}{' …' if len(missing_critical) > 2 else ''}")
+                if missing_important:
+                    preview = '; '.join(missing_important[:2])
+                    print(f"      Missing IMPORTANT items: {preview}{' …' if len(missing_important) > 2 else ''}")
+
         except Exception as e:
             print(f"     Failed to evaluate candidate {orig_idx + 1}: {e}")
             candidate_scores.append((orig_idx, candidate, 0.0, {}))
@@ -2015,10 +2072,16 @@ def _generate_best_initial_draft_candidate(
         print("      No valid candidates scored, returning first valid candidate")
         return valid_candidates[0][1] if valid_candidates else ""
 
-def _evaluate_initial_draft_quality(draft_text: str, topic: str, field: str, question: str) -> Dict[str, float]:
+def _evaluate_initial_draft_quality(
+    draft_text: str,
+    topic: str,
+    field: str,
+    question: str,
+    planning_brief: Optional[str] = None,
+) -> Dict[str, Any]:
     """Evaluate the quality of an initial draft candidate using structural heuristics."""
 
-    metrics: Dict[str, float] = {}
+    metrics: Dict[str, Any] = {}
 
     doc_type = infer_document_type(topic, field, question)
     template = get_document_template(doc_type)
@@ -2134,18 +2197,58 @@ def _evaluate_initial_draft_quality(draft_text: str, topic: str, field: str, que
     placeholder_hits = sum(draft_text_lower.count(pattern) for pattern in placeholder_patterns)
     metrics['placeholder_penalty'] = max(0.0, 1.0 - placeholder_hits / 5)
 
+    # Blueprint alignment with planning brief priorities
+    requirements = _extract_blueprint_requirements(planning_brief)
+
+    def _coverage_score(items: List[str]) -> Tuple[float, List[str]]:
+        if not items:
+            return 1.0, []
+
+        missing_items: List[str] = []
+        hits = 0
+        for item in items:
+            normalized_item = _normalize(item)
+            if not normalized_item:
+                continue
+            tokens = [tok for tok in normalized_item.split() if len(tok) > 3]
+            if not tokens:
+                continue
+            token_matches = sum(1 for tok in tokens if f" {tok} " in normalized_text_buffer)
+            phrase_present = f" {normalized_item} " in normalized_text_buffer
+            if phrase_present or token_matches / len(tokens) >= 0.5:
+                hits += 1
+            else:
+                missing_items.append(item)
+
+        total = len(items)
+        coverage = hits / total if total else 1.0
+        if total and hits == 0 and not missing_items:
+            # If nothing matched and we skipped all tokens, treat as uncovered
+            missing_items = items
+        return coverage, missing_items
+
+    critical_coverage, missing_critical = _coverage_score(requirements['critical'])
+    important_coverage, missing_important = _coverage_score(requirements['important'])
+
+    metrics['blueprint_critical_coverage'] = critical_coverage
+    metrics['blueprint_important_coverage'] = important_coverage
+    metrics['blueprint_alignment'] = 0.7 * critical_coverage + 0.3 * important_coverage
+    metrics['missing_critical_items'] = missing_critical
+    metrics['missing_important_items'] = missing_important
+
     # Overall quality score (weighted combination)
     metrics['overall_quality'] = (
-        metrics['length_score'] * 0.10 +
-        metrics['latex_structure'] * 0.15 +
-        metrics['section_completeness'] * 0.15 +
-        metrics['topic_relevance'] * 0.12 +
+        metrics['length_score'] * 0.08 +
+        metrics['latex_structure'] * 0.13 +
+        metrics['section_completeness'] * 0.13 +
+        metrics['topic_relevance'] * 0.10 +
         metrics['technical_depth'] * 0.10 +
-        metrics['citation_quality'] * 0.10 +
-        metrics['mathematical_content'] * 0.08 +
-        metrics['simulation_quality'] * 0.08 +
-        metrics['embedded_references'] * 0.07 +
-        metrics['placeholder_penalty'] * 0.05
+        metrics['citation_quality'] * 0.09 +
+        metrics['mathematical_content'] * 0.07 +
+        metrics['simulation_quality'] * 0.07 +
+        metrics['embedded_references'] * 0.06 +
+        metrics['placeholder_penalty'] * 0.05 +
+        metrics['blueprint_alignment'] * 0.12
     )
 
     return metrics
@@ -2212,7 +2315,12 @@ def _initial_draft_prompt(
             paper_type = detect_paper_type(question, field, topic)
 
             enhanced_prompt = enhance_prompt_with_rigor(system_prompt, paper_type)
-            enhanced_prompt = enhance_prompt_for_review_quality(enhanced_prompt, paper_type)
+            enhanced_prompt = enhance_prompt_for_review_quality(
+                enhanced_prompt,
+                paper_type,
+                doc_type=doc_type,
+                field=field,
+            )
             system_prompt = enhanced_prompt
 
             if paper_type == "experimental":
@@ -2220,7 +2328,11 @@ def _initial_draft_prompt(
             elif paper_type == "theoretical":
                 user_content += f"\n\nTHEORETICAL RIGOR REQUIREMENTS:\n{get_theoretical_rigor_requirements()}"
 
-            review_requirements = get_review_driven_requirements(paper_type)
+            review_requirements = get_review_driven_requirements(
+                paper_type,
+                doc_type=doc_type,
+                field=field,
+            )
             user_content += (
                 "\n\n🔬 CRITICAL FOR POSITIVE REVIEWS - EMPIRICAL VALIDATION:\n"
                 + "\n".join(f"• {req}" for req in review_requirements["empirical_validation"][:3])
@@ -2229,6 +2341,13 @@ def _initial_draft_prompt(
                 "\n\n📊 MANDATORY FIGURE REQUIREMENTS (0 FIGURES = REJECTION):\n"
                 + "\n".join(f"• {req}" for req in review_requirements["figure_requirements"][:3])
             )
+            if review_requirements.get("baseline_expectations"):
+                user_content += (
+                    "\n\n⚖️ BASELINE EXPECTATIONS:\n"
+                    + "\n".join(
+                        f"• {req}" for req in review_requirements["baseline_expectations"][:3]
+                    )
+                )
 
         except Exception as e:
             print(f"Warning: Quality enhancement failed: {e}")
@@ -3547,7 +3666,7 @@ def run_workflow(
             print(f" LaTeX compilation successful!")
         
         # COMPREHENSIVE QUALITY VALIDATION
-        quality_issues = _validate_research_quality(current_tex, sim_summary)
+        quality_issues = _validate_research_quality(current_tex, sim_summary, doc_type=detected_type)
         
         # Additional validations based on config
         if config.reference_validation:
@@ -3992,35 +4111,60 @@ def _extract_quality_metrics(paper_content: str, sim_summary: str) -> Dict[str, 
     
     return metrics
 
-def _validate_research_quality(paper_content: str, sim_summary: str) -> List[str]:
+def _validate_research_quality(
+    paper_content: str,
+    sim_summary: str,
+    doc_type: Optional[DocumentType] = None,
+) -> List[str]:
     """Validate the quality of the research paper."""
-    issues = []
+
+    issues: List[str] = []
+    info_notes: List[str] = []
+
+    template = get_document_template(doc_type or DocumentType.RESEARCH_PAPER)
     
     # Check for single file requirement
     if '\\input{' in paper_content or '\\include{' in paper_content:
         issues.append("Paper uses \\input or \\include - must be a single self-contained file")
     
-    # Check for embedded references requirement - MANDATORY
+    # Check for embedded references requirement when template requires it
     has_filecontents = bool(re.search(r'\\begin\{filecontents\*?\}\{[^}]*\.bib\}', paper_content))
     has_thebibliography = bool(re.search(r'\\begin\{thebibliography\}', paper_content))
     has_external_bib = bool(re.search(r'\\bibliography\{[^}]+\}', paper_content)) and not has_filecontents
-    
-    if has_external_bib and not has_filecontents:
-        issues.append("CRITICAL: Paper references external .bib file - all references must be embedded in paper.tex using filecontents or thebibliography")
-    
-    if not has_filecontents and not has_thebibliography:
-        issues.append("CRITICAL: No embedded bibliography found - all references must be embedded in paper.tex using filecontents or thebibliography")
-    
-    # Check for minimum number of references
+
+    if template.requires_embedded_references:
+        if has_external_bib and not has_filecontents:
+            issues.append(
+                "CRITICAL: Paper references external .bib file - all references must be embedded in paper.tex using filecontents or thebibliography"
+            )
+
+        if not has_filecontents and not has_thebibliography:
+            issues.append(
+                "CRITICAL: No embedded bibliography found - all references must be embedded in paper.tex using filecontents or thebibliography"
+            )
+    else:
+        info_notes.append(
+            f"INFO: Embedded bibliography requirement skipped for {template.doc_type.value} template"
+        )
+
+    # Check for minimum number of references when required by template
     if has_filecontents:
         bib_entries = len(re.findall(r'@\w+\{', paper_content))
     elif has_thebibliography:
         bib_entries = len(re.findall(r'\\bibitem\{', paper_content))
     else:
         bib_entries = 0
-    
-    if bib_entries < 15:
-        issues.append(f"Insufficient references: only {bib_entries} found (minimum 15 required)")
+
+    if template.min_references > 0:
+        if bib_entries < template.min_references:
+            issues.append(
+                f"Insufficient references: only {bib_entries} found (minimum {template.min_references} required for {template.doc_type.value})"
+            )
+    else:
+        if bib_entries == 0:
+            info_notes.append(
+                f"INFO: Reference count requirement skipped for {template.doc_type.value} template"
+            )
     
     # Check that all references are cited in text
     if has_filecontents:
@@ -4093,37 +4237,47 @@ def _validate_research_quality(paper_content: str, sim_summary: str) -> List[str
     
     # Check for appropriate paper structure
     structure_issues = _check_paper_structure(paper_content)
-    if structure_issues:
+    if structure_issues and template.enforce_strict_sections:
         issues.extend(structure_issues)
-    
-    # Check for essential sections
-    if not re.search(r'\\begin\{abstract\}', paper_content):
-        issues.append("Missing abstract")
-    if not re.search(r'\\section\*?\{.*[Ii]ntroduction.*\}', paper_content):
-        issues.append("Missing Introduction section")
-    if not re.search(r'\\section\*?\{.*[Rr]elated.*[Ww]ork.*\}', paper_content):
-        issues.append("Missing Related Work section")
-    if not re.search(r'\\section\*?\{.*[Mm]ethodology.*\}', paper_content):
-        issues.append("Missing Methodology section")
-    if not re.search(r'\\section\*?\{.*[Ee]xperiments.*\}', paper_content):
-        issues.append("Missing Experiments section")
-    if not re.search(r'\\section\*?\{.*[Rr]esults.*\}', paper_content):
-        issues.append("Missing Results section")
-    if not re.search(r'\\section\*?\{.*[Dd]iscussion.*\}', paper_content):
-        issues.append("Missing Discussion section")
-    if not re.search(r'\\section\*?\{.*[Cc]onclusion.*\}', paper_content):
-        issues.append("Missing Conclusion section")
-    
-    # Check for reasonable number of references
-    bib_entries = len(re.findall(r'\\bibitem\{|@\w+\{', paper_content))
-    if bib_entries < 10:
-        issues.append(f"Only {bib_entries} bibliography entries (recommend 15+)")
+    elif structure_issues and not template.enforce_strict_sections:
+        info_notes.append(
+            f"INFO: Section structure checks relaxed for {template.doc_type.value} template"
+        )
+
+    if template.enforce_strict_sections:
+        if not re.search(r'\\begin\{abstract\}', paper_content):
+            issues.append("Missing abstract")
+        if not re.search(r'\\section\*?\{.*[Ii]ntroduction.*\}', paper_content):
+            issues.append("Missing Introduction section")
+        if not re.search(r'\\section\*?\{.*[Rr]elated.*[Ww]ork.*\}', paper_content):
+            issues.append("Missing Related Work section")
+        if not re.search(r'\\section\*?\{.*[Mm]ethodology.*\}', paper_content):
+            issues.append("Missing Methodology section")
+        if template.requires_simulation and not re.search(r'\\section\*?\{.*[Ee]xperiments.*\}', paper_content):
+            issues.append("Missing Experiments section")
+        if template.requires_simulation and not re.search(r'\\section\*?\{.*[Rr]esults.*\}', paper_content):
+            issues.append("Missing Results section")
+        if not re.search(r'\\section\*?\{.*[Dd]iscussion.*\}', paper_content):
+            issues.append("Missing Discussion section")
+        if not re.search(r'\\section\*?\{.*[Cc]onclusion.*\}', paper_content):
+            issues.append("Missing Conclusion section")
+    else:
+        info_notes.append(
+            f"INFO: Standard article section requirements skipped for {template.doc_type.value} template"
+        )
+
+    # Check for reasonable number of references (soft recommendation)
+    bib_entries_total = len(re.findall(r'\\bibitem\{|@\w+\{', paper_content))
+    if template.min_references and bib_entries_total < max(template.min_references, 10):
+        issues.append(
+            f"Only {bib_entries_total} bibliography entries (template recommends at least {template.min_references})"
+        )
     
     # Add figure/table validation
-    figure_table_issues = _validate_figures_tables(paper_content)
+    figure_table_issues = _validate_figures_tables(paper_content, template)
     issues.extend(figure_table_issues)
-    
-    return issues
+
+    return issues + info_notes
 
 def _check_paper_structure(paper_content: str) -> List[str]:
     """Check if paper structure aligns with paper type and field conventions."""
@@ -4510,85 +4664,110 @@ def _validate_figure_generation(paper_content: str, sim_path: Path, project_dir:
     
     return issues
 
-def _validate_figures_tables(paper_content: str) -> List[str]:
+def _validate_figures_tables(
+    paper_content: str,
+    template: Optional[DocumentTemplate] = None,
+) -> List[str]:
     """Validate figure and table formatting to prevent overflow and ensure self-containment."""
     issues = []
-    
+
+    requires_figures = True
+    requires_tables = True
+    if template is not None:
+        requires_figures = template.requires_figures
+        requires_tables = template.requires_tables
+
+    if not requires_figures and not requires_tables:
+        issues.append(
+            f"INFO: Figure/table formatting checks skipped for {template.doc_type.value if template else 'document'} template"
+        )
+        return issues
+
     # Check for external image dependencies
-    external_images = re.findall(r'\\includegraphics\[[^\]]*\]\{([^}]+)\}', paper_content)
-    external_files = [img for img in external_images if '.' in img and not img.endswith(('.tex', '.tikz'))]
-    if external_files:
-        issues.append(f"Found {len(external_files)} external image references - convert to TikZ/PGFPlots for self-containment")
-    
-    # Check for proper figure width constraints
-    bad_figures = re.findall(r'\\includegraphics(?!\[[^\]]*width\s*=\s*\\linewidth)', paper_content)
-    if bad_figures:
-        issues.append(f"Found {len(bad_figures)} figures without width=\\linewidth constraint")
-    
-    # Check for oversized figures (width > \linewidth)
-    oversized_figures = re.findall(r'\\includegraphics\[[^\]]*width\s*=\s*[^\\][^\]]*\]', paper_content)
-    if oversized_figures:
-        issues.append("Found figures with custom width that may exceed page margins")
-    
+    if requires_figures:
+        external_images = re.findall(r'\\includegraphics\[[^\]]*\]\{([^}]+)\}', paper_content)
+        external_files = [img for img in external_images if '.' in img and not img.endswith(('.tex', '.tikz'))]
+        if external_files:
+            issues.append(
+                f"Found {len(external_files)} external image references - convert to TikZ/PGFPlots for self-containment"
+            )
+
+        # Check for proper figure width constraints
+        bad_figures = re.findall(r'\\includegraphics(?!\[[^\]]*width\s*=\s*\\linewidth)', paper_content)
+        if bad_figures:
+            issues.append(f"Found {len(bad_figures)} figures without width=\\linewidth constraint")
+
+        # Check for oversized figures (width > \linewidth)
+        oversized_figures = re.findall(r'\\includegraphics\[[^\]]*width\s*=\s*[^\\][^\]]*\]', paper_content)
+        if oversized_figures:
+            issues.append("Found figures with custom width that may exceed page margins")
+
     # Check for table captions
-    table_count = len(re.findall(r'\\begin\{table\}', paper_content))
-    caption_count = len(re.findall(r'\\caption\{', paper_content))
-    if table_count > caption_count:
+    table_count = len(re.findall(r'\\begin\{table\}', paper_content)) if requires_tables else 0
+    caption_count = len(re.findall(r'\\caption\{', paper_content)) if requires_tables else 0
+    if requires_tables and table_count > caption_count:
         issues.append(f"Some tables missing captions ({table_count} tables, {caption_count} captions)")
-    
+
     # Check for tables without adjustbox wrapping
-    unwrapped_tables = []
-    table_blocks = re.finditer(r'\\begin\{table\}(.*?)\\end\{table\}', paper_content, re.DOTALL)
-    for match in table_blocks:
-        table_content = match.group(1)
-        if '\\begin{tabular}' in table_content and 'adjustbox' not in table_content and 'resizebox' not in table_content:
-            unwrapped_tables.append(match.group(0)[:50] + "...")
-    
-    if unwrapped_tables:
-        issues.append(f"Found {len(unwrapped_tables)} tables without adjustbox width constraint")
-    
+    if requires_tables:
+        unwrapped_tables = []
+        table_blocks = re.finditer(r'\\begin\{table\}(.*?)\\end\{table\}', paper_content, re.DOTALL)
+        for match in table_blocks:
+            table_content = match.group(1)
+            if '\\begin{tabular}' in table_content and 'adjustbox' not in table_content and 'resizebox' not in table_content:
+                unwrapped_tables.append(match.group(0)[:50] + "...")
+
+        if unwrapped_tables:
+            issues.append(f"Found {len(unwrapped_tables)} tables without adjustbox width constraint")
+
     # Check for tikzpicture without size constraints
-    tikz_pictures = re.findall(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', paper_content, re.DOTALL)
-    oversized_tikz = []
-    for tikz in tikz_pictures:
-        if 'adjustbox' not in tikz and 'width=' not in tikz and 'scale=' not in tikz:
-            oversized_tikz.append(tikz[:50] + "...")
-    
-    if oversized_tikz:
-        issues.append(f"Found {len(oversized_tikz)} tikzpicture diagrams without size constraints")
-    
+    if requires_figures:
+        tikz_pictures = re.findall(r'\\begin\{tikzpicture\}.*?\\end\{tikzpicture\}', paper_content, re.DOTALL)
+        oversized_tikz = []
+        for tikz in tikz_pictures:
+            if 'adjustbox' not in tikz and 'width=' not in tikz and 'scale=' not in tikz:
+                oversized_tikz.append(tikz[:50] + "...")
+
+        if oversized_tikz:
+            issues.append(f"Found {len(oversized_tikz)} tikzpicture diagrams without size constraints")
+
     # Check for placeholder or fake data in tables
-    table_data = re.findall(r'\\begin\{tabular\}.*?\\end\{tabular\}', paper_content, re.DOTALL)
-    for table in table_data:
-        if any(placeholder in table.lower() for placeholder in ['xxx', 'placeholder', 'example', 'tbd', 'todo', 'n/a']):
-            issues.append("Tables contain placeholder data - populate with real simulation results")
-            break
-    
+    if requires_tables:
+        table_data = re.findall(r'\\begin\{tabular\}.*?\\end\{tabular\}', paper_content, re.DOTALL)
+        for table in table_data:
+            if any(placeholder in table.lower() for placeholder in ['xxx', 'placeholder', 'example', 'tbd', 'todo', 'n/a']):
+                issues.append("Tables contain placeholder data - populate with real simulation results")
+                break
+
     # CHECK FOR POOR TABLE/FIGURE POSITIONING
-    # Find tables and figures with problematic positioning specifiers
-    bad_table_positioning = re.findall(r'\\begin\{table\}\[([^\]]*[!]?[t][^\]]*)\]', paper_content)
-    bad_figure_positioning = re.findall(r'\\begin\{figure\}\[([^\]]*[!]?[t][^\]]*)\]', paper_content)
-    
+    bad_table_positioning = re.findall(r'\\begin\{table\}\[([^\]]*[!]?[t][^\]]*)\]', paper_content) if requires_tables else []
+    bad_figure_positioning = re.findall(r'\\begin\{figure\}\[([^\]]*[!]?[t][^\]]*)\]', paper_content) if requires_figures else []
+
     problematic_positions = []
     if bad_table_positioning:
         for pos in bad_table_positioning:
             if 't' in pos and ('h' not in pos or '!' in pos):
                 problematic_positions.append(f"table[{pos}]")
-    
+
     if bad_figure_positioning:
         for pos in bad_figure_positioning:
             if 't' in pos and ('h' not in pos or '!' in pos):
                 problematic_positions.append(f"figure[{pos}]")
-    
+
     if problematic_positions:
-        issues.append(f"Found poor positioning specifiers forcing floats to page tops: {', '.join(problematic_positions[:3])}{'...' if len(problematic_positions) > 3 else ''} - use [h], [ht], or [H] for contextual placement")
-    
+        issues.append(
+            f"Found poor positioning specifiers forcing floats to page tops: {', '.join(problematic_positions[:3])}{'...' if len(problematic_positions) > 3 else ''} - use [h], [ht], or [H] for contextual placement"
+        )
+
     # Check for tables/figures without any positioning specifier (defaults to [tbp])
-    unspecified_tables = len(re.findall(r'\\begin\{table\}(?!\[)', paper_content))
-    unspecified_figures = len(re.findall(r'\\begin\{figure\}(?!\[)', paper_content))
-    
-    if unspecified_tables > 0 or unspecified_figures > 0:
-        issues.append(f"Found {unspecified_tables + unspecified_figures} floats without explicit positioning specifiers - specify [h], [ht], or [H] for better contextual placement")
+    if requires_tables or requires_figures:
+        unspecified_tables = len(re.findall(r'\\begin\{table\}(?!\[)', paper_content)) if requires_tables else 0
+        unspecified_figures = len(re.findall(r'\\begin\{figure\}(?!\[)', paper_content)) if requires_figures else 0
+
+        if unspecified_tables > 0 or unspecified_figures > 0:
+            issues.append(
+                f"Found {unspecified_tables + unspecified_figures} floats without explicit positioning specifiers - specify [h], [ht], or [H] for better contextual placement"
+            )
 
     return issues
 
