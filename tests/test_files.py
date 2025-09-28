@@ -23,7 +23,9 @@ def test_ensure_single_tex_file_creates_defaults():
         tex_contents = paper_path.read_text(encoding="utf-8")
         py_contents = sim_path.read_text(encoding="utf-8")
         assert "\\documentclass" in tex_contents
-        assert "Simulation code" in py_contents
+        assert "\\section{Introduction}" in tex_contents
+        assert "run_experiments" in py_contents
+        assert "Experiment scaffold generated" in py_contents
 
 
 def test_ensure_single_tex_file_renames_existing_files():
