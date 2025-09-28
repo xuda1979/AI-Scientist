@@ -9,6 +9,8 @@ from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 import logging
 
+from document_types import DocumentTemplate, DocumentType, get_document_template
+
 # Import review-driven enhancements
 try:
     from prompts.review_driven_enhancements import detect_review_issues
@@ -33,6 +35,9 @@ class PaperQualityValidator:
     def __init__(self, config: Optional[Dict] = None):
         """Initialize validator with configuration."""
         self.config = config or self._default_config()
+        self._active_template: Optional[DocumentTemplate] = None
+        self._active_doc_type: Optional[DocumentType] = None
+        self._active_field: str = ""
         
     def _default_config(self) -> Dict:
         """Default validation configuration."""
@@ -82,59 +87,97 @@ class PaperQualityValidator:
         """
         issues = []
         quality_scores = {}
-        
-        # Statistical rigor validation
-        stat_issues, stat_score = self._validate_statistical_rigor(paper_content, simulation_output)
-        issues.extend(stat_issues)
-        quality_scores['statistical_rigor'] = stat_score
-        
-        # Experimental design validation  
-        exp_issues, exp_score = self._validate_experimental_design(paper_content, simulation_output)
-        issues.extend(exp_issues)
-        quality_scores['experimental_design'] = exp_score
-        
-        # Methodology clarity validation
-        method_issues, method_score = self._validate_methodology_clarity(paper_content)
-        issues.extend(method_issues)
-        quality_scores['methodology_clarity'] = method_score
-        
-        # Literature review validation
-        lit_issues, lit_score = self._validate_literature_review(paper_content)
-        issues.extend(lit_issues)
-        quality_scores['literature_review'] = lit_score
-        
-        # Results presentation validation
-        results_issues, results_score = self._validate_results_presentation(paper_content)
-        issues.extend(results_issues)
-        quality_scores['results_presentation'] = results_score
-        
-        # Domain-specific validation (poker AI if detected)
-        if self._is_poker_related(paper_content):
-            poker_issues, poker_score = self._validate_poker_specific(paper_content, simulation_output)
-            issues.extend(poker_issues)
-            quality_scores['poker_specific'] = poker_score
-        
-        # LaTeX and formatting validation
-        format_issues, format_score = self._validate_formatting(paper_content)
-        issues.extend(format_issues)
-        quality_scores['formatting'] = format_score
-        
-        # Review-driven issue detection (based on actual reviewer feedback)
-        if REVIEW_ENHANCEMENTS_AVAILABLE:
-            review_issues = detect_review_issues(paper_content)
-            issues.extend(review_issues)
-            # Calculate review quality score based on critical issues
-            critical_count = sum(1 for issue in review_issues if "CRITICAL" in issue)
-            warning_count = sum(1 for issue in review_issues if "WARNING" in issue)
-            review_score = max(0.0, 1.0 - (critical_count * 0.3) - (warning_count * 0.1))
-            quality_scores['review_readiness'] = review_score
-        
-        # Overall quality score
-        quality_scores['overall'] = sum(quality_scores.values()) / len(quality_scores)
-        
-        return issues, quality_scores
+
+        doc_type: Optional[DocumentType] = None
+        field = ""
+        if metadata:
+            doc_type_value = metadata.get("doc_type") or metadata.get("document_type")
+            field = metadata.get("field", "")
+            if isinstance(doc_type_value, DocumentType):
+                doc_type = doc_type_value
+            elif isinstance(doc_type_value, str):
+                normalized = doc_type_value.lower()
+                for candidate in DocumentType:
+                    if normalized in (candidate.value, candidate.name.lower()):
+                        doc_type = candidate
+                        break
+
+        template = get_document_template(doc_type) if doc_type else None
+
+        previous_template = self._active_template
+        previous_doc_type = self._active_doc_type
+        previous_field = self._active_field
+
+        self._active_template = template
+        self._active_doc_type = doc_type
+        self._active_field = field
+
+        try:
+            # Statistical rigor validation
+            stat_issues, stat_score = self._validate_statistical_rigor(paper_content, simulation_output)
+            issues.extend(stat_issues)
+            quality_scores['statistical_rigor'] = stat_score
+
+            # Experimental design validation
+            exp_issues, exp_score = self._validate_experimental_design(paper_content, simulation_output)
+            issues.extend(exp_issues)
+            quality_scores['experimental_design'] = exp_score
+
+            # Methodology clarity validation
+            method_issues, method_score = self._validate_methodology_clarity(paper_content)
+            issues.extend(method_issues)
+            quality_scores['methodology_clarity'] = method_score
+
+            # Literature review validation
+            lit_issues, lit_score = self._validate_literature_review(paper_content)
+            issues.extend(lit_issues)
+            quality_scores['literature_review'] = lit_score
+
+            # Results presentation validation
+            results_issues, results_score = self._validate_results_presentation(paper_content)
+            issues.extend(results_issues)
+            quality_scores['results_presentation'] = results_score
+
+            # Domain-specific validation (poker AI if detected)
+            if self._is_poker_related(paper_content):
+                poker_issues, poker_score = self._validate_poker_specific(paper_content, simulation_output)
+                issues.extend(poker_issues)
+                quality_scores['poker_specific'] = poker_score
+
+            # LaTeX and formatting validation
+            format_issues, format_score = self._validate_formatting(paper_content)
+            issues.extend(format_issues)
+            quality_scores['formatting'] = format_score
+
+            # Review-driven issue detection (based on actual reviewer feedback)
+            if REVIEW_ENHANCEMENTS_AVAILABLE:
+                review_issues = detect_review_issues(
+                    paper_content,
+                    doc_type=self._active_doc_type,
+                    field=self._active_field,
+                )
+                issues.extend(review_issues)
+                # Calculate review quality score based on critical issues
+                critical_count = sum(1 for issue in review_issues if "CRITICAL" in issue)
+                warning_count = sum(1 for issue in review_issues if "WARNING" in issue)
+                review_score = max(0.0, 1.0 - (critical_count * 0.3) - (warning_count * 0.1))
+                quality_scores['review_readiness'] = review_score
+
+            # Overall quality score
+            quality_scores['overall'] = sum(quality_scores.values()) / len(quality_scores)
+
+            return issues, quality_scores
+        finally:
+            self._active_template = previous_template
+            self._active_doc_type = previous_doc_type
+            self._active_field = previous_field
     
-    def get_fair_quality_assessment(self, paper_content: str, simulation_output: str = "") -> Tuple[float, Dict, List[str], str]:
+    def get_fair_quality_assessment(
+        self,
+        paper_content: str,
+        simulation_output: str = "",
+        metadata: Optional[Dict] = None,
+    ) -> Tuple[float, Dict, List[str], str]:
         """
         Get comprehensive quality assessment using the fair scoring system.
         
@@ -149,7 +192,7 @@ class PaperQualityValidator:
         
         # Use fair scoring system
         fair_scorer = FairPaperScorer()
-        metrics, issues = fair_scorer.score_paper(paper_content, simulation_output)
+        metrics, issues = fair_scorer.score_paper(paper_content, simulation_output, metadata=metadata)
         
         # Generate detailed report
         report = fair_scorer.generate_detailed_report(metrics, issues)
@@ -163,10 +206,14 @@ class PaperQualityValidator:
         """Validate statistical rigor and significance testing."""
         issues = []
         score = 1.0
-        
+
+        template = self._active_template
+        if template and not template.requires_simulation:
+            return self._validate_theoretical_rigor(content)
+
         # First, determine if this paper involves numerical experiments
         experimental_paper = self._is_experimental_paper(content, simulation)
-        
+
         if not experimental_paper:
             # For theoretical/survey papers, different validation criteria
             return self._validate_theoretical_rigor(content)
@@ -228,9 +275,17 @@ class PaperQualityValidator:
             'survey', 'review', 'analysis', 'framework', 'formalism',
             'position paper', 'perspective', 'opinion', 'discussion'
         ]
-        
+
+        template = self._active_template
+        if template:
+            if not template.requires_simulation:
+                return False
+            # Bias towards experimental if template explicitly requires it
+            if template.requires_simulation:
+                experimental_keywords.extend(['simulation', 'benchmark', 'empirical'])
+
         content_lower = content.lower()
-        
+
         # Count experimental vs theoretical indicators
         exp_count = sum(1 for keyword in experimental_keywords if keyword in content_lower)
         theo_count = sum(1 for keyword in theoretical_keywords if keyword in content_lower)
@@ -347,12 +402,16 @@ class PaperQualityValidator:
         """Validate methodology documentation clarity."""
         issues = []
         score = 1.0
-        
+
+        template = self._active_template
+        requires_algorithms = True if template is None else template.requires_algorithms
+
         # Check for algorithm pseudocode
-        if '\\begin{algorithm}' not in content and '\\begin{algorithmic}' not in content:
-            issues.append("Missing algorithmic pseudocode for novel methods")
-            score -= 0.2
-        
+        if requires_algorithms:
+            if '\\begin{algorithm}' not in content and '\\begin{algorithmic}' not in content:
+                issues.append("Missing algorithmic pseudocode for novel methods")
+                score -= 0.2
+
         # Check for detailed architecture description
         arch_patterns = [r'architecture', r'layer.*dimension', r'hidden.*unit', r'network.*structure']
         if not any(re.search(pattern, content, re.IGNORECASE) for pattern in arch_patterns):
@@ -383,26 +442,41 @@ class PaperQualityValidator:
         """Validate literature review comprehensiveness."""
         issues = []
         score = 1.0
-        
+
+        template = self._active_template
+        min_required_refs = self.config['literature_review']['min_total_refs']
+        if template:
+            if not template.requires_embedded_references:
+                issues.append(
+                    f"INFO: Extensive bibliography requirements relaxed for {template.doc_type.value} template"
+                )
+                return issues, score
+            min_required_refs = max(template.min_references, min_required_refs)
+
         # Count references
         ref_matches = re.findall(r'\\cite\{[^}]+\}', content)
         ref_count = len(set(ref_matches))  # Unique citations
-        
-        if ref_count < self.config['literature_review']['min_total_refs']:
-            issues.append(f"Insufficient references: {ref_count} < {self.config['literature_review']['min_total_refs']}")
+
+        if ref_count < min_required_refs:
+            issues.append(f"Insufficient references: {ref_count} < {min_required_refs}")
             score -= 0.2
-        
+
         # Check for recent work citation
         recent_patterns = [r'20(1[9-9]|2[0-4])', r'recent', r'state.of.the.art']
         if not any(re.search(pattern, content, re.IGNORECASE) for pattern in recent_patterns):
             issues.append("Missing recent work from the last 2-3 years")
             score -= 0.15
-        
+
         # Check for related work integration
-        if '\\section{Related Work}' not in content and '\\section{Literature Review}' not in content:
-            issues.append("Missing dedicated related work or literature review section")
-            score -= 0.1
-        
+        if template is None or template.enforce_strict_sections:
+            if '\\section{Related Work}' not in content and '\\section{Literature Review}' not in content:
+                issues.append("Missing dedicated related work or literature review section")
+                score -= 0.1
+        else:
+            issues.append(
+                f"INFO: Dedicated related work section requirement skipped for {template.doc_type.value} template"
+            )
+
         # Check for limitation discussion of existing work
         limitation_patterns = [r'limitation', r'shortcoming', r'drawback', r'problem.*existing']
         if not any(re.search(pattern, content, re.IGNORECASE) for pattern in limitation_patterns):
@@ -415,19 +489,36 @@ class PaperQualityValidator:
         """Validate results presentation quality."""
         issues = []
         score = 1.0
-        
+
+        template = self._active_template
+        requires_figures = True
+        requires_tables = True
+        if template:
+            requires_figures = template.requires_figures
+            requires_tables = template.requires_tables
+
+        if not requires_figures and not requires_tables:
+            issues.append(
+                f"INFO: Visual results requirements relaxed for {template.doc_type.value} template"
+                if template
+                else "INFO: Visual results requirements relaxed"
+            )
+            return issues, score
+
         # Check for figures
-        figure_count = len(re.findall(r'\\begin{figure}', content))
-        if figure_count < 2:
-            issues.append("Insufficient figures for results presentation - need at least 2-3 figures")
-            score -= 0.15
-        
+        if requires_figures:
+            figure_count = len(re.findall(r'\\begin{figure}', content))
+            if figure_count < 2:
+                issues.append("Insufficient figures for results presentation - need at least 2-3 figures")
+                score -= 0.15
+
         # Check for tables
-        table_count = len(re.findall(r'\\begin{table}', content))
-        if table_count < 1:
-            issues.append("Missing tables for numerical results presentation")
-            score -= 0.1
-        
+        if requires_tables:
+            table_count = len(re.findall(r'\\begin{table}', content))
+            if table_count < 1:
+                issues.append("Missing tables for numerical results presentation")
+                score -= 0.1
+
         # Check for error bars or uncertainty quantification
         error_patterns = [r'error.*bar', r'standard.*deviation', r'\\pm', r'uncertainty', r'variance']
         if not any(re.search(pattern, content, re.IGNORECASE) for pattern in error_patterns):
@@ -497,29 +588,32 @@ class PaperQualityValidator:
         """Validate LaTeX formatting and structure."""
         issues = []
         score = 1.0
-        
+
+        template = self._active_template
+        enforce_sections = True if template is None else template.enforce_strict_sections
+
         # Check for proper document structure
         if '\\documentclass' not in content:
             issues.append("Missing proper LaTeX document class declaration")
             score -= 0.1
-        
+
         # Check for abstract
-        if '\\begin{abstract}' not in content:
+        if enforce_sections and '\\begin{abstract}' not in content:
             issues.append("Missing abstract section")
             score -= 0.1
-        
+
         # Check for introduction
-        if '\\section{Introduction}' not in content and '\\section{Introduction}' not in content:
+        if enforce_sections and '\\section{Introduction}' not in content and '\\section{Introduction}' not in content:
             issues.append("Missing introduction section")
             score -= 0.1
-        
+
         # Check for conclusion
-        if '\\section{Conclusion}' not in content and '\\section{Conclusions}' not in content:
+        if enforce_sections and '\\section{Conclusion}' not in content and '\\section{Conclusions}' not in content:
             issues.append("Missing conclusion section")
             score -= 0.05
-        
+
         # Check for references section
-        if '\\begin{thebibliography}' not in content and '\\bibliography' not in content:
+        if enforce_sections and '\\begin{thebibliography}' not in content and '\\bibliography' not in content:
             issues.append("Missing references section")
             score -= 0.15
         
