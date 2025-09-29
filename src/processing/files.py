@@ -171,8 +171,11 @@ class FileManager:
             sim_path.write_text(DEFAULT_SIMULATION_TEMPLATE, encoding="utf-8")
         elif len(py_files) == 1:
             sim_path = py_files[0]
-            # Rename to simulation.py if needed
-            if sim_path.name != "simulation.py":
+            # Rename to simulation.py if needed (unless preserving original filename)
+            if (
+                not preserve_original_filename
+                and sim_path.name != "simulation.py"
+            ):
                 new_path = project_dir / "simulation.py"
                 sim_path.rename(new_path)
                 sim_path = new_path

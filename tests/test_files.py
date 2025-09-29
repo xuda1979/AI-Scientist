@@ -46,6 +46,25 @@ def test_ensure_single_tex_file_renames_existing_files():
         assert not custom_py.exists()
 
 
+def test_ensure_single_tex_file_preserves_filenames_when_requested():
+    """Existing files keep their original names when preservation is requested."""
+    manager = FileManager()
+    with TemporaryDirectory() as tmpdir:
+        project_dir = Path(tmpdir)
+        custom_tex = project_dir / "draft.tex"
+        custom_py = project_dir / "experiment_runner.py"
+        custom_tex.write_text("\\documentclass{article}", encoding="utf-8")
+        custom_py.write_text("print('hi')", encoding="utf-8")
+
+        paper_path, sim_path = manager.ensure_single_tex_file(
+            project_dir,
+            preserve_original_filename=True,
+        )
+
+        assert paper_path == custom_tex
+        assert sim_path == custom_py
+
+
 @pytest.mark.parametrize("ext", [".aux", ".log", ".out", ".toc", ".bbl", ".blg", ".fls", ".fdb_latexmk"])
 def test_cleanup_temp_files_removes_auxiliary_files(ext):
     """Temporary LaTeX artifacts should be cleaned up."""
