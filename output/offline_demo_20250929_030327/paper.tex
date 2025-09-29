@@ -1,0 +1,78 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{graphicx}
+\title{Offline Demo Study on Self-stabilizing alignment curricula}
+\author{AI-Scientist Autonomous Workflow}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present an offline demonstration of the AI-Scientist workflow configured for the field of AI Safety.
+The system is tasked with the research question: ``How can curriculum design improve self-alignment in autonomous agents?.'' Without relying on external APIs,
+the workflow generates a synthetic experiment showing that the proposed alignment-inspired intervention
+improves simulated task accuracy by 14.0\% over a baseline policy.
+\end{abstract}
+
+\section{Introduction}
+Modern research pipelines benefit from automation that can rapidly explore candidate ideas, evaluate
+them through executable simulations, and record fully reproducible artifacts. In this demonstration we
+showcase how AI-Scientist can operate in a constrained offline setting while still providing a coherent
+narrative around self-stabilizing alignment curricula.
+
+\section{Methodology}
+The demo pipeline instantiates a toy learning scenario in which an autonomous agent refines its alignment
+heuristics using a curriculum grounded in ai safety. The simulation tracks how the intervention alters
+decision quality relative to a static baseline controller. Although lightweight, the example exercises the
+same orchestration layers responsible for simulation extraction, execution, and manuscript assembly in the
+full workflow.
+
+\section{Results}
+Table~\ref{tab:offline-results} summarizes the synthetic learning curves. The demo agent rapidly closes
+the gap to a target accuracy of 0.9, ultimately outperforming the baseline by 14.0 percentage
+points. The trajectories are derived from the generated Python simulation and saved alongside this manuscript
+for auditability.
+
+\begin{table}[t]
+  \centering
+  \caption{Offline simulation accuracy trends for the self-stabilizing alignment curricula study.}
+  \label{tab:offline-results}
+  \begin{adjustbox}{width=\linewidth}
+  \begin{tabular}{ccc}
+  \toprule
+  Step & Baseline Accuracy & Demo Accuracy \
+  \midrule
+  0 & 0.620 & 0.600 \
+  1 & 0.638 & 0.625 \
+  2 & 0.656 & 0.654 \
+  3 & 0.674 & 0.685 \
+  4 & 0.692 & 0.720 \
+  5 & 0.710 & 0.757 \
+  6 & 0.728 & 0.798 \
+  7 & 0.746 & 0.842 \
+  8 & 0.764 & 0.888 \
+  9 & 0.782 & 0.938 \
+  10 & 0.800 & 0.940 \
+  \bottomrule
+  \end{tabular}
+  \end{adjustbox}
+\end{table}
+
+\section{Discussion}
+Even without high-fidelity models, the workflow maintains good practices such as embedding executable code,
+recording intermediate analyses, and structuring LaTeX sections according to common publication norms. Users
+can replace the offline controller with real large language models by providing API credentials, unlocking
+ideation, reviewer feedback loops, and figure validation modules described in the project documentation.
+
+\section{Conclusion}
+This offline run verifies that AI-Scientist can stand up a complete research artifact in environments without
+external network access. The resulting package—including this paper, simulation code, and recorded metrics—can
+serve as a starting point for customized experiments on self-stabilizing alignment curricula within the broader context of
+ai safety.
+
+\bibliographystyle{unsrt}
+\bibliography{refs}
+\end{document}
