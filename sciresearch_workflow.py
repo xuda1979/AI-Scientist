@@ -146,6 +146,55 @@ OSS_CLIENT: Optional[OSS120BClient] = None
 # Active workflow configuration (populated when available)
 CURRENT_WORKFLOW_CONFIG: Optional[WorkflowConfig] = None
 
+
+def _record_iteration_feedback(
+    project_dir: Path,
+    iteration: int,
+    review_text: str,
+    decision_text: str,
+    quality_score: float,
+    latex_success: bool,
+    latex_errors: str,
+    ref_report: str,
+) -> None:
+    """Persist iteration feedback for terminal logs and GUI dashboards."""
+
+    if project_dir is None:
+        return
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    entry = {
+        "iteration": iteration,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "review": review_text,
+        "decision": decision_text.strip(),
+        "quality_score": quality_score,
+        "latex_success": latex_success,
+        "latex_errors": latex_errors[-2000:] if latex_errors else "",
+        "reference_report": ref_report or "",
+    }
+
+    history_path = project_dir / "review_history.json"
+    history: List[Dict[str, Any]] = []
+
+    if history_path.exists():
+        try:
+            history = json.loads(history_path.read_text(encoding="utf-8"))
+            if not isinstance(history, list):
+                history = []
+        except json.JSONDecodeError:
+            history = []
+
+    history = [item for item in history if item.get("iteration") != iteration]
+    history.append(entry)
+    history.sort(key=lambda item: item.get("iteration", 0))
+    history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+
+    latest_path = project_dir / "latest_review.json"
+    latest_path.write_text(json.dumps(entry, indent=2), encoding="utf-8")
+
+
 class APIError(Exception):
     """Custom exception for API-related errors"""
     pass
@@ -1400,6 +1449,23 @@ def review_paper(
         fallback_models=config.fallback_models,
     )
     (project_dir / f"review_{iteration}.txt").write_text(review, encoding="utf-8")
+
+    logger.info("Review feedback (iteration %s):\n%s", iteration, review)
+    logger.info("Editor decision (iteration %s): %s", iteration, decision.strip())
+    print("\n📝 Reviewer feedback (iteration {}):\n{}\n".format(iteration, review))
+    print("🗳️ Editor decision (iteration {}): {}\n".format(iteration, decision.strip()))
+
+    _record_iteration_feedback(
+        project_dir,
+        iteration,
+        review,
+        decision,
+        quality_score,
+        latex_success,
+        latex_errors,
+        ref_report,
+    )
+
     return review, decision, latex_success, latex_errors, quality_score, ref_report
 
 
