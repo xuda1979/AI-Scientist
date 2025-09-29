@@ -40,7 +40,9 @@ pip install -r requirements.txt
 ### Configure model access
 There are two common ways to provide credentials and settings:
 
-1. **Environment variables** – export keys before running the workflow (for example `export OPENAI_API_KEY=...`).
+1. **Environment variables** – export keys before running the workflow (for example `export OPENAI_API_KEY=...`). The CLI will
+   emit a warning and temporarily use the value if it detects the common typo `OPEANAI_API_KEY`, but you should still rename the
+   variable for future runs.
 2. **Configuration file** – copy `config_example.json` to `config.json`, fill in keys such as `default_model`, `oss120b_api_key`, or `google_api_key`, and pass it with `--config config.json`.
 
 Key fields you may want to update:
@@ -56,6 +58,21 @@ python sciresearch_workflow.py \
   --field "Cryptography" \
   --question "How can lattice methods improve post-quantum key exchange?"
 ```
+
+### Try the offline demo
+If you do not have API keys handy, you can still see the orchestration in action by invoking the new offline mode. It spins up a
+toy simulation, runs it locally, and assembles a reproducible paper bundle without calling external services.
+
+```bash
+python sciresearch_workflow.py \
+  --topic "Autonomous alignment curricula" \
+  --field "AI Safety" \
+  --question "How can curriculum learning improve alignment heuristics?" \
+  --offline-demo
+```
+
+The offline run produces a timestamped folder under `output/` containing `paper.tex`, `simulation.py`, the simulation outputs, and
+an ideation summary that documents the generated experiment.
 
 The command creates a timestamped folder inside `output/` containing:
 - `paper.tex` – the LaTeX manuscript

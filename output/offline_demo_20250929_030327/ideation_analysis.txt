@@ -1,0 +1,15 @@
+Offline ideation snapshot for Self-stabilizing alignment curricula
+====================================
+
+Field: AI Safety
+Research question: How can curriculum design improve self-alignment in autonomous agents?
+
+Key motivations:
+- Demonstrate the workflow's ability to produce reproducible artifacts without external APIs.
+- Provide a starting point for benchmarking alignment-inspired interventions in simulation.
+- Document how code generation, execution, and manuscript authoring interact inside AI-Scientist.
+
+Summary of simulation insights:
+- Baseline policy accuracy spans 0.62 to 0.80 across the horizon.
+- Demo policy accuracy reaches 0.94, yielding a 14.0% relative improvement.
+- All assets are stored under output/offline_demo_20250929_030327 for inspection.
