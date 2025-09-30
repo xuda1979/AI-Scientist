@@ -63,34 +63,69 @@ class AIChat:
             # Try to import and use OpenAI
             from openai import OpenAI
             import os
-            
-            # Initialize OpenAI client
-            api_key = os.getenv('OPENAI_API_KEY')
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable not set")
-            
-            client = OpenAI(api_key=api_key)
-            
-            # Make the API call
-            if model.startswith('gpt-5') or model.startswith('o1'):
-                # GPT-5 and o1 models use max_completion_tokens and only support default temperature
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_completion_tokens=4000,
-                    timeout=timeout or 3600
-                    # Note: temperature not specified for GPT-5 (uses default of 1.0)
+
+            # Determine which API to call and configure the client
+            requested_model = model
+            if model == "oss-120b":
+                requested_model = "openai/gpt-oss-120b:free"
+
+            openrouter_key = os.getenv("OPENROUTER_API_KEY")
+            use_openrouter = bool(openrouter_key and (
+                requested_model.startswith("openai/") or "oss" in requested_model
+            ))
+
+            if use_openrouter:
+                client = OpenAI(
+                    base_url="https://openrouter.ai/api/v1",
+                    api_key=openrouter_key,
                 )
-            else:
-                # GPT-4 and earlier models use max_tokens and support custom temperature
+
+                extra_headers = {}
+                referer = os.getenv("OPENROUTER_HTTP_REFERER")
+                if referer:
+                    extra_headers["HTTP-Referer"] = referer
+
+                site_title = os.getenv("OPENROUTER_X_TITLE")
+                if site_title:
+                    extra_headers["X-Title"] = site_title
+
                 response = client.chat.completions.create(
-                    model=model,
+                    model=requested_model,
                     messages=messages,
                     max_tokens=4000,
                     temperature=0.7,
-                    timeout=timeout or 3600
+                    timeout=timeout or 3600,
+                    extra_headers=extra_headers,
+                    extra_body={},
                 )
-            
+            else:
+                # Initialize OpenAI client
+                api_key = os.getenv('OPENAI_API_KEY')
+                if not api_key:
+                    raise ValueError("OPENAI_API_KEY environment variable not set")
+
+                client = OpenAI(api_key=api_key)
+
+                # Make the API call
+                if requested_model.startswith('gpt-5') or requested_model.startswith('o1'):
+                    # GPT-5 and o1 models use max_completion_tokens and only support default temperature
+                    response = client.chat.completions.create(
+                        model=requested_model,
+                        messages=messages,
+                        max_completion_tokens=4000,
+                        timeout=timeout or 3600
+                        # Note: temperature not specified for GPT-5 (uses default of 1.0)
+                    )
+                else:
+                    # GPT-4 and earlier models use max_tokens and support custom temperature
+                    response = client.chat.completions.create(
+                        model=requested_model,
+                        messages=messages,
+                        max_tokens=4000,
+                        temperature=0.7,
+                        timeout=timeout or 3600
+                    )
+
             return response.choices[0].message.content
             
         except ImportError:
