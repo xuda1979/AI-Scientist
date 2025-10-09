@@ -41,7 +41,6 @@ py-modules = [
     "fix_latex_overflow",
     "legacy_monolithic_workflow",
     "main",
-    "modify_ag_qec",
     "original_file",
     "run_pdflatex_capture",
     "sciresearch_workflow",

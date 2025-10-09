@@ -1,3 +1,24 @@
 @echo off
-cd /d "C:\Users\Lenovo\software\simple-sciresearch-workflow"
-C:\Users\Lenovo\miniconda3\python.exe sciresearch_workflow_refactored.py --modify-existing --output-dir output\ag-qec --model gpt-5 --max-iterations 1 --enable-pdf-review --check-references --validate-figures
+setlocal ENABLEEXTENSIONS
+
+rem Simple helper script to run the workflow on Windows without referencing a specific paper.
+rem Usage: run_workflow.bat "Topic" "Field" "Research question" [additional workflow args]
+
+if "%~3"=="" (
+    echo Usage: %~nx0 "Topic" "Field" "Research question" [additional workflow args]
+    exit /b 1
+)
+
+set "TOPIC=%~1"
+set "FIELD=%~2"
+set "QUESTION=%~3"
+
+shift
+shift
+shift
+
+pushd "%~dp0"
+python "%~dp0sciresearch_workflow.py" --topic "%TOPIC%" --field "%FIELD%" --question "%QUESTION%" %*
+popd
+
+endlocal
