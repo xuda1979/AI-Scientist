@@ -142,56 +142,63 @@ class AIChat:
             if "ideation" in content.lower():
                 return """## IDEATION ANALYSIS
 
-### Research Ideas for Neural Network Optimization Training Efficiency
+This placeholder response demonstrates the structure of an ideation and drafting reply
+when the language model API is unavailable. Replace the bracketed sections below with
+domain-specific insight once live model access is restored.
 
-1. **Adaptive Learning Rate Scheduling**: Implement dynamic learning rate adjustment based on loss landscape curvature
-2. **Gradient Compression Techniques**: Use sparsification and quantization to reduce communication overhead
-3. **Mixed Precision Training**: Leverage FP16 computation while maintaining FP32 master weights
-4. **Model Parallelism Strategies**: Distribute large models across multiple GPUs efficiently
-5. **Batch Size Optimization**: Find optimal batch sizes for memory and convergence trade-offs
+### Research Idea Options
+1. **Idea A**: [Summarize a potential direction and why it might matter.]
+2. **Idea B**: [Describe an alternative approach highlighting a distinct methodology.]
+3. **Idea C**: [Outline a complementary avenue or comparative baseline study.]
 
 ### SELECTED RESEARCH DIRECTION
-**Title**: Adaptive Learning Rate Scheduling for Improved Neural Network Training Efficiency
-**Rationale**: This approach addresses a fundamental bottleneck in training convergence speed while maintaining mathematical rigor.
+**Title**: [Placeholder title for the preferred idea]
+**Rationale**: [Brief justification describing novelty, impact, and feasibility.]
 
 ## COMPLETE LATEX PAPER
 ```latex
-\\documentclass{article}
-\\usepackage{amsmath}
-\\usepackage{amsthm}
-\\usepackage{amssymb}
+\documentclass{article}
+\usepackage{amsmath}
 
-\\begin{document}
-\\title{Adaptive Learning Rate Scheduling for Improved Neural Network Training Efficiency}
-\\author{AI Research}
-\\maketitle
+\begin{document}
+\title{Placeholder Research Manuscript}
+\author{Automated Workflow}
+\maketitle
 
-\\begin{abstract}
-This paper presents a novel adaptive learning rate scheduling algorithm that dynamically adjusts learning rates based on loss landscape curvature analysis. Our approach demonstrates significant improvements in training convergence speed while maintaining solution quality across multiple neural network architectures.
-\\end{abstract}
+\begin{abstract}
+This placeholder manuscript illustrates the expected paper structure produced by the
+workflow when model calls succeed. Replace this text with a concise summary of the
+actual study, including the problem statement, approach, and primary findings.
+\end{abstract}
 
-\\section{Introduction}
-Neural network training efficiency remains a critical bottleneck in deep learning applications. Traditional fixed learning rate schedules often lead to suboptimal convergence patterns, requiring extensive hyperparameter tuning.
+\section{Introduction}
+[Introduce the broad research problem, motivate its importance, and summarise key
+contributions without referencing any specific prior paper.]
 
-\\section{Methodology}
-We propose an adaptive learning rate scheduler that monitors second-order gradient information to estimate local curvature and adjust learning rates accordingly.
+\section{Methodology}
+[Outline the general methodology, experimental setup, or theoretical framework that the
+final paper should contain once generated.]
 
-\\begin{equation}
-\\alpha_t = \\alpha_0 \\cdot \\exp(-\\beta \\cdot \\text{curvature}_t)
-\\end{equation}
+\section{Results}
+[Describe the types of results, evaluations, or analyses that will support the claims in
+the completed manuscript.]
 
-\\section{Results}
-Experimental validation on standard benchmarks shows 20-30\\% reduction in training time with comparable final accuracy.
+\section{Conclusion}
+[Summarise anticipated takeaways and future work directions in a domain-agnostic manner.]
 
-\\section{Conclusion}
-The proposed adaptive learning rate scheduling provides a mathematically principled approach to improving neural network training efficiency.
-
-\\end{document}
+\end{document}
 ```"""
             else:
-                return "Comprehensive analysis and recommendations for the research paper improvement."
-        
-        return "Default AI response for research paper generation"
+                return (
+                    "Structured placeholder response for research paper refinement. "
+                    "Actual reviewer insights will appear once model access is restored."
+                )
+
+        return (
+            "Placeholder response generated without referencing a specific paper. "
+            "Connect a language model provider to receive full results."
+        )
+
     
     def get_stats(self) -> Dict[str, Any]:
         """Get usage statistics."""
