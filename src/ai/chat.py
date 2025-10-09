@@ -9,6 +9,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+RESPONSES_API_MODELS = {"gpt-5-pro"}
+
+
 class AIChat:
     """Centralized AI chat interface with fallback support."""
     
@@ -52,9 +55,9 @@ class AIChat:
             raise RuntimeError(f"All models failed for {prompt_type}. Last error: {e}")
     
     def _make_api_call(
-        self, 
-        messages: List[Dict[str, str]], 
-        model: str, 
+        self,
+        messages: List[Dict[str, str]],
+        model: str,
         timeout: Optional[int],
         pdf_path: Optional[Path]
     ) -> str:
@@ -107,7 +110,25 @@ class AIChat:
                 client = OpenAI(api_key=api_key)
 
                 # Make the API call
-                if requested_model.startswith('gpt-5') or requested_model.startswith('o1'):
+                normalized_model = requested_model.lower()
+
+                if normalized_model in RESPONSES_API_MODELS:
+                    responses_client = getattr(client, "responses", None)
+                    if responses_client is None:
+                        raise RuntimeError(
+                            "OpenAI client does not expose the Responses API. Please upgrade the 'openai' package."
+                        )
+
+                    responses_timeout = timeout or 3600
+                    responses_client = responses_client.with_options(timeout=responses_timeout)
+
+                    response = responses_client.create(
+                        model=requested_model,
+                        input=messages,
+                        max_output_tokens=4000,
+                    )
+                    return self._extract_responses_text(response)
+                elif requested_model.startswith('gpt-5') or requested_model.startswith('o1'):
                     # GPT-5 and o1 models use max_completion_tokens and only support default temperature
                     response = client.chat.completions.create(
                         model=requested_model,
@@ -127,14 +148,42 @@ class AIChat:
                     )
 
             return response.choices[0].message.content
-            
+
         except ImportError:
             logger.warning("OpenAI library not available, using placeholder response")
             return self._placeholder_response(messages)
         except Exception as e:
             logger.error(f"OpenAI API call failed: {e}")
             return self._placeholder_response(messages)
-    
+
+    @staticmethod
+    def _extract_responses_text(response: Any) -> str:
+        """Extract text output from OpenAI Responses API result."""
+        if hasattr(response, "output_text") and response.output_text:
+            return response.output_text
+
+        # Fallback: concatenate text segments if present
+        output_chunks: List[str] = []
+        for item in getattr(response, "output", []) or []:
+            item_type = getattr(item, "type", None)
+            if item_type in {"output_text", "text"}:
+                text_value = getattr(item, "text", None)
+                if text_value:
+                    output_chunks.append(text_value)
+            elif item_type == "message":
+                # Some SDK versions nest message content
+                for content in getattr(item, "content", []) or []:
+                    if getattr(content, "type", None) == "output_text":
+                        text_value = getattr(content, "text", None)
+                        if text_value:
+                            output_chunks.append(text_value)
+
+        if output_chunks:
+            return "".join(output_chunks)
+
+        # As a last resort, return the repr to aid debugging
+        return str(response)
+
     def _placeholder_response(self, messages: List[Dict[str, str]]) -> str:
         """Generate placeholder response when API is not available."""
         if isinstance(messages, list) and messages:

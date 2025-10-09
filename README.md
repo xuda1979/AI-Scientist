@@ -49,6 +49,27 @@ sciresearch-workflow "Neural Architecture Search" "Computer Science" \
   --output-dir out/nas_study --max-iterations 3
 ```
 
+### Using GPT-5 Pro
+
+GPT-5 Pro is now fully supported as a first-class model. Provide your standard `OPENAI_API_KEY` and either keep the default or
+select the model explicitly:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+sciresearch-workflow "Quantum Materials" "Physics" \
+  "Can layered heterostructures enable room-temperature superconductivity?" \
+  --model gpt-5-pro --max-iterations 2 --output-dir out/gpt5pro_demo
+```
+
+To make GPT-5 Pro the default for all runs, set an environment override or update your configuration file:
+
+```bash
+export SCI_MODEL=gpt-5-pro
+```
+
+Or edit `config_example.json` (copy it to `~/.config/ai-scientist/config.json`) so that `"default_model": "gpt-5-pro"` with a
+fallback chain such as `["gpt-5", "gpt-4o", "gpt-4"]`.
+
 Commonly used flags:
 
 | Flag | Description |

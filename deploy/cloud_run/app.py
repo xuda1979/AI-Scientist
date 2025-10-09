@@ -185,7 +185,7 @@ def _run_workflow_async(job_id: str, payload: WorkflowRequest) -> None:
             field=payload.field,
             question=payload.question,
             output_dir=run_output_dir,
-            model=payload.model or os.getenv("SCI_MODEL", "gpt-5"),
+            model=payload.model or os.getenv("SCI_MODEL", "gpt-5-pro"),
             max_iterations=
             payload.max_iterations if payload.max_iterations is not None else config.max_iterations,
             quality_threshold=

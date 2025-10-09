@@ -20,8 +20,8 @@ pip install .
 # Generate a new research paper
 sciresearch-workflow "Neural Networks" "AI" "How to improve training efficiency?" --output-dir out/neural_nets
 
-# Use GPT-5 with single iteration
-sciresearch-workflow "Quantum Computing" "Physics" "Quantum advantage?" --model gpt-5 --max-iterations 1 --output-dir out/quantum
+# Use GPT-5 Pro with single iteration
+sciresearch-workflow "Quantum Computing" "Physics" "Quantum advantage?" --model gpt-5-pro --max-iterations 1 --output-dir out/quantum
 
 # Modify existing paper
 sciresearch-workflow --modify-existing --output-dir out/existing_paper --max-iterations 2

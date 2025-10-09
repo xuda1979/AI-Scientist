@@ -9,6 +9,6 @@
   "max_quality_history_size": 25,
   "doi_rate_limit_delay": 0.05,
   "max_doi_cache_size": 2000,
-  "default_model": "gpt-5",
-  "fallback_models": ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]
+  "default_model": "gpt-5-pro",
+  "fallback_models": ["gpt-5", "gpt-4o", "gpt-4", "gpt-3.5-turbo"]
 }
