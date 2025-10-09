@@ -2,6 +2,14 @@
 
 All notable changes to the Enhanced SciResearch Workflow project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- Eliminated ag-qec specific scripts and Monte Carlo artifact files so the workflow remains focused on generating general-purpose papers.
+
+### Changed
+- Updated the Windows helper batch script to accept arbitrary topics, fields, and research questions instead of targeting a single project.
+
 ## [2.0.0] - 2025-09-03
 
 ### Added
