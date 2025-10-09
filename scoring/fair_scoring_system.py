@@ -16,6 +16,7 @@ import json
 
 from document_types import DocumentType, get_document_template
 from prompts.review_driven_enhancements import DomainReviewProfile, get_domain_review_profile
+from quality_enhancements.novelty_vetting import NoveltyVetter
 
 
 @dataclass
@@ -72,6 +73,7 @@ class FairPaperScorer:
     def __init__(self, config: Optional[Dict] = None):
         """Initialize scorer with configuration."""
         self.config = config or self._default_config()
+        self._novelty_vetter = NoveltyVetter()
         
     def _default_config(self) -> Dict:
         """Default configuration with realistic thresholds."""
@@ -172,7 +174,7 @@ class FairPaperScorer:
         metrics.technical_depth, tech_issues = self._score_technical_depth(paper_content)
         issues.extend(tech_issues)
         
-        metrics.novelty_significance, novelty_issues = self._score_novelty_significance(paper_content)
+        metrics.novelty_significance, novelty_issues = self._score_novelty_significance(paper_content, field)
         issues.extend(novelty_issues)
         
         metrics.reproducibility, repro_issues = self._score_reproducibility(paper_content)
@@ -572,43 +574,18 @@ class FairPaperScorer:
         
         return min(score, 1.0), issues
     
-    def _score_novelty_significance(self, content: str) -> Tuple[float, List[str]]:
-        """Score novelty and significance (often overestimated)."""
-        score = 0.2  # Start low - novelty is often overstated
-        issues = []
-        
-        # Check for novelty claims
-        novelty_claims = ["novel", "new", "first", "unprecedented", "breakthrough"]
-        claim_count = sum(1 for claim in novelty_claims 
-                         if claim in content.lower())
-        
-        if claim_count > 5:
-            issues.append("MINOR: Excessive novelty claims - may be overstated")
-            score = 0.3  # Cap score if too many claims
-        elif claim_count >= 2:
-            score += 0.2
-        elif claim_count >= 1:
-            score += 0.1
-        else:
-            issues.append("MINOR: No explicit novelty claims")
-            
-        # Check for contribution clarity
-        if "contribution" in content.lower():
-            score += 0.2
-        else:
-            issues.append("MAJOR: No clear contribution statement")
-            
-        # Check for significance indicators
-        significance_indicators = ["significant", "improvement", "outperform", "state-of-the-art"]
-        sig_count = sum(1 for indicator in significance_indicators 
-                       if indicator in content.lower())
-        
-        if sig_count >= 3:
-            score += 0.2
-        elif sig_count >= 1:
-            score += 0.1
-            
-        return min(score, 1.0), issues
+    def _score_novelty_significance(self, content: str, field: str) -> Tuple[float, List[str]]:
+        """Score novelty using retrieval-backed diagnostics."""
+
+        try:
+            assessment = self._novelty_vetter.assess_manuscript(content, field)
+        except Exception as exc:
+            return 0.3, [f"WARNING: Novelty analysis unavailable ({exc})"]
+
+        issues = self._novelty_vetter.revision_diagnostics(assessment)
+        issues.append(f"INFO: Novelty diagnostics — {assessment.diagnostics}")
+
+        return max(0.0, min(assessment.novelty_score, 1.0)), issues
     
     def _score_reproducibility(self, content: str) -> Tuple[float, List[str]]:
         """Score reproducibility potential."""

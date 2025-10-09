@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from textwrap import dedent
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from document_types import DocumentType, get_document_template
 
@@ -13,6 +13,7 @@ def get_blueprint_prompt(
     topic: str,
     field: str,
     question: str,
+    novelty_digest: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """Create a planning prompt that yields a structured research blueprint."""
 
@@ -30,6 +31,9 @@ def get_blueprint_prompt(
         • Specify quantitative evaluation strategy: metrics, baselines, ablation studies, and statistical tests that must appear.
         • Identify figures, tables, and diagrams that must be produced, with one line describing the insight each visual conveys.
         • Highlight potential risks, open questions, or assumptions that the draft must address explicitly.
+        • Dedicate a subsection titled "Prior Art Differentiation" that contrasts this plan against the closest overlapping works.
+        • Include an "Experimental Innovation Hooks" list that specifies validation twists, ablations, or stress tests that go beyond standard baselines.
+        • Provide a "Feasibility & Risk Mitigation" checklist covering resources, data availability, and fallback paths for risky components.
 
         Constraints:
         • Keep the blueprint under 600 words.
@@ -50,8 +54,21 @@ def get_blueprint_prompt(
         """
     ).strip()
 
-    return [
+    messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
+
+    if novelty_digest:
+        novelty_prompt = dedent(
+            f"""
+            NOVELTY DIAGNOSTICS:
+            {novelty_digest}
+
+            Incorporate explicit differentiation strategies responding to each retrieved work when drafting the blueprint.
+            """
+        ).strip()
+        messages.append({"role": "user", "content": novelty_prompt})
+
+    return messages
 

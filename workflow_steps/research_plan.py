@@ -12,6 +12,7 @@ def generate_research_blueprint(
     model: str,
     request_timeout: int,
     config,
+    novelty_digest: Optional[str] = None,
 ) -> Optional[str]:
     """Generate a research blueprint prior to drafting the paper."""
 
@@ -23,7 +24,13 @@ def generate_research_blueprint(
     from sciresearch_workflow import _universal_chat
 
     doc_type = infer_document_type(topic=topic, field=field, question=question)
-    prompt_messages = get_blueprint_prompt(doc_type, topic, field, question)
+    prompt_messages = get_blueprint_prompt(
+        doc_type,
+        topic,
+        field,
+        question,
+        novelty_digest=novelty_digest,
+    )
 
     blueprint_text = _universal_chat(
         prompt_messages,

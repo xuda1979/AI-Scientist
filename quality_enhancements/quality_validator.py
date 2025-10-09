@@ -5,11 +5,12 @@ Quality validation module for automated paper quality assessment.
 
 import re
 import json
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
 import logging
 
 from document_types import DocumentTemplate, DocumentType, get_document_template
+from .novelty_vetting import NoveltyVetter
 
 # Import review-driven enhancements
 try:
@@ -38,6 +39,7 @@ class PaperQualityValidator:
         self._active_template: Optional[DocumentTemplate] = None
         self._active_doc_type: Optional[DocumentType] = None
         self._active_field: str = ""
+        self._novelty_vetter: Optional[NoveltyVetter] = None
         
     def _default_config(self) -> Dict:
         """Default validation configuration."""
@@ -68,6 +70,18 @@ class PaperQualityValidator:
                 "recent_years": 3,
                 "min_total_refs": 15,
                 "comparison_analysis": True
+            },
+            "novelty": {
+                "global_threshold": 0.55,
+                "domain_thresholds": {
+                    "machine learning": 0.60,
+                    "computer vision": 0.60,
+                    "natural language processing": 0.60,
+                    "robotics": 0.55,
+                    "security": 0.50,
+                    "theory": 0.45,
+                },
+                "fair_score_threshold": 0.55,
             },
             "poker_specific": {
                 "required_metrics": ["exploitability", "nash_convergence", "win_rate"],
@@ -149,6 +163,14 @@ class PaperQualityValidator:
             issues.extend(format_issues)
             quality_scores['formatting'] = format_score
 
+            # Novelty validation using retrieval-backed analysis
+            novelty_issues, novelty_score = self._validate_novelty(
+                paper_content,
+                field or self._active_field,
+            )
+            issues.extend(novelty_issues)
+            quality_scores['novelty'] = novelty_score
+
             # Review-driven issue detection (based on actual reviewer feedback)
             if REVIEW_ENHANCEMENTS_AVAILABLE:
                 review_issues = detect_review_issues(
@@ -162,6 +184,19 @@ class PaperQualityValidator:
                 warning_count = sum(1 for issue in review_issues if "WARNING" in issue)
                 review_score = max(0.0, 1.0 - (critical_count * 0.3) - (warning_count * 0.1))
                 quality_scores['review_readiness'] = review_score
+
+            # Hard acceptance gate using FairPaperScorer when available
+            fair_issues, fair_score, fair_metrics = self._enforce_fair_acceptance(
+                paper_content,
+                simulation_output,
+                metadata,
+            )
+            if fair_issues:
+                issues.extend(fair_issues)
+            if fair_score is not None:
+                quality_scores['fair_final'] = fair_score
+            if fair_metrics is not None:
+                quality_scores['fair_penalty_adjusted'] = fair_metrics.penalty_adjusted_score
 
             # Overall quality score
             quality_scores['overall'] = sum(quality_scores.values()) / len(quality_scores)
@@ -624,9 +659,69 @@ class PaperQualityValidator:
                 issues.append("Potential equation overflow - long equations should use align or split environments")
                 score -= 0.05
                 break
-        
+
         return issues, max(0.0, score)
-    
+
+    def _get_novelty_vetter(self) -> NoveltyVetter:
+        if self._novelty_vetter is None:
+            self._novelty_vetter = NoveltyVetter()
+        return self._novelty_vetter
+
+    def _lookup_novelty_threshold(self, field: str) -> float:
+        novelty_cfg = self.config.get('novelty', {})
+        domain_thresholds = novelty_cfg.get('domain_thresholds', {})
+        field_lower = (field or '').lower()
+        for domain, threshold in domain_thresholds.items():
+            if domain in field_lower:
+                return float(threshold)
+        return float(novelty_cfg.get('global_threshold', 0.55))
+
+    def _validate_novelty(self, content: str, field: str) -> Tuple[List[str], float]:
+        if 'novelty' not in self.config:
+            return [], 0.5
+
+        try:
+            assessment = self._get_novelty_vetter().assess_manuscript(content, field or self._active_field)
+        except Exception as exc:
+            logger.warning(f"Novelty assessment failed: {exc}")
+            return [f"WARNING: Novelty assessment unavailable ({exc})"], 0.4
+
+        issues = self._get_novelty_vetter().revision_diagnostics(assessment)
+        threshold = self._lookup_novelty_threshold(field or self._active_field)
+        if assessment.novelty_score < threshold:
+            issues.append(
+                f"CRITICAL: Novelty score {assessment.novelty_score:.2f} below baseline {threshold:.2f}"
+            )
+
+        return issues, assessment.novelty_score
+
+    def _enforce_fair_acceptance(
+        self,
+        content: str,
+        simulation_output: str,
+        metadata: Optional[Dict],
+    ) -> Tuple[List[str], Optional[float], Any]:
+        if not FAIR_SCORING_AVAILABLE:
+            return [], None, None
+
+        try:
+            scorer = FairPaperScorer()
+            metrics, issues = scorer.score_paper(content, simulation_output, metadata=metadata)
+        except Exception as exc:
+            logger.warning(f"Fair scoring failed: {exc}")
+            return [f"WARNING: Fair scoring failed ({exc})"], None, None
+
+        novelty_cfg = self.config.get('novelty', {})
+        threshold = float(novelty_cfg.get('fair_score_threshold', 0.55))
+
+        reported_issues = [f"FAIR: {issue}" for issue in issues[:10]] if issues else []
+        if metrics.final_score < threshold:
+            reported_issues.append(
+                f"CRITICAL: FairPaperScorer final score {metrics.final_score:.2f} below acceptance threshold {threshold:.2f}"
+            )
+
+        return reported_issues, metrics.final_score, metrics
+
     def generate_quality_report(self, issues: List[str], quality_scores: Dict[str, float]) -> str:
         """Generate comprehensive quality assessment report."""
         report = "📊 AUTOMATED QUALITY ASSESSMENT REPORT\n"
