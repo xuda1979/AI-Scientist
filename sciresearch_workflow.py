@@ -24,7 +24,7 @@ import threading
 from textwrap import dedent
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Set
 
 # Google AI SDK
 try:
@@ -67,6 +67,7 @@ from prompts.experimental_rigor_prompts import (
     get_theoretical_rigor_requirements
 )
 from quality_enhancements.quality_validator import PaperQualityValidator
+from quality_enhancements.novelty_vetting import NoveltyVetter
 
 # Review-driven enhancements  
 from prompts.review_driven_enhancements import (
@@ -3499,16 +3500,24 @@ def run_workflow(
     paper_content = paper_path.read_text(encoding="utf-8").strip()
     is_minimal_template = (paper_content == "\\documentclass{article}\\begin{document}\\end{document}" or len(paper_content) < 200)
     
+    selected_idea = None
+    novelty_digest = None
+
     # If no real paper content yet (fresh), run ideation and then draft one.
     if is_minimal_template:
         _check_cancellation(cancel_event, "ideation setup")
 
         if specify_idea:
             print(f"Using specified research idea: {specify_idea}")
-            
+
             # Use the specified idea directly
             final_topic = specify_idea
             final_question = specify_idea
+            selected_idea = {
+                "title": final_topic,
+                "core_concept": final_question,
+                "description": specify_idea,
+            }
             
             # Save specified idea to project directory
             ideation_file = project_dir / "ideation_analysis.txt"
@@ -3577,12 +3586,61 @@ def run_workflow(
                 print("  No ideas selected, using original topic/question")
                 final_topic = topic
                 final_question = question
+                selected_idea = None
         else:
             print("  Ideation phase skipped (--skip-ideation flag used)")
             final_topic = topic
             final_question = question
-        
+            selected_idea = None
+
         print(f"\nCreating paper draft for: {final_topic}")
+
+        # Run novelty vetting before blueprinting to ensure differentiation
+        if getattr(config, "enable_novelty_vetting", True):
+            try:
+                novelty_vetter = NoveltyVetter()
+                extra_queries = []
+                if selected_idea:
+                    extra_queries.extend(
+                        filter(
+                            None,
+                            [
+                                selected_idea.get("description"),
+                                selected_idea.get("core_concept"),
+                            ],
+                        )
+                    )
+
+                novelty_assessment = novelty_vetter.assess_concept(
+                    title=final_topic,
+                    question=final_question,
+                    field=field,
+                    extra_queries=extra_queries,
+                )
+                novelty_digest = novelty_vetter.blueprint_digest(novelty_assessment)
+                novelty_report_path = project_dir / "novelty_vetting.json"
+                novelty_report_path.write_text(
+                    json.dumps(novelty_assessment.to_dict(), indent=2),
+                    encoding="utf-8",
+                )
+
+                print(
+                    f" Novelty vetting score: {novelty_assessment.novelty_score:.2f}"
+                )
+                if novelty_assessment.retrieved_works:
+                    top_matches = ", ".join(
+                        work.short_label()
+                        for work in novelty_assessment.retrieved_works[:3]
+                    )
+                    print(f" Closest retrieved works: {top_matches}")
+                else:
+                    print(" No overlapping publications detected in retrieval phase")
+                print(f" Novelty report saved to: {novelty_report_path}")
+            except Exception as novelty_error:
+                novelty_digest = None
+                print(f"⚠ Novelty vetting failed: {novelty_error}")
+        else:
+            novelty_digest = None
 
         planning_brief = None
         if getattr(config, "enable_blueprint_planning", True):
@@ -3596,6 +3654,7 @@ def run_workflow(
                     model,
                     request_timeout or config.request_timeout,
                     config,
+                    novelty_digest=novelty_digest,
                 )
             except Exception as planning_error:
                 print(f"  Blueprint generation failed: {planning_error}")
@@ -3666,7 +3725,14 @@ def run_workflow(
             print(f" LaTeX compilation successful!")
         
         # COMPREHENSIVE QUALITY VALIDATION
-        quality_issues = _validate_research_quality(current_tex, sim_summary, doc_type=detected_type)
+        quality_issues = _validate_research_quality(
+            current_tex,
+            sim_summary,
+            doc_type=detected_type,
+            field=field,
+            project_dir=project_dir,
+            fair_threshold=getattr(config, "fair_acceptance_threshold", 0.55),
+        )
         
         # Additional validations based on config
         if config.reference_validation:
@@ -4115,6 +4181,9 @@ def _validate_research_quality(
     paper_content: str,
     sim_summary: str,
     doc_type: Optional[DocumentType] = None,
+    field: Optional[str] = None,
+    project_dir: Optional[Path] = None,
+    fair_threshold: Optional[float] = None,
 ) -> List[str]:
     """Validate the quality of the research paper."""
 
@@ -4277,7 +4346,48 @@ def _validate_research_quality(
     figure_table_issues = _validate_figures_tables(paper_content, template)
     issues.extend(figure_table_issues)
 
-    return issues + info_notes
+    validator_metadata: Dict[str, Any] = {}
+    if doc_type:
+        validator_metadata["doc_type"] = doc_type
+    if field:
+        validator_metadata["field"] = field
+
+    validator = PaperQualityValidator()
+    if fair_threshold is not None:
+        validator.config.setdefault("novelty", {})
+        validator.config["novelty"]["fair_score_threshold"] = float(fair_threshold)
+    validator_issues, validator_scores = validator.validate_paper(
+        paper_content,
+        sim_summary,
+        metadata=validator_metadata,
+    )
+
+    if project_dir:
+        try:
+            validator_path = project_dir / "quality_validator_last.json"
+            validator_path.write_text(
+                json.dumps(
+                    {
+                        "issues": validator_issues,
+                        "scores": validator_scores,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    combined = issues + info_notes + validator_issues
+
+    seen: Set[str] = set()
+    deduped: List[str] = []
+    for item in combined:
+        if item not in seen:
+            deduped.append(item)
+            seen.add(item)
+
+    return deduped
 
 def _check_paper_structure(paper_content: str) -> List[str]:
     """Check if paper structure aligns with paper type and field conventions."""
