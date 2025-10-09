@@ -58,7 +58,7 @@ DOCUMENT_TEMPLATES = {
         output_format=OutputFormat.LATEX_PDF,
         latex_documentclass="article",
         required_packages=["amsmath", "amsfonts", "graphicx", "cite"],
-        typical_sections=["Abstract", "Introduction", "Related Work", "Methodology", 
+        typical_sections=["Abstract", "Introduction", "Related Work", "Methodology",
                          "Results", "Discussion", "Conclusion"],
         optional_sections=["Appendix", "Acknowledgments"],
         requires_simulation=True,
@@ -69,7 +69,12 @@ DOCUMENT_TEMPLATES = {
         max_pages=15,
         citation_style="ieee",
         prompt_focus="scientific rigor and methodology",
-        special_requirements=["peer-review quality", "reproducible results"]
+        special_requirements=[
+            "peer-review quality",
+            "reproducible results",
+            "explicit innovation thesis",
+            "prior art differentiation checklist",
+        ]
     ),
     
     DocumentType.ENGINEERING_PAPER: DocumentTemplate(

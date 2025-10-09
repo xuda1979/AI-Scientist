@@ -117,13 +117,33 @@ SPECIAL REQUIREMENTS FOR THIS DOCUMENT TYPE:
         
         if user_prompt:
             sys_prompt += f"\n\nADDITIONAL USER REQUIREMENTS:\n{user_prompt}"
-        
+
+        if template.doc_type == DocumentType.RESEARCH_PAPER:
+            sys_prompt += """
+
+INNOVATION EXPECTATIONS:
+- Craft an "Innovation Thesis" paragraph in the introduction linking the research gap to the proposed breakthroughs
+- Include a labelled "Prior Art Differentiation" subsection comparing against at least three closest works
+- Provide an "Innovation Hooks" checklist detailing ablations, stress tests, or design twists that evidence novelty
+- Conclude with a forward-looking impact statement describing how the contributions enable future innovations
+"""
+
         user_prompt_text = f"""Create a complete {template.doc_type.value.replace('_', ' ')} on the topic: "{topic}"
 
 Research question/focus: {question}
 Field: {field}
 
 The document should be written as a professional {template.doc_type.value.replace('_', ' ')} suitable for {field} professionals, following all the requirements specified above."""
+
+        if template.doc_type == DocumentType.RESEARCH_PAPER:
+            user_prompt_text += """
+
+Please ensure the draft:
+- Summarises the key innovations in a numbered Contributions section with bullet points
+- Adds a brief comparison table or paragraph that highlights differentiation from prior art
+- References an Innovation Hooks checklist tying each novel element to evaluation evidence
+- Ends with a Vision & Future Work paragraph that extrapolates the broader impact of the contributions
+"""
 
         return [
             {"role": "system", "content": sys_prompt},
@@ -284,10 +304,18 @@ SLIDE STRUCTURE:
             
         if template.requires_algorithms:
             content_reqs.append("ALGORITHMS: Include detailed algorithms using algorithm2e package")
-            
+
         if template.requires_financial_data:
             content_reqs.append("FINANCIAL DATA: Include real market data, financial models, and quantitative analysis")
-            
+
+        if template.doc_type == DocumentType.RESEARCH_PAPER:
+            content_reqs.extend([
+                "CONTRIBUTIONS: Provide a dedicated section with a concise bullet list of 3-4 novel contributions",
+                "DIFFERENTIATION: Add a \"Prior Art Differentiation\" subsection contrasting against at least three closest works",
+                "INNOVATION ROADMAP: Describe experimental or theoretical innovation hooks that go beyond standard baselines",
+                "IMPACT ANALYSIS: Explain why the proposed innovations matter for the broader research community",
+            ])
+
         if template.doc_type == DocumentType.EQUITY_RESEARCH:
             content_reqs.extend([
                 "VALUATION MODELS: Include DCF, comparable company analysis",

@@ -147,6 +147,11 @@ class PaperQualityValidator:
             issues.extend(lit_issues)
             quality_scores['literature_review'] = lit_score
 
+            # Innovation articulation validation
+            innovation_issues, innovation_score = self._validate_innovation_focus(paper_content)
+            issues.extend(innovation_issues)
+            quality_scores['innovation_focus'] = innovation_score
+
             # Results presentation validation
             results_issues, results_score = self._validate_results_presentation(paper_content)
             issues.extend(results_issues)
@@ -520,6 +525,105 @@ class PaperQualityValidator:
         
         return issues, max(0.0, score)
     
+    def _validate_innovation_focus(self, content: str) -> Tuple[List[str], float]:
+        """Ensure the manuscript foregrounds innovation and differentiation."""
+        issues: List[str] = []
+        score = 0.0
+
+        template = self._active_template
+        if template:
+            innovation_doc_types = {
+                DocumentType.RESEARCH_PAPER,
+                DocumentType.CONFERENCE_PAPER,
+                DocumentType.JOURNAL_ARTICLE,
+                DocumentType.ENGINEERING_PAPER,
+                DocumentType.TECHNICAL_REPORT,
+                DocumentType.WHITE_PAPER,
+            }
+            if template.doc_type not in innovation_doc_types:
+                return issues, 1.0
+
+        lowered = content.lower()
+
+        # Dedicated contributions section is critical
+        contributions_match = re.search(r'\\section\\*?\{[^}]*contribution[^}]*\}', content, re.IGNORECASE)
+        if not contributions_match:
+            contributions_match = re.search(r'\\subsection\\*?\{[^}]*contribution[^}]*\}', content, re.IGNORECASE)
+
+        if contributions_match:
+            score += 0.35
+            section_body = content[contributions_match.end():]
+            next_section_match = re.search(r'\\section\\*?\{', section_body)
+            if next_section_match:
+                section_body = section_body[:next_section_match.start()]
+
+            has_bullets = bool(
+                re.search(r'\\begin\{itemize\}.*?\\end\{itemize\}', section_body, re.DOTALL)
+                or re.search(r'\\begin\{enumerate\}.*?\\end\{enumerate\}', section_body, re.DOTALL)
+            )
+            if has_bullets:
+                score += 0.2
+            else:
+                issues.append(
+                    "WARNING: Contributions section should enumerate innovations with bullet or numbered lists for clarity."
+                )
+        else:
+            issues.append(
+                "CRITICAL: Missing a dedicated Contributions section that summarises the paper's novel innovations."
+            )
+
+        # Prior art differentiation subsection
+        prior_art_match = re.search(
+            r'\\(?:sub)?section\\*?\{[^}]*(prior\\s*art|differentiation|novelty analysis)[^}]*\}',
+            content,
+            re.IGNORECASE,
+        )
+        if prior_art_match:
+            score += 0.2
+        else:
+            issues.append(
+                "WARNING: Add a labelled prior art differentiation subsection contrasting against closest existing work."
+            )
+
+        # Measure explicit innovation language
+        novelty_terms = re.findall(
+            r'\b(novel|innovation|innovative|original|differentiation|breakthrough)\b',
+            lowered,
+        )
+        if len(novelty_terms) >= 6:
+            score += 0.15
+        elif len(novelty_terms) >= 3:
+            score += 0.1
+        else:
+            issues.append(
+                "WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections."
+            )
+
+        # Innovation hooks or validation checklists
+        hook_patterns = [
+            r'innovation\s+hooks?',
+            r'innovation\s+checklist',
+            r'differentiation\s+matrix',
+            r'novelty\s+validation',
+        ]
+        if any(re.search(pattern, lowered) for pattern in hook_patterns):
+            score += 0.1
+        else:
+            issues.append(
+                "INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence."
+            )
+
+        # Forward-looking vision and impact
+        vision_patterns = [r'broader impact', r'future work', r'vision', r'roadmap']
+        if any(re.search(pattern, lowered) for pattern in vision_patterns):
+            score += 0.1
+        else:
+            issues.append(
+                "INFO: Consider adding a forward-looking impact or vision statement to contextualise the innovations."
+            )
+
+        return issues, max(0.0, min(1.0, score))
+
     def _validate_results_presentation(self, content: str) -> Tuple[List[str], float]:
         """Validate results presentation quality."""
         issues = []
