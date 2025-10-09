@@ -349,7 +349,7 @@ def _model_supports_vision(model: str) -> bool:
     """Check if the given model supports vision/image inputs."""
     vision_models = [
         'gpt-4-vision', 'gpt-4-vision-preview', 'gpt-4-turbo', 'gpt-4-turbo-vision',
-        'gpt-4o', 'gpt-4o-mini', 'gpt-5'  # Add more vision-capable models as they become available
+        'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-pro'  # Add more vision-capable models as they become available
     ]
     return any(vm in model.lower() for vm in vision_models)
 

@@ -139,7 +139,7 @@ def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
             print(f"\nTimeout reached. Using default: {default}")
             return default
 
-DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5")
+DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5-pro")
 
 def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = None) -> logging.Logger:
     """Set up structured logging for the workflow."""
@@ -388,7 +388,7 @@ def _model_supports_vision(model: str) -> bool:
     """Check if the given model supports vision/image inputs."""
     vision_models = [
         'gpt-4-vision', 'gpt-4-vision-preview', 'gpt-4-turbo', 'gpt-4-turbo-vision',
-        'gpt-4o', 'gpt-4o-mini', 'gpt-5'  # Add more vision-capable models as they become available
+        'gpt-4o', 'gpt-4o-mini', 'gpt-5', 'gpt-5-pro'  # Add more vision-capable models as they become available
     ]
     return any(vm in model.lower() for vm in vision_models)
 
@@ -4016,7 +4016,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                       default="auto", help="Type of document to generate (auto-detect if not specified)")
     
     p.add_argument("--output-dir", default="output", help="Output directory root (contains project subfolder)")
-    p.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use (default: gpt-5)")
+    p.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use (default: gpt-5-pro)")
     p.add_argument("--request-timeout", type=int, default=3600, help="Per-request timeout seconds (0 means no timeout)")
     p.add_argument("--max-retries", type=int, default=3, help="Max OpenAI retries")
     p.add_argument("--max-iterations", type=int, default=4, help="Max review->revise iterations")

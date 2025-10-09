@@ -49,7 +49,7 @@ class WorkflowConfig:
 # Default models and constants
 DEFAULT_MODEL = "gpt-4"
 SUPPORTED_MODELS = [
-    "gpt-4", "gpt-4-turbo", "gpt-5",
+    "gpt-4", "gpt-4-turbo", "gpt-5", "gpt-5-pro",
     "claude-3-opus", "claude-3-sonnet",
     "gemini-pro"
 ]
