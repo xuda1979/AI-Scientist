@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 
-from document_types import DocumentType, get_document_template
+from document_types import DocumentTemplate, DocumentType, get_document_template
 from prompts.review_driven_enhancements import DomainReviewProfile, get_domain_review_profile
 from quality_enhancements.novelty_vetting import NoveltyVetter
 
