@@ -141,6 +141,9 @@ def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
 
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5-pro")
 
+# Models that currently require the Responses API instead of the Chat Completions API
+RESPONSES_API_MODELS = {"gpt-5-pro"}
+
 def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = None) -> logging.Logger:
     """Set up structured logging for the workflow."""
     if log_dir is None:
@@ -300,6 +303,31 @@ def _offline_response(prompt_type: str) -> str:
         return "## REVIEW\nOffline review skipped\n## REVISION DIFFS\n"
     return ""
 
+def _extract_responses_text(response: Any) -> str:
+    """Extract text content from a Responses API result."""
+    if hasattr(response, "output_text") and response.output_text:
+        return response.output_text
+
+    output_chunks: List[str] = []
+    for item in getattr(response, "output", []) or []:
+        item_type = getattr(item, "type", None)
+        if item_type in {"output_text", "text"}:
+            text_value = getattr(item, "text", None)
+            if text_value:
+                output_chunks.append(text_value)
+        elif item_type == "message":
+            for content in getattr(item, "content", []) or []:
+                if getattr(content, "type", None) == "output_text":
+                    text_value = getattr(content, "text", None)
+                    if text_value:
+                        output_chunks.append(text_value)
+
+    if output_chunks:
+        return "".join(output_chunks)
+
+    return str(response)
+
+
 def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, request_timeout: int, prompt_type: str, pdf_path: Optional[Path] = None, max_retries: int = 3) -> str:
     """
     Try a specific OpenAI model with intelligent retry logic and optional PDF support.
@@ -356,14 +384,45 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
             # Use configured temperature based on prompt type
             print(f"Sending request with temperature={temp}, timeout={request_timeout}s (attempt {attempt + 1}/{max_retries})...")
             
-            resp = client.chat.completions.create(
-                model=model, 
-                messages=processed_messages, 
-                temperature=temp, 
-                timeout=request_timeout
-            )
-            print("INFO: API call successful.")
-            return resp.choices[0].message.content
+            if model.lower() in RESPONSES_API_MODELS:
+                responses_client = getattr(client, "responses", None)
+                if responses_client is None:
+                    raise RuntimeError(
+                        "OpenAI client does not expose the Responses API. Please upgrade the 'openai' package."
+                    )
+
+                responses_timeout = request_timeout or 3600
+                if hasattr(responses_client, "with_options"):
+                    responses_client = responses_client.with_options(timeout=responses_timeout)
+                    resp = responses_client.create(
+                        model=model,
+                        input=processed_messages,
+                        max_output_tokens=4000,
+                    )
+                else:
+                    resp = responses_client.create(
+                        model=model,
+                        input=processed_messages,
+                        max_output_tokens=4000,
+                        timeout=responses_timeout,
+                    )
+                print("INFO: API call successful (Responses API).")
+                return _extract_responses_text(resp)
+            else:
+                completion_kwargs: Dict[str, Any] = {
+                    "model": model,
+                    "messages": processed_messages,
+                    "timeout": request_timeout,
+                }
+                if model.startswith("gpt-5") or model.startswith("o1"):
+                    completion_kwargs["max_completion_tokens"] = 4000
+                else:
+                    completion_kwargs["temperature"] = temp
+                    completion_kwargs["max_tokens"] = 4000
+
+                resp = client.chat.completions.create(**completion_kwargs)
+                print("INFO: API call successful.")
+                return resp.choices[0].message.content
             
         except KeyboardInterrupt:
             print("ERROR: User interrupted the process.")
