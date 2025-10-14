@@ -44,28 +44,76 @@ class LaTeXProcessor:
     
     def _compile_latex(self, paper_path: Path, timeout: int) -> Tuple[bool, str]:
         """Perform actual LaTeX compilation."""
-        try:
-            # Run pdflatex in the directory containing the file
-            result = subprocess.run(
+
+        def run_pdflatex() -> subprocess.CompletedProcess:
+            return subprocess.run(
                 ["pdflatex", "-interaction=nonstopmode", paper_path.name],
                 cwd=paper_path.parent,
                 capture_output=True,
                 text=True,
                 timeout=timeout
             )
-            
-            success = result.returncode == 0
-            output = result.stdout + result.stderr
-            
-            # Clean up auxiliary files
-            self._cleanup_aux_files(paper_path)
-            
-            return success, output
-            
+
+        output_chunks = []
+
+        try:
+            # First LaTeX run to generate auxiliary data
+            result = run_pdflatex()
+            output_chunks.append(result.stdout + result.stderr)
+
+            if result.returncode != 0:
+                return False, "".join(output_chunks)
+
+            needs_bibliography = False
+            aux_path = paper_path.with_suffix('.aux')
+            if aux_path.exists():
+                try:
+                    aux_content = aux_path.read_text(encoding="utf-8", errors="ignore")
+                    bibliography_indicators = ("\\bibdata", "\\bibstyle", "\\citation{")
+                    needs_bibliography = any(indicator in aux_content for indicator in bibliography_indicators)
+                except Exception:
+                    needs_bibliography = False
+
+            if needs_bibliography:
+                try:
+                    bibtex_result = subprocess.run(
+                        ["bibtex", paper_path.stem],
+                        cwd=paper_path.parent,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout
+                    )
+                except FileNotFoundError:
+                    output_chunks.append("BibTeX not found. Install bibtex to build references. ")
+                    return False, "".join(output_chunks)
+
+                output_chunks.append(bibtex_result.stdout + bibtex_result.stderr)
+
+                if bibtex_result.returncode != 0:
+                    return False, "".join(output_chunks)
+
+                # Run pdflatex twice more to incorporate bibliography
+                for _ in range(2):
+                    result = run_pdflatex()
+                    output_chunks.append(result.stdout + result.stderr)
+                    if result.returncode != 0:
+                        return False, "".join(output_chunks)
+            else:
+                # Second pass for cross-references when bibliography is not needed
+                result = run_pdflatex()
+                output_chunks.append(result.stdout + result.stderr)
+                if result.returncode != 0:
+                    return False, "".join(output_chunks)
+
+            return True, "".join(output_chunks)
+
         except subprocess.TimeoutExpired:
             return False, f"LaTeX compilation timed out after {timeout}s"
         except Exception as e:
             return False, f"LaTeX compilation error: {str(e)}"
+        finally:
+            # Clean up auxiliary files
+            self._cleanup_aux_files(paper_path)
     
     def _cleanup_aux_files(self, paper_path: Path) -> None:
         """Clean up LaTeX auxiliary files."""

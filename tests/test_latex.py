@@ -26,12 +26,12 @@ def test_compile_and_validate_uses_cache_and_cleans_aux_files():
             assert success is True
             assert "compiled" in output
             assert not aux_file.exists()
-            mock_run.assert_called_once()
+            assert mock_run.call_count == 2
 
             cached_success, cached_output = processor.compile_and_validate(paper_path)
             assert cached_success is True
             assert cached_output == ""
-            mock_run.assert_called_once()
+            assert mock_run.call_count == 2
 
 
 def test_compile_and_validate_failure_reports_errors():
