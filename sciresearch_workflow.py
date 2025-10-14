@@ -328,6 +328,37 @@ def _extract_responses_text(response: Any) -> str:
     return str(response)
 
 
+def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize chat messages for the Responses API."""
+
+    normalized_messages: List[Dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role", "user")
+        content = message.get("content", "")
+
+        # The Responses API expects content to be a list of typed blocks.
+        if isinstance(content, list):
+            normalized_content: List[Dict[str, Any]] = []
+            for item in content:
+                if isinstance(item, dict):
+                    item_type = item.get("type")
+                    if item_type in {"text", "output_text"} and "text" in item:
+                        normalized_content.append({"type": "text", "text": item["text"]})
+                    elif item_type == "input_text" and "text" in item:
+                        normalized_content.append({"type": "text", "text": item["text"]})
+                    else:
+                        # Already in a compatible format (e.g., image parts). Keep as-is.
+                        normalized_content.append(item)
+                else:
+                    normalized_content.append({"type": "text", "text": str(item)})
+        else:
+            normalized_content = [{"type": "text", "text": str(content)}]
+
+        normalized_messages.append({"role": role, "content": normalized_content})
+
+    return normalized_messages
+
+
 def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, request_timeout: int, prompt_type: str, pdf_path: Optional[Path] = None, max_retries: int = 3) -> str:
     """
     Try a specific OpenAI model with intelligent retry logic and optional PDF support.
@@ -396,13 +427,13 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     responses_client = responses_client.with_options(timeout=responses_timeout)
                     resp = responses_client.create(
                         model=model,
-                        input=processed_messages,
+                        input=_convert_messages_to_responses_input(processed_messages),
                         max_output_tokens=4000,
                     )
                 else:
                     resp = responses_client.create(
                         model=model,
-                        input=processed_messages,
+                        input=_convert_messages_to_responses_input(processed_messages),
                         max_output_tokens=4000,
                         timeout=responses_timeout,
                     )

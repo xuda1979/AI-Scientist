@@ -12,6 +12,35 @@ logger = logging.getLogger(__name__)
 RESPONSES_API_MODELS = {"gpt-5-pro"}
 
 
+def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize chat messages for compatibility with the Responses API."""
+
+    normalized_messages: List[Dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role", "user")
+        content = message.get("content", "")
+
+        if isinstance(content, list):
+            normalized_content: List[Dict[str, Any]] = []
+            for item in content:
+                if isinstance(item, dict):
+                    item_type = item.get("type")
+                    if item_type in {"text", "output_text"} and "text" in item:
+                        normalized_content.append({"type": "text", "text": item["text"]})
+                    elif item_type == "input_text" and "text" in item:
+                        normalized_content.append({"type": "text", "text": item["text"]})
+                    else:
+                        normalized_content.append(item)
+                else:
+                    normalized_content.append({"type": "text", "text": str(item)})
+        else:
+            normalized_content = [{"type": "text", "text": str(content)}]
+
+        normalized_messages.append({"role": role, "content": normalized_content})
+
+    return normalized_messages
+
+
 class AIChat:
     """Centralized AI chat interface with fallback support."""
     
@@ -120,13 +149,20 @@ class AIChat:
                         )
 
                     responses_timeout = timeout or 3600
-                    responses_client = responses_client.with_options(timeout=responses_timeout)
-
-                    response = responses_client.create(
-                        model=requested_model,
-                        input=messages,
-                        max_output_tokens=4000,
-                    )
+                    if hasattr(responses_client, "with_options"):
+                        responses_client = responses_client.with_options(timeout=responses_timeout)
+                        response = responses_client.create(
+                            model=requested_model,
+                            input=_convert_messages_to_responses_input(messages),
+                            max_output_tokens=4000,
+                        )
+                    else:
+                        response = responses_client.create(
+                            model=requested_model,
+                            input=_convert_messages_to_responses_input(messages),
+                            max_output_tokens=4000,
+                            timeout=responses_timeout,
+                        )
                     return self._extract_responses_text(response)
                 elif requested_model.startswith('gpt-5') or requested_model.startswith('o1'):
                     # GPT-5 and o1 models use max_completion_tokens and only support default temperature
