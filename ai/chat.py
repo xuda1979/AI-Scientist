@@ -10,7 +10,7 @@ import time
 import urllib.request
 import urllib.parse
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Google AI SDK
 try:
@@ -18,6 +18,64 @@ try:
     GOOGLE_AI_AVAILABLE = True
 except ImportError:
     GOOGLE_AI_AVAILABLE = False
+
+
+RESPONSES_API_MODELS = {"gpt-5-pro"}
+
+
+def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize chat messages for compatibility with the Responses API."""
+
+    normalized_messages: List[Dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role", "user")
+        content = message.get("content", "")
+
+        if isinstance(content, list):
+            normalized_content: List[Dict[str, Any]] = []
+            for item in content:
+                if isinstance(item, dict):
+                    item_type = item.get("type")
+                    if item_type in {"text", "output_text"} and "text" in item:
+                        normalized_content.append({"type": "text", "text": item["text"]})
+                    elif item_type == "input_text" and "text" in item:
+                        normalized_content.append({"type": "text", "text": item["text"]})
+                    else:
+                        normalized_content.append(item)
+                else:
+                    normalized_content.append({"type": "text", "text": str(item)})
+        else:
+            normalized_content = [{"type": "text", "text": str(content)}]
+
+        normalized_messages.append({"role": role, "content": normalized_content})
+
+    return normalized_messages
+
+
+def _extract_responses_text(response: Any) -> str:
+    """Extract text output from an OpenAI Responses API result."""
+
+    if hasattr(response, "output_text") and response.output_text:
+        return response.output_text
+
+    output_chunks: List[str] = []
+    for item in getattr(response, "output", []) or []:
+        item_type = getattr(item, "type", None)
+        if item_type in {"output_text", "text"}:
+            text_value = getattr(item, "text", None)
+            if text_value:
+                output_chunks.append(text_value)
+        elif item_type == "message":
+            for content in getattr(item, "content", []) or []:
+                if getattr(content, "type", None) == "output_text":
+                    text_value = getattr(content, "text", None)
+                    if text_value:
+                        output_chunks.append(text_value)
+
+    if output_chunks:
+        return "".join(output_chunks)
+
+    return str(response)
 
 
 def _classify_error(error: Exception) -> Tuple[str, Optional[int]]:
@@ -79,6 +137,35 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             print(f"Warning: Failed to attach PDF to vision model: {e}")
     
     try:
+        normalized_model = model.lower()
+
+        if normalized_model in RESPONSES_API_MODELS:
+            responses_client = getattr(client, "responses", None)
+            if responses_client is None:
+                raise RuntimeError(
+                    "OpenAI client does not expose the Responses API. Please upgrade the 'openai' package."
+                )
+
+            responses_timeout = request_timeout or 3600
+            if hasattr(responses_client, "with_options"):
+                responses_client = responses_client.with_options(timeout=responses_timeout)
+                response = responses_client.create(
+                    model=model,
+                    input=_convert_messages_to_responses_input(messages),
+                    temperature=1.0,
+                    max_output_tokens=4000,
+                )
+            else:
+                response = responses_client.create(
+                    model=model,
+                    input=_convert_messages_to_responses_input(messages),
+                    temperature=1.0,
+                    max_output_tokens=4000,
+                    timeout=responses_timeout,
+                )
+
+            return _extract_responses_text(response)
+
         response = client.chat.completions.create(
             model=model,
             messages=messages,
