@@ -187,11 +187,25 @@ def get_available_document_types() -> List[str]:
     """Get list of available document type names"""
     return [doc_type.value for doc_type in DocumentType]
 
-def infer_document_type(topic: str, field: str, question: str) -> DocumentType:
-    """Infer document type based on topic, field, and question"""
-    topic_lower = topic.lower()
-    field_lower = field.lower()
-    question_lower = question.lower()
+def infer_document_type(
+    topic: Optional[str],
+    field: Optional[str],
+    question: Optional[str],
+) -> DocumentType:
+    """Infer document type based on topic, field, and question.
+
+    The CLI allows the workflow to be executed in ``--modify-existing`` mode where
+    topic/field/question arguments may be omitted.  In that scenario the
+    ``Namespace`` entries are ``None`` until metadata is extracted from the
+    existing paper.  The previous implementation attempted to call ``.lower()`` on
+    these ``None`` values which triggered an ``AttributeError``.  By normalising the
+    inputs to empty strings we can safely infer the document type regardless of
+    which metadata is currently available.
+    """
+
+    topic_lower = (topic or "").lower()
+    field_lower = (field or "").lower()
+    question_lower = (question or "").lower()
     
     # Finance-related keywords
     finance_keywords = ["finance", "financial", "investment", "equity", "stock", "market", 
