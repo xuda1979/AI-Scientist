@@ -142,7 +142,7 @@ def timeout_input(prompt: str, timeout: int = 30, default: str = "") -> str:
 DEFAULT_MODEL = os.environ.get("SCI_MODEL", "gpt-5-pro")
 
 # Models that currently require the Responses API instead of the Chat Completions API
-RESPONSES_API_MODELS = {"gpt-5-pro"}
+RESPONSES_API_MODELS = {"gpt-5-pro", "gpt-5"}
 
 def setup_workflow_logging(log_level=logging.INFO, log_dir: Optional[Path] = None) -> logging.Logger:
     """Set up structured logging for the workflow."""
@@ -305,9 +305,23 @@ def _offline_response(prompt_type: str) -> str:
 
 def _extract_responses_text(response: Any) -> str:
     """Extract text content from a Responses API result."""
+    # Check for incomplete/error status first
+    status = getattr(response, "status", None)
+    if status == "incomplete":
+        incomplete_reason = getattr(getattr(response, "incomplete_details", None), "reason", "unknown")
+        print(f"WARNING: Responses API returned incomplete response: {incomplete_reason}")
+        # For max_output_tokens, we'll try to extract what we can
+        if incomplete_reason != "max_output_tokens":
+            raise RuntimeError(f"Responses API incomplete: {incomplete_reason}")
+    
+    # Primary extraction method: use output_text attribute
     if hasattr(response, "output_text") and response.output_text:
-        return response.output_text
-
+        text = response.output_text
+        print(f"DEBUG: Extracted {len(text)} chars from response.output_text")
+        print(f"DEBUG: First 200 chars: {text[:200]}")
+        return text
+    
+    # Fallback: iterate through output array looking for text items
     output_chunks: List[str] = []
     for item in getattr(response, "output", []) or []:
         item_type = getattr(item, "type", None)
@@ -321,11 +335,22 @@ def _extract_responses_text(response: Any) -> str:
                     text_value = getattr(content, "text", None)
                     if text_value:
                         output_chunks.append(text_value)
-
+    
     if output_chunks:
-        return "".join(output_chunks)
-
-    return str(response)
+        result = "".join(output_chunks)
+        print(f"DEBUG: Extracted {len(result)} chars from output array")
+        print(f"DEBUG: First 200 chars: {result[:200]}")
+        return result
+    
+    # If no text found, response might only contain reasoning (which is encrypted)
+    # This is an error condition
+    print(f"ERROR: No text content found in response!")
+    print(f"Response status: {status}")
+    print(f"Output types: {[getattr(item, 'type', None) for item in getattr(response, 'output', [])]}")
+    raise RuntimeError(
+        f"No text content in Responses API response. Status: {status}, "
+        f"Output types: {[getattr(item, 'type', None) for item in getattr(response, 'output', [])]}"
+    )
 
 
 def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -337,22 +362,33 @@ def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> List
         content = message.get("content", "")
 
         # The Responses API expects content to be a list of typed blocks.
+        # Use "input_text" for user messages, "output_text" for assistant
+        # System messages should be treated as user messages with input_text
+        if role == "system":
+            content_type = "input_text"
+            role = "user"  # Responses API may not support system role
+        elif role == "user":
+            content_type = "input_text"
+        else:  # assistant
+            content_type = "output_text"
+        
         if isinstance(content, list):
             normalized_content: List[Dict[str, Any]] = []
             for item in content:
                 if isinstance(item, dict):
                     item_type = item.get("type")
-                    if item_type in {"text", "output_text"} and "text" in item:
-                        normalized_content.append({"type": "text", "text": item["text"]})
-                    elif item_type == "input_text" and "text" in item:
-                        normalized_content.append({"type": "text", "text": item["text"]})
+                    if item_type in {"text", "input_text"} and "text" in item:
+                        # Use appropriate type based on role
+                        normalized_content.append({"type": content_type, "text": item["text"]})
+                    elif item_type == "output_text" and "text" in item:
+                        normalized_content.append({"type": "output_text", "text": item["text"]})
                     else:
                         # Already in a compatible format (e.g., image parts). Keep as-is.
                         normalized_content.append(item)
                 else:
-                    normalized_content.append({"type": "text", "text": str(item)})
+                    normalized_content.append({"type": content_type, "text": str(item)})
         else:
-            normalized_content = [{"type": "text", "text": str(content)}]
+            normalized_content = [{"type": content_type, "text": str(content)}]
 
         normalized_messages.append({"role": role, "content": normalized_content})
 
@@ -428,13 +464,13 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     resp = responses_client.create(
                         model=model,
                         input=_convert_messages_to_responses_input(processed_messages),
-                        max_output_tokens=4000,
+                        max_output_tokens=16000,  # Increased from 4000 for longer papers
                     )
                 else:
                     resp = responses_client.create(
                         model=model,
                         input=_convert_messages_to_responses_input(processed_messages),
-                        max_output_tokens=4000,
+                        max_output_tokens=16000,  # Increased from 4000 for longer papers
                         timeout=responses_timeout,
                     )
                 print("INFO: API call successful (Responses API).")
@@ -1182,17 +1218,10 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             del os.environ["HTTPS_PROXY"]
     print("INFO: Restored original proxy settings")
 
-def _nowstamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-
 def _prepare_project_dir(output_dir: Path, modify_existing: bool) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    # Check for any .tex file, not just paper.tex
-    if modify_existing and any(output_dir.glob("*.tex")):
-        return output_dir
-    project_dir = output_dir / _nowstamp()
-    project_dir.mkdir(parents=True, exist_ok=True)
-    return project_dir
+    # Use the output directory directly - no timestamp subfolders
+    return output_dir
 
 def _generate_research_ideas(
     topic: str, 
@@ -2700,6 +2729,17 @@ def _parse_combined_response(response: str, project_dir: Path) -> tuple[str, str
     """
     import re
     
+    # DEBUG: Show what we actually received
+    print(f"\n{'='*80}")
+    print(f"DEBUG: Response content preview (first 500 chars):")
+    print(f"{'-'*80}")
+    print(response[:500])
+    print(f"{'-'*80}")
+    print(f"Response length: {len(response)} chars")
+    print(f"Contains '## REVIEW': {'## REVIEW' in response}")
+    print(f"Contains '## REVISION DIFFS': {'## REVISION DIFFS' in response}")
+    print(f"{'='*80}\n")
+    
     # Extract sections using regex
     review_match = re.search(r'## REVIEW\s*\n(.*?)(?=## REVISION DIFFS)', response, re.DOTALL | re.IGNORECASE)
     diffs_match = re.search(r'## REVISION DIFFS.*?\n(.*)', response, re.DOTALL | re.IGNORECASE)
@@ -3099,9 +3139,19 @@ def _editor_prompt(review_text: str, iteration_count: int, user_prompt: Optional
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
 
 def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple[bool, str]:
-    """Compile LaTeX file and return success status and error log."""
+    """Compile LaTeX file with full bibliography support and return success status and error log."""
     try:
-        # Run pdflatex with nonstopmode
+        # Check if paper.tex uses filecontents to embed refs.bib
+        paper_content = paper_path.read_text(encoding='utf-8', errors='ignore')
+        uses_filecontents = '\\begin{filecontents' in paper_content and 'refs.bib' in paper_content
+        
+        # Delete old refs.bib if paper uses filecontents (allows regeneration)
+        if uses_filecontents:
+            refs_file = paper_path.parent / "refs.bib"
+            if refs_file.exists():
+                refs_file.unlink()  # Delete to force regeneration from filecontents
+        
+        # First pdflatex run to generate .aux file (and regenerate refs.bib from filecontents)
         result = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", paper_path.name],
             cwd=paper_path.parent,
@@ -3109,6 +3159,49 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
             text=True,
             timeout=timeout  # Use dynamic timeout parameter
         )
+        
+        # Run bibtex if .aux file exists (for bibliography processing)
+        aux_path = paper_path.with_suffix('.aux')
+        if aux_path.exists():
+            # Check if .aux file contains citation data
+            aux_content = aux_path.read_text(encoding='utf-8', errors='ignore')
+            if '\\citation{' in aux_content or '\\bibdata{' in aux_content:
+                bibtex_result = subprocess.run(
+                    ["bibtex", paper_path.stem],
+                    cwd=paper_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False
+                )
+                
+                # Check if bibtex generated a valid .bbl file
+                bbl_path = paper_path.with_suffix('.bbl')
+                if not bbl_path.exists() or bbl_path.stat().st_size < 100:
+                    # bibtex failed or produced empty output
+                    error_log += f"\n[WARNING] bibtex failed or produced empty output\n"
+                    error_log += f"bibtex stdout: {bibtex_result.stdout[:500]}\n"
+                    error_log += f"bibtex stderr: {bibtex_result.stderr[:500]}\n"
+                
+                # Second pdflatex run to incorporate bibliography
+                subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+                    cwd=paper_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False
+                )
+                
+                # Third pdflatex run to finalize cross-references
+                result = subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+                    cwd=paper_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False
+                )
         
         # Check if PDF was generated
         pdf_path = paper_path.with_suffix('.pdf')
@@ -3136,7 +3229,7 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
 
 def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool, Optional[Path], str]:
     """
-    Generate PDF from LaTeX file specifically for AI review.
+    Generate PDF from LaTeX file specifically for AI review with full bibliography support.
     
     Args:
         paper_path: Path to the LaTeX file
@@ -3148,7 +3241,17 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
     try:
         print(f"Generating PDF for AI review from {paper_path.name}...")
         
-        # Run pdflatex with nonstopmode
+        # Check if paper.tex uses filecontents to embed refs.bib
+        paper_content = paper_path.read_text(encoding='utf-8', errors='ignore')
+        uses_filecontents = '\\begin{filecontents' in paper_content and 'refs.bib' in paper_content
+        
+        # Delete old refs.bib if paper uses filecontents (allows regeneration)
+        if uses_filecontents:
+            refs_file = paper_path.parent / "refs.bib"
+            if refs_file.exists():
+                refs_file.unlink()  # Delete to force regeneration from filecontents
+        
+        # First pdflatex run to generate .aux file (and regenerate refs.bib from filecontents)
         result = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", paper_path.name],
             cwd=paper_path.parent,
@@ -3157,11 +3260,56 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
             timeout=timeout
         )
         
+        # Run bibtex if .aux file exists (for bibliography processing)
+        aux_path = paper_path.with_suffix('.aux')
+        if aux_path.exists():
+            # Check if .aux file contains citation data
+            aux_content = aux_path.read_text(encoding='utf-8', errors='ignore')
+            if '\\citation{' in aux_content or '\\bibdata{' in aux_content:
+                print(f"  Running bibtex for bibliography processing...")
+                bibtex_result = subprocess.run(
+                    ["bibtex", paper_path.stem],
+                    cwd=paper_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False
+                )
+                
+                # Check if bibtex generated a valid .bbl file
+                bbl_path = paper_path.with_suffix('.bbl')
+                if bbl_path.exists() and bbl_path.stat().st_size > 100:
+                    print(f"  ✓ bibtex generated bibliography ({bbl_path.stat().st_size} bytes)")
+                else:
+                    print(f"  ⚠ bibtex failed or produced empty output")
+                    if bibtex_result.stdout:
+                        print(f"    {bibtex_result.stdout[:300]}")
+                
+                # Second pdflatex run to incorporate bibliography
+                subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+                    cwd=paper_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False
+                )
+                
+                # Third pdflatex run to finalize cross-references
+                result = subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+                    cwd=paper_path.parent,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    check=False
+                )
+        
         # Check if PDF was generated
         pdf_path = paper_path.with_suffix('.pdf')
         
         if pdf_path.exists():
-            print(f" PDF generated successfully: {pdf_path.name}")
+            print(f"✓ PDF generated successfully: {pdf_path.name}")
             return True, pdf_path, ""
         else:
             # Get error details from log
@@ -3175,20 +3323,20 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
                 except Exception:
                     error_msg += " Could not read log file."
             
-            print(f" PDF generation failed: {error_msg}")
+            print(f"⚠ PDF generation failed: {error_msg}")
             return False, None, error_msg
         
     except subprocess.TimeoutExpired:
         error_msg = f"PDF generation timed out after {timeout} seconds"
-        print(f" {error_msg}")
+        print(f"⚠ {error_msg}")
         return False, None, error_msg
     except FileNotFoundError:
         error_msg = "pdflatex command not found. Please install a LaTeX distribution."
-        print(f" {error_msg}")
+        print(f"⚠ {error_msg}")
         return False, None, error_msg
     except Exception as e:
         error_msg = f"PDF generation error: {str(e)}"
-        print(f" {error_msg}")
+        print(f"⚠ {error_msg}")
         return False, None, error_msg
 
 def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
@@ -3935,6 +4083,129 @@ def run_workflow(
     print(f"\nQuality progression: {[f'{q:.2f}' for q in quality_history]}")
     print(f"Best quality score achieved: {best_quality_score:.2f}")
 
+    # FINAL PDF COMPILATION
+    # Always compile final PDF regardless of PDF review setting
+    print(f"\n{'='*80}")
+    print(f"FINAL PDF GENERATION")
+    print(f"{'='*80}")
+    print(f"Compiling final PDF from paper.tex...")
+    
+    current_tex = paper_path.read_text(encoding="utf-8", errors="ignore")
+    dynamic_timeout = _calculate_dynamic_timeout(current_tex, config)
+    
+    # Run pdflatex twice and bibtex for proper references
+    final_pdf_path = project_dir / "paper.pdf"
+    try:
+        import subprocess
+        print(f"  Running LaTeX compilation sequence (pdflatex → bibtex → pdflatex × 2)...")
+        
+        # Check if paper.tex uses filecontents to embed refs.bib
+        uses_filecontents = '\\begin{filecontents' in current_tex and 'refs.bib' in current_tex
+        
+        # Delete old refs.bib if paper uses filecontents (allows regeneration)
+        if uses_filecontents:
+            refs_file = project_dir / "refs.bib"
+            if refs_file.exists():
+                refs_file.unlink()  # Delete to force regeneration from filecontents
+                print(f"  Removed old refs.bib to regenerate from filecontents...")
+        
+        # First pdflatex run to generate .aux file (and regenerate refs.bib from filecontents)
+        print(f"  [1/4] First pdflatex run...")
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "paper.tex"],
+            cwd=project_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=dynamic_timeout,
+            check=False
+        )
+        
+        # Run bibtex if .aux file exists and contains citation data
+        aux_file = project_dir / "paper.aux"
+        if aux_file.exists():
+            aux_content = aux_file.read_text(encoding='utf-8', errors='ignore')
+            if '\\citation{' in aux_content or '\\bibdata{' in aux_content:
+                print(f"  [2/4] Running bibtex for bibliography...")
+                bibtex_result = subprocess.run(
+                    ["bibtex", "paper"],
+                    cwd=project_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=60,
+                    check=False,
+                    text=True
+                )
+                
+                # Check if bibtex generated a valid .bbl file
+                bbl_file = project_dir / "paper.bbl"
+                if bbl_file.exists() and bbl_file.stat().st_size > 100:
+                    print(f"        ✓ bibtex successful ({bbl_file.stat().st_size} bytes generated)")
+                else:
+                    print(f"        ⚠ bibtex failed or produced empty output!")
+                    print(f"        bibtex output: {bibtex_result.stdout[:400]}")
+                    if bibtex_result.stderr:
+                        print(f"        bibtex errors: {bibtex_result.stderr[:400]}")
+            else:
+                print(f"  [2/4] Skipping bibtex (no citations found)")
+        else:
+            print(f"  [2/4] Skipping bibtex (no .aux file)")
+        
+        # Second pdflatex run to incorporate bibliography
+        print(f"  [3/4] Second pdflatex run (incorporating references)...")
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "paper.tex"],
+            cwd=project_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=dynamic_timeout,
+            check=False
+        )
+        
+        # Third run to finalize cross-references
+        print(f"  [4/4] Third pdflatex run (finalizing)...")
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "paper.tex"],
+            cwd=project_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=dynamic_timeout,
+            check=False
+        )
+        
+        if final_pdf_path.exists():
+            file_size = final_pdf_path.stat().st_size
+            print(f"✓ Final PDF generated successfully: {final_pdf_path}")
+            print(f"  File size: {file_size:,} bytes")
+            
+            # Check for undefined references in log
+            log_file = project_dir / "paper.log"
+            if log_file.exists():
+                log_content = log_file.read_text(encoding='utf-8', errors='ignore')
+                undefined_refs = log_content.count('LaTeX Warning: Citation')
+                undefined_labels = log_content.count('LaTeX Warning: Reference')
+                if undefined_refs > 0 or undefined_labels > 0:
+                    print(f"  ⚠ Note: {undefined_refs} undefined citations, {undefined_labels} undefined references")
+                    print(f"     (This may indicate bibliography processing issues)")
+                else:
+                    print(f"  ✓ All citations and references resolved successfully")
+            
+            logger.info(f"Final PDF generated: {final_pdf_path} ({file_size:,} bytes)")
+        else:
+            print(f"⚠ PDF file not found after compilation")
+            logger.warning("Final PDF compilation did not produce output file")
+    except FileNotFoundError:
+        print(f"⚠ pdflatex not found - PDF compilation skipped")
+        print(f"  Install a LaTeX distribution (e.g., TeX Live, MiKTeX) to generate PDFs")
+        logger.warning("pdflatex not found - final PDF not generated")
+    except subprocess.TimeoutExpired:
+        print(f"⚠ PDF compilation timed out after {dynamic_timeout}s")
+        logger.warning(f"Final PDF compilation timed out ({dynamic_timeout}s)")
+    except Exception as e:
+        print(f"⚠ PDF compilation failed: {e}")
+        logger.error(f"Final PDF compilation error: {e}")
+    
+    print(f"{'='*80}\n")
+
     return project_dir
 
 def _calculate_quality_score(metrics: Dict[str, Any], issues: List[str]) -> float:
@@ -4230,12 +4501,23 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         print(f"Detected existing paper - Topic: {args.topic}, Field: {args.field}")
     elif not args.modify_existing:
         # Interactive prompts if missing and no existing paper (but NOT when modifying existing)
+        # These are used as input to the ideation phase, which will generate specific research ideas
+        print("\n" + "="*60)
+        print("RESEARCH AREA SETUP")
+        print("="*60)
+        print("The following inputs define the broad research area.")
+        print("The ideation system will generate specific research ideas from this.")
+        print("You can press Enter to use defaults and let ideation guide the research.")
+        print("-"*60)
+        
         if not getattr(args, 'topic', None):
-            args.topic = timeout_input("Topic:", timeout=30, default="Large Language Models").strip()
+            args.topic = timeout_input("Research area of interest:", timeout=30, default="Large Language Models").strip()
         if not getattr(args, 'field', None):
             args.field = timeout_input("Field:", timeout=30, default="Computer Science").strip()
         if not getattr(args, 'question', None):
-            args.question = timeout_input("Research question:", timeout=30, default="Find revolutionary, impactful, and practical methods?").strip()
+            args.question = timeout_input("General research direction:", timeout=30, default="Find revolutionary, impactful, and practical methods?").strip()
+        
+        print("="*60 + "\n")
     # If modify_existing is True but no existing metadata found, we'll use whatever args were provided
     
     return args

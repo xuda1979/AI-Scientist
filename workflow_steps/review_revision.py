@@ -37,6 +37,13 @@ def run_review_revision_step(
         pdf_path=pdf_path,
     )
     review, decision, file_changes = _parse_combined_response(combined_response, project_dir)
+    
+    # PRINT REVIEW FEEDBACK
+    print(f"\n{'='*80}")
+    print(f"REVIEW FEEDBACK - Iteration {iteration}")
+    print(f"{'='*80}")
+    print(review)
+    print(f"{'='*80}\n")
 
     original_content = paper_path.read_text(encoding="utf-8", errors="ignore") if output_diffs else None
 
@@ -50,6 +57,27 @@ def run_review_revision_step(
             if output_diffs and original_content is not None:
                 new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
                 _save_iteration_diff(original_content, new_content, project_dir, iteration, "paper.tex")
+                
+                # PRINT GIT-STYLE DIFF
+                print(f"\n{'='*80}")
+                print(f"GIT DIFF FOR ITERATION {iteration} - paper.tex")
+                print(f"{'='*80}")
+                import difflib
+                diff = difflib.unified_diff(
+                    original_content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile='a/paper.tex',
+                    tofile='b/paper.tex',
+                    lineterm=''
+                )
+                diff_text = ''.join(diff)
+                if len(diff_text) > 5000:
+                    print(diff_text[:2500])
+                    print(f"\n... (diff truncated, {len(diff_text)} total chars) ...\n")
+                    print(diff_text[-2500:])
+                else:
+                    print(diff_text)
+                print(f"{'='*80}\n")
     else:
         revised = _universal_chat(
             _revise_prompt(current_tex, sim_summary, review, latex_errors, project_dir, user_prompt, quality_issues),
@@ -83,6 +111,27 @@ def run_review_revision_step(
                     
                     if output_diffs and original_content is not None:
                         _save_iteration_diff(original_content, revised, project_dir, iteration, "paper.tex")
+                        
+                        # PRINT GIT-STYLE DIFF FOR FALLBACK
+                        print(f"\n{'='*80}")
+                        print(f"GIT DIFF FOR ITERATION {iteration} - paper.tex (FALLBACK REVISION)")
+                        print(f"{'='*80}")
+                        import difflib
+                        diff = difflib.unified_diff(
+                            original_content.splitlines(keepends=True),
+                            revised.splitlines(keepends=True),
+                            fromfile='a/paper.tex',
+                            tofile='b/paper.tex',
+                            lineterm=''
+                        )
+                        diff_text = ''.join(diff)
+                        if len(diff_text) > 5000:
+                            print(diff_text[:2500])
+                            print(f"\n... (diff truncated, {len(diff_text)} total chars) ...\n")
+                            print(diff_text[-2500:])
+                        else:
+                            print(diff_text)
+                        print(f"{'='*80}\n")
                 else:
                     print("❌ Fallback revision also rejected by content protection - keeping original content")
                     print("   This indicates the AI model is making unsafe changes. Manual review recommended.")
