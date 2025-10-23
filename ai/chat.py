@@ -20,6 +20,10 @@ except ImportError:
     GOOGLE_AI_AVAILABLE = False
 
 
+from core.openai_connection import OpenAIConnectionError, OpenAIConnectionManager
+
+_CONNECTION_MANAGER = OpenAIConnectionManager()
+
 RESPONSES_API_MODELS = {"gpt-5-pro"}
 
 
@@ -108,34 +112,83 @@ def _model_supports_vision(model: str) -> bool:
     return any(vm in model.lower() for vm in vision_models)
 
 
+def _is_auth_error(error: Exception) -> bool:
+    """Return True if the exception indicates an authentication problem."""
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if status in {401, 403}:
+        return True
+
+    status = getattr(error, "status_code", None)
+    if status in {401, 403}:
+        return True
+
+    message = str(error).lower()
+    indicators = [
+        "401",
+        "403",
+        "unauthorized",
+        "forbidden",
+        "invalid api key",
+        "authentication",
+    ]
+    return any(term in message for term in indicators)
+
+
+def _extract_total_tokens(response: Any) -> Optional[int]:
+    """Best-effort extraction of total token usage from an API response."""
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+
+    if usage is None:
+        return None
+
+    if isinstance(usage, dict):
+        for key in ("total_tokens", "total", "tokens"):
+            value = usage.get(key)
+            if isinstance(value, int):
+                return value
+        return None
+
+    for attr in ("total_tokens", "total", "tokens"):
+        value = getattr(usage, attr, None)
+        if isinstance(value, int):
+            return value
+
+    return None
+
+
 def _offline_response(prompt_type: str) -> str:
     """Provide offline fallback response."""
     return f"OFFLINE MODE: Unable to connect to AI service for {prompt_type} task. Please check your internet connection and API keys."
 
 
-def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, 
-                prompt_type: str = "general", fallback_models: Optional[List[str]] = None, 
+def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None,
+                prompt_type: str = "general", fallback_models: Optional[List[str]] = None,
                 pdf_path: Optional[Path] = None) -> str:
     """Chat with OpenAI models with vision support."""
-    import openai
-    
-    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    
+    try:
+        client = _CONNECTION_MANAGER.get_client()
+    except OpenAIConnectionError as exc:
+        raise RuntimeError(str(exc)) from exc
+
     # Handle PDF attachment for vision-capable models
     if pdf_path and _model_supports_vision(model):
         try:
             with open(pdf_path, "rb") as pdf_file:
                 base64_pdf = base64.b64encode(pdf_file.read()).decode('utf-8')
-            
+
             # Modify the last user message to include the PDF
             if messages and messages[-1]["role"] == "user":
                 messages[-1]["content"] = [
                     {"type": "text", "text": messages[-1]["content"]},
                     {"type": "image_url", "image_url": {"url": f"data:application/pdf;base64,{base64_pdf}"}}
                 ]
-        except Exception as e:
-            print(f"Warning: Failed to attach PDF to vision model: {e}")
-    
+        except Exception as exc:
+            print(f"Warning: Failed to attach PDF to vision model: {exc}")
+
+    endpoint = "chat.completions.create"
+
     try:
         normalized_model = model.lower()
 
@@ -147,6 +200,7 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                 )
 
             responses_timeout = request_timeout or 3600
+            endpoint = "responses.create"
             if hasattr(responses_client, "with_options"):
                 responses_client = responses_client.with_options(timeout=responses_timeout)
                 response = responses_client.create(
@@ -164,6 +218,8 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                     timeout=responses_timeout,
                 )
 
+            _CONNECTION_MANAGER.mark_valid()
+            _CONNECTION_MANAGER.log_usage(endpoint, tokens_used=_extract_total_tokens(response))
             return _extract_responses_text(response)
 
         response = client.chat.completions.create(
@@ -172,11 +228,17 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             temperature=1.0,
             timeout=request_timeout or 3600
         )
+        _CONNECTION_MANAGER.mark_valid()
+        _CONNECTION_MANAGER.log_usage(endpoint, tokens_used=_extract_total_tokens(response))
         return response.choices[0].message.content
-    
-    except Exception as e:
-        error_type, wait_time = _classify_error(e)
-        
+
+    except Exception as exc:
+        if _is_auth_error(exc):
+            _CONNECTION_MANAGER.mark_invalid()
+            raise RuntimeError("OpenAI authentication failed. Please reconnect with a valid API key.") from exc
+
+        error_type, wait_time = _classify_error(exc)
+
         if error_type == "rate_limit" and wait_time:
             print(f"Rate limit hit. Waiting {wait_time} seconds...")
             time.sleep(wait_time)
@@ -188,13 +250,18 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                     temperature=1.0,
                     timeout=request_timeout or 3600
                 )
+                _CONNECTION_MANAGER.mark_valid()
+                _CONNECTION_MANAGER.log_usage(endpoint, tokens_used=_extract_total_tokens(response))
                 return response.choices[0].message.content
-            except Exception as retry_e:
-                print(f"Retry failed: {retry_e}")
-                raise retry_e
-        
-        print(f"OpenAI API error with {model}: {e}")
-        raise e
+            except Exception as retry_exc:
+                if _is_auth_error(retry_exc):
+                    _CONNECTION_MANAGER.mark_invalid()
+                    raise RuntimeError("OpenAI authentication failed. Please reconnect with a valid API key.") from retry_exc
+                print(f"Retry failed: {retry_exc}")
+                raise retry_exc
+
+        print(f"OpenAI API error with {model}: {exc}")
+        raise exc
 
 
 def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None,

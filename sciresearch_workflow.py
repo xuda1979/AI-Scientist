@@ -42,6 +42,9 @@ from utils.content_protection import ContentProtector
 
 # Shared workflow configuration
 from core.config import WorkflowConfig
+from core.openai_connection import OpenAIConnectionError, OpenAIConnectionManager
+
+OPENAI_CONNECTION = OpenAIConnectionManager()
 
 # Workflow step modules
 from workflow_steps.initial_draft import generate_initial_draft
@@ -207,6 +210,44 @@ def _check_cancellation(cancel_event: Optional[threading.Event], stage: str = ""
         if stage:
             message += f" during {stage}"
         raise WorkflowCancelled(message)
+
+def _is_auth_error(error: Exception) -> bool:
+    """Determine whether an exception indicates an authentication failure."""
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if status in {401, 403}:
+        return True
+
+    status = getattr(error, "status_code", None)
+    if status in {401, 403}:
+        return True
+
+    message = str(error).lower()
+    return any(term in message for term in ["401", "403", "unauthorized", "forbidden", "invalid api key", "authentication"])
+
+
+def _extract_total_tokens(response: Any) -> Optional[int]:
+    """Best effort extraction of token usage from an OpenAI response."""
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+
+    if usage is None:
+        return None
+
+    if isinstance(usage, dict):
+        for key in ("total_tokens", "total", "tokens"):
+            value = usage.get(key)
+            if isinstance(value, int):
+                return value
+        return None
+
+    for attr in ("total_tokens", "total", "tokens"):
+        value = getattr(usage, attr, None)
+        if isinstance(value, int):
+            return value
+
+    return None
+
 
 def _classify_error(error: Exception) -> Tuple[str, Optional[int]]:
     """Classify error and return error type and recommended wait time"""
@@ -398,59 +439,47 @@ def _convert_messages_to_responses_input(messages: List[Dict[str, Any]]) -> List
 def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, request_timeout: int, prompt_type: str, pdf_path: Optional[Path] = None, max_retries: int = 3) -> str:
     """
     Try a specific OpenAI model with intelligent retry logic and optional PDF support.
-    
-    Args:
-        messages: List of chat messages
-        model: OpenAI model to use
-        temp: Temperature for generation
-        request_timeout: Request timeout in seconds
-        prompt_type: Type of prompt
-        pdf_path: Optional PDF file to include
-        max_retries: Maximum number of retry attempts
     """
-    
+
     for attempt in range(max_retries):
         try:
-            # Newer SDK
-            from openai import OpenAI
-            client = OpenAI()
-            
-            # Process messages to include PDF if provided
+            client = OPENAI_CONNECTION.get_client()
+        except OpenAIConnectionError as exc:
+            raise APIError(str(exc)) from exc
+
+        try:
             processed_messages = messages.copy()
-            
-            # Add PDF to the last user message if provided and model supports vision
+
             if False and pdf_path and pdf_path.exists() and _model_supports_vision(model):  # PDF upload disabled
                 try:
-                    # For now, we'll add a note about the PDF but not include the binary data
-                    # OpenAI's vision models typically work better with images than PDFs
-                    # In the future, this could be enhanced to convert PDF to images
-                    
-                    # Find the last user message and add PDF notice
                     for i in range(len(processed_messages) - 1, -1, -1):
                         if processed_messages[i]["role"] == "user":
-                            # Add note about PDF availability
                             original_content = processed_messages[i]["content"]
-                            processed_messages[i]["content"] = f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}, {pdf_path.stat().st_size // 1024} KB) has been generated and is available for reference. Please provide feedback as if you can see the rendered document layout, figure placement, and visual formatting.**"
+                            processed_messages[i]["content"] = (
+                                f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}, {pdf_path.stat().st_size // 1024} KB) has been generated and is available for reference. Please provide feedback as if you can see the rendered document layout, figure placement, and visual formatting.**"
+                            )
                             break
-                    
+
                     print(f" PDF reference added to request: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
-                    
+
                 except Exception as pdf_error:
                     print(f"WARNING: Failed to process PDF reference: {pdf_error}")
                     print("Continuing with text-only request...")
-            
+
             elif False and pdf_path and pdf_path.exists() and not _model_supports_vision(model):  # PDF upload disabled
                 print(f"INFO: Model {model} does not support vision input. Adding PDF reference note...")
-                # Even for non-vision models, we can mention that a PDF was generated
                 for i in range(len(processed_messages) - 1, -1, -1):
                     if processed_messages[i]["role"] == "user":
                         original_content = processed_messages[i]["content"]
-                        processed_messages[i]["content"] = f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}) has been generated successfully, indicating that the LaTeX compiles properly and produces a readable document.**"
+                        processed_messages[i]["content"] = (
+                                f"{original_content}\n\n**Note: A PDF version of the paper ({pdf_path.name}) has been generated successfully, indicating that the LaTeX compiles properly and produces a readable document.**"
+                            )
                         break
-            
-            # Use configured temperature based on prompt type
+
             print(f"Sending request with temperature={temp}, timeout={request_timeout}s (attempt {attempt + 1}/{max_retries})...")
-            
+
+            endpoint = "chat.completions.create"
+
             if model.lower() in RESPONSES_API_MODELS:
                 responses_client = getattr(client, "responses", None)
                 if responses_client is None:
@@ -459,6 +488,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     )
 
                 responses_timeout = request_timeout or 3600
+                endpoint = "responses.create"
                 if hasattr(responses_client, "with_options"):
                     responses_client = responses_client.with_options(timeout=responses_timeout)
                     resp = responses_client.create(
@@ -474,6 +504,8 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                         timeout=responses_timeout,
                     )
                 print("INFO: API call successful (Responses API).")
+                OPENAI_CONNECTION.mark_valid()
+                OPENAI_CONNECTION.log_usage(endpoint, tokens_used=_extract_total_tokens(resp))
                 return _extract_responses_text(resp)
             else:
                 completion_kwargs: Dict[str, Any] = {
@@ -489,20 +521,24 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
 
                 resp = client.chat.completions.create(**completion_kwargs)
                 print("INFO: API call successful.")
+                OPENAI_CONNECTION.mark_valid()
+                OPENAI_CONNECTION.log_usage(endpoint, tokens_used=_extract_total_tokens(resp))
                 return resp.choices[0].message.content
-            
+
         except KeyboardInterrupt:
             print("ERROR: User interrupted the process.")
             raise
         except Exception as e:
+            if _is_auth_error(e):
+                OPENAI_CONNECTION.mark_invalid()
+                raise APIError("OpenAI authentication failed. Please reconnect with a valid API key.") from e
+
             error_type, wait_time = _classify_error(e)
             print(f"WARNING: API Error (attempt {attempt + 1}): {e} (Type: {error_type})")
-            
-            # Don't retry for certain error types
+
             if wait_time is None:
                 raise e
-            
-            # Only retry for retryable errors and if we have attempts left
+
             if attempt < max_retries - 1 and wait_time is not None:
                 print(f"INFO: Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
