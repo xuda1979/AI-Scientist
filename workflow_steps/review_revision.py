@@ -145,3 +145,51 @@ def run_review_revision_step(
                     _save_iteration_diff(original_content, revised, project_dir, iteration, "paper.tex")
 
     return review, decision
+
+
+def run_optimized_review_revision_step(
+    comprehensive_prompt: str,
+    project_dir: Path,
+    user_prompt: Optional[str],
+    iteration: int,
+    model: str,
+    request_timeout: int,
+    config,
+    pdf_path: Optional[Path],
+    output_diffs: bool,
+    paper_path: Path,
+) -> Tuple[str, str]:
+    """Run the optimized single-call review and revision routine."""
+
+    from sciresearch_workflow import (
+        _universal_chat,
+        _parse_combined_response,
+        _apply_file_changes,
+        _save_iteration_diff,
+    )
+
+    response = _universal_chat(
+        comprehensive_prompt,
+        model=model,
+        request_timeout=request_timeout,
+        prompt_type="optimized_review_revision",
+        fallback_models=getattr(config, "fallback_models", []),
+        pdf_path=pdf_path,
+    )
+
+    review, decision, file_changes = _parse_combined_response(response, project_dir)
+
+    original_content = paper_path.read_text(encoding="utf-8", errors="ignore") if output_diffs else None
+
+    if file_changes:
+        changes_applied = _apply_file_changes(file_changes, project_dir, config)
+        if changes_applied and output_diffs and original_content is not None:
+            new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
+            _save_iteration_diff(original_content, new_content, project_dir, iteration, "paper.tex")
+    else:
+        print(
+            "⚠ Optimized review did not include file changes."
+            " Consider running the standard revision pipeline."
+        )
+
+    return review, decision
