@@ -5,6 +5,7 @@ import contextlib
 import logging
 import queue
 import threading
+import webbrowser
 from io import TextIOBase
 from pathlib import Path
 from typing import Dict, Optional
@@ -14,6 +15,10 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from core.config import WorkflowConfig
+from core.openai_connection import (
+    OpenAIConnectionError,
+    get_shared_connection_manager,
+)
 from document_types import get_available_document_types
 from sciresearch_workflow import (
     DEFAULT_MODEL,
@@ -75,8 +80,17 @@ class WorkflowGUI(tk.Tk):
         self.status_var = tk.StringVar(value="Idle")
         self.vars: Dict[str, tk.Variable] = {}
 
+        self.connection_manager = get_shared_connection_manager()
+        self.openai_status_var = tk.StringVar(value="Status: Disconnected")
+        self.openai_details_var = tk.StringVar(value="Connect your OpenAI API key to run the workflow.")
+        self.openai_status_label: Optional[ttk.Label] = None
+        self.openai_details_label: Optional[ttk.Label] = None
+        self.openai_disconnect_button: Optional[ttk.Button] = None
+        self._openai_status = "disconnected"
+
         self._build_ui()
         self._bind_shortcuts()
+        self._refresh_openai_status()
         self._update_run_button_state()
         self._poll_queue()
 
@@ -102,6 +116,7 @@ class WorkflowGUI(tk.Tk):
         form_frame.columnconfigure(0, weight=1)
         form_frame.columnconfigure(1, weight=1)
 
+        self._build_openai_frame(left_column)
         self._build_project_frame(left_column)
         self._build_execution_frame(left_column)
         self._build_quality_frame(right_column)
@@ -133,6 +148,147 @@ class WorkflowGUI(tk.Tk):
         self.cancel_button.pack(side=tk.RIGHT, padx=(0, 8))
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _build_openai_frame(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="OpenAI Connection", padding=8)
+        frame.pack(fill=tk.X, expand=False, pady=(0, 12))
+
+        self.openai_status_label = ttk.Label(frame, textvariable=self.openai_status_var)
+        self.openai_status_label.grid(row=0, column=0, columnspan=2, sticky=tk.W)
+
+        self.openai_details_label = ttk.Label(frame, textvariable=self.openai_details_var, wraplength=320, foreground="#555555")
+        self.openai_details_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(2, 8))
+
+        connect_btn = ttk.Button(frame, text="Connect OpenAI…", command=self._open_openai_dialog)
+        connect_btn.grid(row=2, column=0, sticky=tk.W)
+
+        self.openai_disconnect_button = ttk.Button(frame, text="Disconnect", command=self._disconnect_openai)
+        self.openai_disconnect_button.grid(row=2, column=1, sticky=tk.W, padx=(8, 0))
+
+        ttk.Label(frame, text="We validate your key with OpenAI and store it encrypted at rest.").grid(
+            row=3, column=0, columnspan=2, sticky=tk.W, pady=(8, 0)
+        )
+
+        revoke_label = ttk.Label(
+            frame,
+            text="You can delete this key anytime; we only use it to proxy your requests.",
+            wraplength=320,
+        )
+        revoke_label.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(2, 0))
+
+    def _open_openai_dialog(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Connect OpenAI")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        ttk.Label(
+            dialog,
+            text="Paste your personal OpenAI API key. We validate it immediately and store it encrypted.",
+            wraplength=360,
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=12, pady=(12, 8))
+
+        key_var = tk.StringVar()
+        ttk.Label(dialog, text="OpenAI API key").grid(row=1, column=0, sticky=tk.W, padx=12)
+        entry = ttk.Entry(dialog, textvariable=key_var, show="*")
+        entry.grid(row=1, column=1, sticky="ew", padx=12)
+        dialog.columnconfigure(1, weight=1)
+
+        def open_docs(*_: object) -> None:
+            webbrowser.open_new_tab("https://platform.openai.com/account/api-keys")
+
+        link = ttk.Label(dialog, text="Create or manage keys", foreground="#1a73e8", cursor="hand2")
+        link.grid(row=2, column=1, sticky=tk.W, padx=12, pady=(0, 8))
+        link.bind("<Button-1>", open_docs)
+
+        ttk.Label(
+            dialog,
+            text="You can delete this key anytime; we only use it to proxy your requests.",
+            wraplength=360,
+        ).grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=12, pady=(0, 12))
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(row=4, column=0, columnspan=2, sticky=tk.EW, padx=12, pady=(0, 12))
+        button_frame.columnconfigure((0, 1), weight=1)
+
+        def submit() -> None:
+            api_key = key_var.get().strip()
+            if not api_key:
+                messagebox.showerror("Missing key", "Enter your OpenAI API key before connecting.", parent=dialog)
+                return
+            try:
+                self.connection_manager.connect(api_key)
+            except OpenAIConnectionError as exc:
+                messagebox.showerror("Connection failed", str(exc), parent=dialog)
+                return
+            else:
+                messagebox.showinfo("Connected", "OpenAI API key validated and stored securely.", parent=dialog)
+            dialog.destroy()
+            self._refresh_openai_status()
+
+        def cancel() -> None:
+            dialog.destroy()
+
+        ttk.Button(button_frame, text="Cancel", command=cancel).grid(row=0, column=0, sticky=tk.E, padx=(0, 8))
+        ttk.Button(button_frame, text="Connect", command=submit).grid(row=0, column=1, sticky=tk.E)
+
+        entry.focus_set()
+        dialog.bind("<Return>", lambda event: submit())
+        dialog.bind("<Escape>", lambda event: cancel())
+
+    def _disconnect_openai(self) -> None:
+        if not self.connection_manager.is_connected():
+            return
+        if not messagebox.askyesno(
+            "Disconnect OpenAI",
+            "Remove the stored API key? You can reconnect at any time.",
+            parent=self,
+        ):
+            return
+        try:
+            self.connection_manager.disconnect()
+        except OpenAIConnectionError as exc:
+            messagebox.showerror("Error", str(exc), parent=self)
+            return
+        messagebox.showinfo("Disconnected", "OpenAI API key removed from this device.", parent=self)
+        self._refresh_openai_status()
+
+    def _refresh_openai_status(self) -> None:
+        status = self.connection_manager.get_status()
+        status_value = status.get("status", "disconnected")
+        self._openai_status = status_value
+
+        if status_value == "disconnected":
+            self.openai_status_var.set("Status: Disconnected")
+            self.openai_details_var.set("Connect your OpenAI API key to run the workflow.")
+            disconnect_state = tk.DISABLED
+            status_color = ""
+        else:
+            display_status = status_value.replace("_", " ").title()
+            last4 = status.get("last4") or "----"
+            created = status.get("created_at")
+            last_used = status.get("last_used") or "Never"
+            details = []
+            if created:
+                details.append(f"Added: {created}")
+            details.append(f"Last used: {last_used}")
+            model_count = status.get("model_count")
+            if model_count:
+                details.append(f"Models available: {model_count}")
+            self.openai_status_var.set(f"Status: {display_status} (••••{last4})")
+            self.openai_details_var.set(" • ".join(details))
+            disconnect_state = tk.NORMAL
+            status_color = "#d12f2f" if status_value == "invalid" else ""
+
+        if self.openai_status_label is not None and status_color is not None:
+            if status_color:
+                self.openai_status_label.configure(foreground=status_color)
+            else:
+                self.openai_status_label.configure(foreground="")
+        if self.openai_disconnect_button is not None:
+            self.openai_disconnect_button.configure(state=disconnect_state)
+        self._update_run_button_state()
 
     def _build_project_frame(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="Project Details", padding=8)
@@ -341,6 +497,8 @@ class WorkflowGUI(tk.Tk):
             )
 
         state = tk.NORMAL if required_ready and not self.running else tk.DISABLED
+        if self._openai_status != "valid":
+            state = tk.DISABLED
         self.run_button.configure(state=state)
         self.cancel_button.configure(state=tk.NORMAL if self.running else tk.DISABLED)
 
@@ -377,6 +535,13 @@ class WorkflowGUI(tk.Tk):
             messagebox.showerror(
                 "Missing information",
                 "Please provide the following before starting the workflow:\n- " + "\n- ".join(missing),
+                parent=self,
+            )
+            return False
+        if self._openai_status != "valid":
+            messagebox.showerror(
+                "Connect OpenAI",
+                "Please connect a valid OpenAI API key before running the workflow.",
                 parent=self,
             )
             return False
@@ -572,7 +737,7 @@ class WorkflowGUI(tk.Tk):
             self.status_var.set("Idle")
         self.cancel_event = None
         self.worker_thread = None
-        self._update_run_button_state()
+        self._refresh_openai_status()
 
     def _on_close(self) -> None:
         if self.running:
