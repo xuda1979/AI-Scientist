@@ -20,9 +20,12 @@ except ImportError:
     GOOGLE_AI_AVAILABLE = False
 
 
-from core.openai_connection import OpenAIConnectionError, OpenAIConnectionManager
+from core.openai_connection import (
+    OpenAIConnectionError,
+    get_shared_connection_manager,
+)
 
-_CONNECTION_MANAGER = OpenAIConnectionManager()
+_CONNECTION_MANAGER = get_shared_connection_manager()
 
 RESPONSES_API_MODELS = {"gpt-5-pro"}
 

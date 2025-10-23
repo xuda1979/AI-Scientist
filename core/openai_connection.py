@@ -10,6 +10,7 @@ from .key_vault import ApiKeyVaultError, LocalApiKeyVault
 __all__ = [
     "OpenAIConnectionError",
     "OpenAIConnectionManager",
+    "get_shared_connection_manager",
 ]
 
 
@@ -139,3 +140,15 @@ class OpenAIConnectionManager:
         if model_count is not None:
             metadata["model_count"] = str(model_count)
         return metadata
+
+
+_SHARED_MANAGER: Optional[OpenAIConnectionManager] = None
+
+
+def get_shared_connection_manager() -> OpenAIConnectionManager:
+    """Return a process-wide :class:`OpenAIConnectionManager` instance."""
+
+    global _SHARED_MANAGER
+    if _SHARED_MANAGER is None:
+        _SHARED_MANAGER = OpenAIConnectionManager()
+    return _SHARED_MANAGER

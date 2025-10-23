@@ -15,7 +15,10 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from core.config import WorkflowConfig
-from core.openai_connection import OpenAIConnectionError, OpenAIConnectionManager
+from core.openai_connection import (
+    OpenAIConnectionError,
+    get_shared_connection_manager,
+)
 from document_types import get_available_document_types
 from sciresearch_workflow import (
     DEFAULT_MODEL,
@@ -77,7 +80,7 @@ class WorkflowGUI(tk.Tk):
         self.status_var = tk.StringVar(value="Idle")
         self.vars: Dict[str, tk.Variable] = {}
 
-        self.connection_manager = OpenAIConnectionManager()
+        self.connection_manager = get_shared_connection_manager()
         self.openai_status_var = tk.StringVar(value="Status: Disconnected")
         self.openai_details_var = tk.StringVar(value="Connect your OpenAI API key to run the workflow.")
         self.openai_status_label: Optional[ttk.Label] = None

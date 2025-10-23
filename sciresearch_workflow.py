@@ -42,9 +42,12 @@ from utils.content_protection import ContentProtector
 
 # Shared workflow configuration
 from core.config import WorkflowConfig
-from core.openai_connection import OpenAIConnectionError, OpenAIConnectionManager
+from core.openai_connection import (
+    OpenAIConnectionError,
+    get_shared_connection_manager,
+)
 
-OPENAI_CONNECTION = OpenAIConnectionManager()
+OPENAI_CONNECTION = get_shared_connection_manager()
 
 # Workflow step modules
 from workflow_steps.initial_draft import generate_initial_draft
