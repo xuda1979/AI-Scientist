@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import List, Dict, Optional, Any
 from pathlib import Path
+from textwrap import dedent
 
 logger = logging.getLogger(__name__)
 
@@ -225,54 +226,58 @@ class AIChat:
         if isinstance(messages, list) and messages:
             content = messages[0].get("content", "")
             if "ideation" in content.lower():
-                return """## IDEATION ANALYSIS
+                return dedent(
+                    """
+                    ## IDEATION ANALYSIS
 
-This placeholder response demonstrates the structure of an ideation and drafting reply
-when the language model API is unavailable. Replace the bracketed sections below with
-domain-specific insight once live model access is restored.
+                    This placeholder response demonstrates the structure of an ideation and drafting reply
+                    when the language model API is unavailable. Replace the bracketed sections below with
+                    domain-specific insight once live model access is restored.
 
-### Research Idea Options
-1. **Idea A**: [Summarize a potential direction and why it might matter.]
-2. **Idea B**: [Describe an alternative approach highlighting a distinct methodology.]
-3. **Idea C**: [Outline a complementary avenue or comparative baseline study.]
+                    ### Research Idea Options
+                    1. **Idea A**: [Summarize a potential direction and why it might matter.]
+                    2. **Idea B**: [Describe an alternative approach highlighting a distinct methodology.]
+                    3. **Idea C**: [Outline a complementary avenue or comparative baseline study.]
 
-### SELECTED RESEARCH DIRECTION
-**Title**: [Placeholder title for the preferred idea]
-**Rationale**: [Brief justification describing novelty, impact, and feasibility.]
+                    ### SELECTED RESEARCH DIRECTION
+                    **Title**: [Placeholder title for the preferred idea]
+                    **Rationale**: [Brief justification describing novelty, impact, and feasibility.]
 
-## COMPLETE LATEX PAPER
-```latex
-\documentclass{article}
-\usepackage{amsmath}
+                    ## COMPLETE LATEX PAPER
+                    ```latex
+                    \\documentclass{article}
+                    \\usepackage{amsmath}
 
-\begin{document}
-\title{Placeholder Research Manuscript}
-\author{Automated Workflow}
-\maketitle
+                    \\begin{document}
+                    \\title{Placeholder Research Manuscript}
+                    \\author{Automated Workflow}
+                    \\maketitle
 
-\begin{abstract}
-This placeholder manuscript illustrates the expected paper structure produced by the
-workflow when model calls succeed. Replace this text with a concise summary of the
-actual study, including the problem statement, approach, and primary findings.
-\end{abstract}
+                    \\begin{abstract}
+                    This placeholder manuscript illustrates the expected paper structure produced by the
+                    workflow when model calls succeed. Replace this text with a concise summary of the
+                    actual study, including the problem statement, approach, and primary findings.
+                    \\end{abstract}
 
-\section{Introduction}
-[Introduce the broad research problem, motivate its importance, and summarise key
-contributions without referencing any specific prior paper.]
+                    \\section{Introduction}
+                    [Introduce the broad research problem, motivate its importance, and summarise key
+                    contributions without referencing any specific prior paper.]
 
-\section{Methodology}
-[Outline the general methodology, experimental setup, or theoretical framework that the
-final paper should contain once generated.]
+                    \\section{Methodology}
+                    [Outline the general methodology, experimental setup, or theoretical framework that the
+                    final paper should contain once generated.]
 
-\section{Results}
-[Describe the types of results, evaluations, or analyses that will support the claims in
-the completed manuscript.]
+                    \\section{Results}
+                    [Describe the types of results, evaluations, or analyses that will support the claims in
+                    the completed manuscript.]
 
-\section{Conclusion}
-[Summarise anticipated takeaways and future work directions in a domain-agnostic manner.]
+                    \\section{Conclusion}
+                    [Summarise anticipated takeaways and future work directions in a domain-agnostic manner.]
 
-\end{document}
-```"""
+                    \\end{document}
+                    ```
+                    """
+                ).strip()
             else:
                 return (
                     "Structured placeholder response for research paper refinement. "
