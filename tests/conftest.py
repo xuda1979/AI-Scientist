@@ -9,11 +9,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = PROJECT_ROOT / "src"
 
 project_root_str = str(PROJECT_ROOT)
-if project_root_str not in sys.path:
-    sys.path.insert(0, project_root_str)
+if project_root_str in sys.path:
+    sys.path.remove(project_root_str)
+sys.path.insert(0, project_root_str)
 
 src_path_str = str(SRC_PATH)
-if SRC_PATH.exists() and src_path_str not in sys.path:
+if SRC_PATH.exists():
+    if src_path_str in sys.path:
+        sys.path.remove(src_path_str)
+
     try:
         project_index = sys.path.index(project_root_str)
     except ValueError:
