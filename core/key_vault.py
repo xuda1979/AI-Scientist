@@ -69,7 +69,9 @@ class LocalApiKeyVault:
             master_key = self._load_or_create_master_key()
         self._fernet = Fernet(master_key)
         self._state: Dict[str, Dict[str, str]] = {}
-        self._load_state()
+        self._last_loaded_mtime: float = 0.0
+        with self._lock:
+            self._load_state_locked()
 
     # ------------------------------------------------------------------
     # Public API
@@ -85,6 +87,7 @@ class LocalApiKeyVault:
         encrypted_key = self._fernet.encrypt(api_key.encode("utf-8")).decode("utf-8")
 
         with self._lock:
+            self._refresh_state_locked()
             record = self._state.get(user_id)
             created_at = record.get("created_at") if record else now
             record_data = {
@@ -104,6 +107,7 @@ class LocalApiKeyVault:
     def retrieve_key(self, user_id: str) -> Optional[str]:
         """Return the decrypted API key for the user."""
         with self._lock:
+            self._refresh_state_locked()
             record = self._state.get(user_id)
             if not record:
                 return None
@@ -119,6 +123,7 @@ class LocalApiKeyVault:
     def delete_key(self, user_id: str) -> None:
         """Remove a stored key and metadata for the user."""
         with self._lock:
+            self._refresh_state_locked()
             if user_id in self._state:
                 del self._state[user_id]
                 self._persist_state()
@@ -126,6 +131,7 @@ class LocalApiKeyVault:
     def get_record(self, user_id: str) -> Optional[ApiKeyRecord]:
         """Return the full record for a user (including encrypted key)."""
         with self._lock:
+            self._refresh_state_locked()
             record = self._state.get(user_id)
             if not record:
                 return None
@@ -134,6 +140,7 @@ class LocalApiKeyVault:
     def update_status(self, user_id: str, status: str) -> Optional[ApiKeyRecord]:
         """Update the stored status for a user and return the new record."""
         with self._lock:
+            self._refresh_state_locked()
             record = self._state.get(user_id)
             if not record:
                 return None
@@ -145,6 +152,7 @@ class LocalApiKeyVault:
     def mark_used(self, user_id: str) -> Optional[ApiKeyRecord]:
         """Update the last-used timestamp for the stored key."""
         with self._lock:
+            self._refresh_state_locked()
             record = self._state.get(user_id)
             if not record:
                 return None
@@ -168,9 +176,10 @@ class LocalApiKeyVault:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _load_state(self) -> None:
+    def _load_state_locked(self) -> None:
         if not self._vault_path.exists():
             self._state = {}
+            self._last_loaded_mtime = 0.0
             return
         try:
             with self._vault_path.open("r", encoding="utf-8") as handle:
@@ -179,6 +188,7 @@ class LocalApiKeyVault:
             raise ApiKeyVaultError("Vault file is corrupted") from exc
         records = payload.get("records", {})
         self._state = {user_id: data for user_id, data in records.items()}
+        self._last_loaded_mtime = self._get_vault_mtime()
 
     def _persist_state(self) -> None:
         payload = {"records": self._state}
@@ -186,6 +196,24 @@ class LocalApiKeyVault:
         with tmp_path.open("w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
         os.replace(tmp_path, self._vault_path)
+        self._last_loaded_mtime = self._get_vault_mtime()
+
+    def _refresh_state_locked(self) -> None:
+        if not self._vault_path.exists():
+            if self._state:
+                self._state = {}
+            self._last_loaded_mtime = 0.0
+            return
+
+        current_mtime = self._get_vault_mtime()
+        if current_mtime > self._last_loaded_mtime:
+            self._load_state_locked()
+
+    def _get_vault_mtime(self) -> float:
+        try:
+            return self._vault_path.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
 
     def _load_or_create_master_key(self) -> bytes:
         if self._master_key_path.exists():
