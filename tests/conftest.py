@@ -14,7 +14,13 @@ if project_root_str not in sys.path:
 
 src_path_str = str(SRC_PATH)
 if SRC_PATH.exists() and src_path_str not in sys.path:
-    sys.path.append(src_path_str)
+    try:
+        project_index = sys.path.index(project_root_str)
+    except ValueError:
+        project_index = -1
+
+    insert_at = project_index + 1 if project_index >= 0 else 0
+    sys.path.insert(insert_at, src_path_str)
 
 existing = sys.modules.get("core")
 if existing is not None:
