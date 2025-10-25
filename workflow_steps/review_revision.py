@@ -36,7 +36,56 @@ def run_review_revision_step(
         fallback_models=config.fallback_models,
         pdf_path=pdf_path,
     )
+    
+    # CRITICAL: Check for response truncation before processing
+    from utils.response_validator import detect_response_truncation, estimate_paper_completeness
+    
+    is_truncated, truncation_issues = detect_response_truncation(combined_response, expected_type="latex")
+    
+    if is_truncated:
+        print(f"\n{'!'*80}")
+        print(f"⚠ WARNING: AI RESPONSE APPEARS TRUNCATED!")
+        print(f"{'!'*80}")
+        print(f"Detected {len(truncation_issues)} truncation indicators:")
+        for issue in truncation_issues:
+            print(f"  - {issue}")
+        print(f"\nResponse length: {len(combined_response):,} characters")
+        print(f"This may result in an incomplete or damaged paper!")
+        print(f"{'!'*80}\n")
+    
     review, decision, file_changes = _parse_combined_response(combined_response, project_dir)
+    
+    # CRITICAL: Validate paper completeness if paper.tex was modified
+    if file_changes and 'paper.tex' in file_changes:
+        from utils.response_validator import validate_paper_structure, estimate_paper_completeness
+        
+        new_paper_content = file_changes['paper.tex']
+        if isinstance(new_paper_content, list):
+            new_paper_content = '\n'.join(new_paper_content)
+        
+        completeness_score = estimate_paper_completeness(new_paper_content)
+        is_complete, missing_sections = validate_paper_structure(new_paper_content)
+        
+        if completeness_score < 0.5:
+            print(f"\n{'!'*80}")
+            print(f"🚨 CRITICAL ERROR: PAPER IS SEVERELY INCOMPLETE!")
+            print(f"{'!'*80}")
+            print(f"Completeness score: {completeness_score*100:.1f}%")
+            print(f"Missing sections: {', '.join(missing_sections) if missing_sections else 'Unknown'}")
+            print(f"Paper length: {len(new_paper_content):,} characters")
+            print(f"\nTHIS IS A DISASTROUS TRUNCATION - REVISION REJECTED!")
+            print(f"The AI response was cut off before completing the paper.")
+            print(f"{'!'*80}\n")
+            # Clear file_changes to prevent applying incomplete content
+            file_changes = None
+        elif not is_complete:
+            print(f"\n{'='*80}")
+            print(f"⚠ WARNING: Paper structure incomplete!")
+            print(f"{'='*80}")
+            print(f"Completeness score: {completeness_score*100:.1f}%")
+            print(f"Missing sections: {', '.join(missing_sections)}")
+            print(f"Proceeding with caution...")
+            print(f"{'='*80}\n")
     
     # PRINT REVIEW FEEDBACK
     print(f"\n{'='*80}")
