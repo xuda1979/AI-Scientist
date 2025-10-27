@@ -17,8 +17,13 @@ def run_review_revision_step(
     output_diffs: bool,
     paper_path: Path,
     quality_issues: Optional[list] = None,
+    is_initial_draft: bool = False,
 ) -> Tuple[str, str]:
-    """Run combined review and revision step."""
+    """Run combined review and revision step.
+    
+    Args:
+        is_initial_draft: If True, request full paper content; if False, request diffs only
+    """
     from sciresearch_workflow import (
         _combined_review_edit_revise_prompt,
         _universal_chat,
@@ -128,8 +133,15 @@ def run_review_revision_step(
                     print(diff_text)
                 print(f"{'='*80}\n")
     else:
+        # Determine diff mode: Use full content for initial draft, diffs for subsequent revisions
+        use_diff_mode = not is_initial_draft
+        
         revised = _universal_chat(
-            _revise_prompt(current_tex, sim_summary, review, latex_errors, project_dir, user_prompt, quality_issues),
+            _revise_prompt(
+                current_tex, sim_summary, review, latex_errors, project_dir, user_prompt, quality_issues,
+                enable_quality_enhancements=getattr(config, 'enable_quality_enhancements', True),
+                use_diff_mode=use_diff_mode
+            ),
             model=model,
             request_timeout=request_timeout,
             prompt_type="revise",
@@ -137,6 +149,39 @@ def run_review_revision_step(
             pdf_path=pdf_path,
         )
         if revised.strip():
+            # DIFF DETECTION AND APPLICATION
+            # If LLM returned a diff instead of full content, apply it to current files
+            from utils.diff_utils import is_diff_format, apply_diffs_to_files
+            
+            if use_diff_mode and is_diff_format(revised):
+                print(f"    Diff format detected in revision response, applying patches...")
+                
+                # Prepare file contents dictionary
+                file_contents = {'paper.tex': current_tex}
+                
+                # Add simulation.py if it exists
+                sim_path = project_dir / "simulation.py"
+                if sim_path.exists():
+                    file_contents['simulation.py'] = sim_path.read_text(encoding='utf-8', errors='ignore')
+                
+                # Apply diffs to all files
+                modified_files, success, msg = apply_diffs_to_files(file_contents, revised)
+                
+                if success and 'paper.tex' in modified_files:
+                    revised = modified_files['paper.tex']
+                    print(f"    ✓ Diff applied to paper.tex: {msg}")
+                    
+                    # Apply simulation.py changes if present
+                    if 'simulation.py' in modified_files:
+                        sim_path.write_text(modified_files['simulation.py'], encoding='utf-8')
+                        print(f"    ✓ Applied diff to simulation.py")
+                else:
+                    print(f"    ⚠ Diff application failed: {msg}")
+                    print(f"    Falling back to treating response as full content")
+                    # Keep revised as-is (treat as full content for paper.tex)
+            elif use_diff_mode:
+                print(f"    ⚠ Expected diff format but got full content, using as-is")
+            
             # Apply content protection to fallback revision
             from utils.content_protection import ContentProtector
             
