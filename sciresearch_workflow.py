@@ -497,13 +497,13 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     resp = responses_client.create(
                         model=model,
                         input=_convert_messages_to_responses_input(processed_messages),
-                        max_output_tokens=16000,  # Increased from 4000 for longer papers
+                        # No max_output_tokens limit - let model generate full response
                     )
                 else:
                     resp = responses_client.create(
                         model=model,
                         input=_convert_messages_to_responses_input(processed_messages),
-                        max_output_tokens=16000,  # Increased from 4000 for longer papers
+                        # No max_output_tokens limit - let model generate full response
                         timeout=responses_timeout,
                     )
                 print("INFO: API call successful (Responses API).")
@@ -517,10 +517,11 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                     "timeout": request_timeout,
                 }
                 if model.startswith("gpt-5") or model.startswith("o1"):
-                    completion_kwargs["max_completion_tokens"] = 4000
+                    # No token limit for gpt-5 and o1 models - allow full paper generation
+                    pass
                 else:
                     completion_kwargs["temperature"] = temp
-                    completion_kwargs["max_tokens"] = 4000
+                    # No max_tokens limit - let model generate full response
 
                 resp = client.chat.completions.create(**completion_kwargs)
                 print("INFO: API call successful.")
@@ -1752,6 +1753,7 @@ def _generate_best_revision_candidate(
     candidate_count: int = 3,
     output_diffs: bool = False,
     pdf_path: Optional[Path] = None,
+    is_initial_draft: bool = False,
 ) -> str:
     """
     Generate multiple revision candidates and select the best one using test-time compute scaling.
@@ -1767,6 +1769,7 @@ def _generate_best_revision_candidate(
         request_timeout: Request timeout
         config: Configuration object
         candidate_count: Number of revision candidates to generate
+        is_initial_draft: If True, generate full paper; if False, generate diffs only
     
     Returns:
         Best revision candidate based on quality metrics
@@ -1786,33 +1789,43 @@ def _generate_best_revision_candidate(
         start_time = time.time()
         
         try:
+            # Determine whether to use diff mode:
+            # - Initial draft (no existing .tex): Request FULL paper content
+            # - Subsequent revisions (existing .tex): Request ONLY diffs
+            use_diff_mode = not is_initial_draft
+            
             # Create varied revision prompts to encourage diversity
-            base_prompt = _revise_prompt(current_tex, sim_summary, review_text, latex_errors, project_dir, user_prompt, enable_quality_enhancements=config.enable_quality_enhancements)
+            base_prompt = _revise_prompt(
+                current_tex, sim_summary, review_text, latex_errors, 
+                project_dir, user_prompt, 
+                enable_quality_enhancements=config.enable_quality_enhancements, 
+                use_diff_mode=use_diff_mode
+            )
             
             # Add MUCH MORE AGGRESSIVE variation instructions to force different approaches
             if i > 0:
                 variation_instructions = [
-                    "\n\nIMPORTANT: You MUST make SUBSTANTIAL changes. Rewrite at least 30% of the content. Add new sections, expand existing ones, change technical approaches, improve mathematical rigor.",
-                    "\n\nCRITICAL: Focus on MAJOR restructuring. Reorganize sections, add missing methodology details, enhance experimental validation. Make this version significantly different from the original.",
-                    "\n\nESSENTIAL: Prioritize COMPREHENSIVE improvements. Add new theoretical foundations, expand results discussion, include additional related work. Transform the paper substantially.",
-                    "\n\nREQUIRED: Concentrate on FUNDAMENTAL enhancements. Strengthen mathematical formulations, add implementation details, improve practical applications. Create a markedly different version.",
-                    "\n\nMANDATORY: Focus on EXTENSIVE modifications. Rewrite abstract and conclusion, add new figures/tables concepts, enhance technical depth throughout. Generate a substantially revised paper."
+                    "\n\nIMPORTANT: You MUST make SUBSTANTIAL changes. Add new sections, expand existing ones, improve mathematical rigor.",
+                    "\n\nCRITICAL: Focus on MAJOR improvements. Add missing methodology details, enhance experimental validation.",
+                    "\n\nESSENTIAL: Prioritize COMPREHENSIVE improvements. Add new theoretical foundations, expand results discussion.",
+                    "\n\nREQUIRED: Concentrate on FUNDAMENTAL enhancements. Strengthen mathematical formulations, add implementation details.",
+                    "\n\nMANDATORY: Focus on EXTENSIVE modifications. Enhance technical depth throughout, add new figures/tables concepts."
                 ]
                 
                 variation = variation_instructions[(i - 1) % len(variation_instructions)]
                 
-                # Add variation to the system prompt with higher temperature equivalent instructions
+                # Add variation to the system prompt
                 varied_prompt = base_prompt.copy()
                 varied_prompt[0]["content"] += variation
                 
-                # Also modify the user prompt to be more aggressive
+                # Also modify the user prompt
                 if len(varied_prompt) > 1:
                     varied_prompt[1]["content"] += f"\n\nVariation {i}: " + variation
             else:
                 varied_prompt = base_prompt
             
-            # Generate revision candidate with increased temperature-equivalent randomness
-            candidate = _universal_chat(
+            # Generate revision candidate (will be a diff in diff mode)
+            candidate_response = _universal_chat(
                 varied_prompt, 
                 model=model, 
                 request_timeout=request_timeout, 
@@ -1821,6 +1834,30 @@ def _generate_best_revision_candidate(
             )
             
             generation_time = time.time() - start_time
+            
+            # Apply diff if in diff mode, otherwise use full content
+            if use_diff_mode:
+                # DIFF MODE: Parse and apply diffs to existing paper
+                from utils.diff_utils import is_diff_format, apply_diff_to_content
+                
+                if is_diff_format(candidate_response):
+                    print(f"       Candidate {i + 1}: Diff format detected, applying patch...")
+                    revised_content, success, msg = apply_diff_to_content(current_tex, candidate_response)
+                    if success:
+                        candidate = revised_content
+                        print(f"       ✓ Diff applied successfully: {msg}")
+                    else:
+                        print(f"       ⚠ Diff application failed: {msg}, using original")
+                        candidate = current_tex  # Fallback to original if diff fails
+                else:
+                    # Fallback: If no diff detected in diff mode, assume full content
+                    print(f"       ⚠ Expected diff format but got full content, using as-is")
+                    candidate = candidate_response
+            else:
+                # FULL CONTENT MODE: Initial draft, use complete paper
+                print(f"       Candidate {i + 1}: Full paper content (initial draft)")
+                candidate = candidate_response
+            
             candidates.append(candidate)
             generation_times.append(generation_time)
             
@@ -2435,7 +2472,7 @@ def _initial_draft_prompt(
     user_content = messages[1]["content"].strip()
 
     global_requirements = dedent(
-        """
+        r"""
         GLOBAL WORKFLOW REQUIREMENTS:
         - Produce a single self-contained LaTeX document that compiles with pdflatex without manual fixes.
         - Embed the complete bibliography using ``\begin{filecontents*}{refs.bib}`` at the top of the file and reference it with ``\bibliography{refs}`` or provide an inline ``thebibliography`` block.
@@ -2646,7 +2683,18 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "- Single file structure with embedded references\n"
         "- Real simulation data usage (no fake numbers)\n"
         "- Reproducible results documentation\n"
-        "- CRITICAL: Tables/figures positioned contextually in relevant subsections (NOT forced to page tops)\n\n"
+        "- CRITICAL: Tables/figures positioned contextually in relevant subsections (NOT forced to page tops)\n"
+        "- EXPERIMENTAL RIGOR: Validation on real-world benchmarks, assumption testing, complexity analysis\n\n"
+        
+        "🔬 EXPERIMENTAL RIGOR CHECKLIST:\n"
+        "Critical issues that lead to paper rejection:\n"
+        "1. ❌ Synthetic-only evaluation → ✓ Add real-world benchmark validation\n"
+        "2. ❌ Unvalidated assumptions → ✓ Include ablation studies testing assumptions empirically\n"
+        "3. ❌ Missing complexity analysis → ✓ Provide Big-O notation and measure overhead\n"
+        "4. ❌ Too many algorithms (>5) without depth → ✓ Focus on 2-4 with comprehensive evaluation\n"
+        "5. ❌ Ignoring calibration issues → ✓ Acknowledge LLM miscalibration, measure ECE/Brier\n"
+        "6. ❌ Weak statistical rigor → ✓ Multiple runs, confidence intervals, significance tests\n"
+        "7. ❌ Hiding limitations → ✓ Honest discussion of when method fails\n\n"
         
         "REVISION OUTPUT FORMAT:\n"
         "Always provide complete revised file contents in this exact format:\n\n"
@@ -2885,6 +2933,42 @@ def _apply_file_changes(file_changes: dict, project_dir: Path, config=None) -> b
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(content, encoding='utf-8')
                 
+                # Validate LaTeX completeness after writing
+                try:
+                    from utils.latex_validator import validate_latex_document, auto_fix_common_issues
+                    
+                    is_valid, issues = validate_latex_document(content, file_path)
+                    
+                    if not is_valid:
+                        critical_issues = [i for i in issues if i.startswith("CRITICAL")]
+                        print(f"  ⚠ LaTeX validation found {len(critical_issues)} critical issue(s):")
+                        for issue in critical_issues[:5]:  # Show first 5
+                            print(f"    - {issue}")
+                        
+                        # Attempt auto-fix
+                        print(f"  → Attempting automatic fixes...")
+                        fixed_content, fixes = auto_fix_common_issues(content)
+                        
+                        if fixes:
+                            # Re-validate
+                            is_valid_after, _ = validate_latex_document(fixed_content, file_path)
+                            if is_valid_after:
+                                file_path.write_text(fixed_content, encoding='utf-8')
+                                print(f"  ✓ Auto-fixed {len(fixes)} issue(s)")
+                                for fix in fixes:
+                                    print(f"    - {fix}")
+                            else:
+                                print(f"  ⚠ Auto-fix applied but validation still fails")
+                        else:
+                            print(f"  ⚠ No automatic fixes available")
+                    else:
+                        print(f"  ✓ LaTeX validation passed")
+                        
+                except ImportError:
+                    pass  # Validator not available, skip validation
+                except Exception as e:
+                    logger.warning(f"LaTeX validation error: {e}")
+                
                 # Log the successful change
                 change_percent = analysis.word_count_change_percent
                 print(f"✓ Updated {filename}: {analysis.old_metrics.word_count:,} → {analysis.new_metrics.word_count:,} words ({change_percent:+.1f}%)")
@@ -3119,6 +3203,51 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- APPROPRIATE STRUCTURE: Paper organization must match the research type and field standards\n"
         "- FIGURE/TABLE PLACEMENT: All figures and tables must be placed either inline where cited or at document end before references - NEVER after or between references\n"
         
+        "🔬 EXPERIMENTAL RIGOR REQUIREMENTS (CRITICAL FOR PUBLICATION):\n"
+        "Reviewers at top venues expect rigorous experimental validation. Check for these common weaknesses:\n\n"
+        
+        "1. SYNTHETIC-ONLY EVALUATION WEAKNESS:\n"
+        "   - Papers relying entirely on synthetic/toy datasets will be rejected\n"
+        "   - MUST include real-world benchmark evaluation (e.g., ImageNet, GLUE, WikiText, standard datasets)\n"
+        "   - Synthetic experiments are acceptable as preliminary analysis but NOT as sole validation\n"
+        "   - Limitations section must acknowledge if using synthetic data and discuss real-world applicability\n\n"
+        
+        "2. UNVALIDATED ASSUMPTIONS:\n"
+        "   - Papers making critical assumptions (e.g., submodularity, monotonicity, independence) MUST validate them\n"
+        "   - Require ablation studies testing whether assumptions hold empirically\n"
+        "   - Discuss scenarios where assumptions may break (e.g., 'Eureka moments' violating diminishing returns)\n"
+        "   - If assumptions are theoretical, provide empirical evidence or acknowledge as limitation\n\n"
+        
+        "3. MISSING COMPLEXITY ANALYSIS:\n"
+        "   - ALL proposed algorithms MUST include complexity analysis (Big-O notation for time/space)\n"
+        "   - Empirical overhead measurements required (runtime, latency, wall-clock time comparisons)\n"
+        "   - If proposing metareasoning/scheduling, measure the scheduler's own computational cost\n"
+        "   - Low-latency applications require detailed overhead breakdown\n\n"
+        
+        "4. ALGORITHM DENSITY (OVERWHELMING SCOPE):\n"
+        "   - Proposing >5 algorithms in one paper suggests insufficient depth\n"
+        "   - EACH algorithm should have: theoretical analysis + empirical validation + ablation study\n"
+        "   - If presenting many methods: either reduce to 2-4 core ones OR frame as survey/framework\n"
+        "   - Algorithms without empirical validation should be moved to appendix or future work\n\n"
+        
+        "5. CALIBRATION AND SELF-EVALUATION:\n"
+        "   - If using LLM confidence/self-evaluation, MUST acknowledge calibration challenges\n"
+        "   - LLMs are poorly calibrated - this is a known issue requiring discussion\n"
+        "   - Should measure calibration quality (ECE, calibration curves, Brier score)\n"
+        "   - If method relies on accurate confidence estimates, show they are reliable or discuss robustness\n\n"
+        
+        "6. STATISTICAL RIGOR:\n"
+        "   - Report mean, standard deviation, and confidence intervals\n"
+        "   - Multiple random seeds/runs required for stochastic methods\n"
+        "   - Statistical significance tests when comparing methods\n"
+        "   - Avoid cherry-picking results - show full distribution\n\n"
+        
+        "7. HONEST LIMITATIONS:\n"
+        "   - Discuss when methods may fail or perform poorly\n"
+        "   - Acknowledge gaps between synthetic and real-world performance\n"
+        "   - Identify scenarios where assumptions don't hold\n"
+        "   - Future work should address real limitations, not generic extensions\n\n"
+        
         "Provide specific, actionable feedback with concrete suggestions for improvement. "
         "If the paper violates any of the 12 mandatory requirements, mark it as needing major revision. "
         "Pay special attention to reference authenticity, results documentation, figure generation, filename removal, structural appropriateness, and figure/table placement relative to references."
@@ -3180,6 +3309,9 @@ def _editor_prompt(review_text: str, iteration_count: int, user_prompt: Optional
 def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple[bool, str]:
     """Compile LaTeX file with full bibliography support and return success status and error log."""
     try:
+        # Initialize error log variable
+        error_log = ""
+        
         # Check if paper.tex uses filecontents to embed refs.bib
         paper_content = paper_path.read_text(encoding='utf-8', errors='ignore')
         uses_filecontents = '\\begin{filecontents' in paper_content and 'refs.bib' in paper_content
@@ -3246,18 +3378,21 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
         pdf_path = paper_path.with_suffix('.pdf')
         success = pdf_path.exists()
         
-        # Get last 20 lines of log file
+        # Get last 20 lines of log file and combine with any bibtex warnings
         log_path = paper_path.with_suffix('.log')
-        error_log = ""
+        latex_log = ""
         if log_path.exists():
             try:
                 with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                     lines = f.readlines()
-                    error_log = ''.join(lines[-20:])  # Last 20 lines
+                    latex_log = ''.join(lines[-20:])  # Last 20 lines
             except Exception:
-                error_log = "Could not read log file"
+                latex_log = "Could not read log file"
         
-        return success, error_log
+        # Combine bibtex warnings (if any) with LaTeX log
+        final_error_log = error_log + "\n" + latex_log if error_log else latex_log
+        
+        return success, final_error_log
         
     except subprocess.TimeoutExpired:
         return False, f"LaTeX compilation timed out after {timeout} seconds"
@@ -3378,10 +3513,25 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
         print(f"⚠ {error_msg}")
         return False, None, error_msg
 
-def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
+def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None, enable_quality_enhancements: bool = True, use_diff_mode: bool = True) -> List[Dict[str, str]]:
+    """
+    Generate revision prompt.
+    
+    Args:
+        use_diff_mode: If True, request unified diff output instead of full paper (DEFAULT: True for efficiency)
+                      If False, request complete revised paper (legacy behavior, causes truncation)
+    """
+    
+    if use_diff_mode:
+        # DIFF MODE: Request only changes (efficient, no truncation)
+        output_instruction = "OUTPUT FORMAT: Provide a unified diff (patch) showing ONLY the changes needed, not the complete paper."
+    else:
+        # FULL MODE: Request complete paper (legacy, can cause truncation with long papers)
+        output_instruction = "OUTPUT FORMAT: Produce a COMPLETE revised LaTeX file."
+    
     sys_prompt = (
-        "You are the paper author making revisions based on peer review. Your goal is to address ALL reviewer concerns "
-        "while maintaining scientific integrity and clarity. Produce a COMPLETE revised LaTeX file.\n\n"
+        f"You are the paper author making revisions based on peer review. Your goal is to address ALL reviewer concerns "
+        f"while maintaining scientific integrity and clarity. {output_instruction}\n\n"
         
         "🔒 CRITICAL CONTENT PRESERVATION REQUIREMENTS:\n"
         "- NEVER delete entire sections, subsections, or substantial content blocks\n"
@@ -3549,7 +3699,53 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "11. CRITICAL: Ensure all figures and tables are placed either inline where cited or at document end before references\n"
         "12. CRITICAL: Prevent any figures/tables from appearing after or between references\n"
         "13. Improve clarity and presentation quality\n"
-        "14. Ensure reproducibility and code quality\n\n"
+        "14. Ensure reproducibility and code quality\n"
+        "15. ADDRESS EXPERIMENTAL RIGOR ISSUES (see requirements below)\n\n"
+        
+        "🔬 EXPERIMENTAL RIGOR REQUIREMENTS (MANDATORY FOR PUBLICATION):\n"
+        "Address these common weaknesses that lead to paper rejection:\n\n"
+        
+        "1. AVOID SYNTHETIC-ONLY EVALUATION:\n"
+        "   - ADD real-world benchmark experiments alongside synthetic ones\n"
+        "   - Use standard datasets: ImageNet, CIFAR, GLUE, SQuAD, WikiText, Penn Treebank, etc.\n"
+        "   - If only synthetic: acknowledge limitation and discuss real-world applicability concerns\n"
+        "   - Show method works beyond idealized controlled settings\n\n"
+        
+        "2. VALIDATE YOUR ASSUMPTIONS:\n"
+        "   - For each critical assumption (submodularity, monotonicity, etc.), ADD validation experiments\n"
+        "   - Include ablation studies testing whether assumptions hold in practice\n"
+        "   - DISCUSS scenarios where assumptions may break (e.g., sudden breakthroughs vs. diminishing returns)\n"
+        "   - Show empirical evidence or acknowledge as limitation\n\n"
+        
+        "3. ADD COMPLEXITY ANALYSIS:\n"
+        "   - Provide Big-O notation for time and space complexity of ALL algorithms\n"
+        "   - Measure empirical overhead: runtime, latency, wall-clock time vs. baselines\n"
+        "   - If using metareasoning/scheduling, measure the scheduler's own computational cost\n"
+        "   - Critical for low-latency applications - show method is practical\n\n"
+        
+        "4. REDUCE ALGORITHM DENSITY OR INCREASE DEPTH:\n"
+        "   - If proposing >5 algorithms: either reduce to 2-4 core methods OR move others to appendix\n"
+        "   - EVERY algorithm needs: theoretical analysis + empirical validation + ablation study\n"
+        "   - Provide comprehensive evaluation, not shallow coverage of many methods\n"
+        "   - Consider focusing paper scope for deeper analysis\n\n"
+        
+        "5. ADDRESS CALIBRATION CHALLENGES:\n"
+        "   - If using LLM confidence/self-evaluation, ACKNOWLEDGE that LLMs are poorly calibrated\n"
+        "   - Measure calibration quality: ECE, calibration curves, Brier score\n"
+        "   - Discuss robustness to miscalibration or describe calibration techniques used\n"
+        "   - Show method works even with imperfect confidence estimates\n\n"
+        
+        "6. ENSURE STATISTICAL RIGOR:\n"
+        "   - Report mean ± standard deviation across multiple runs\n"
+        "   - Use multiple random seeds for stochastic methods\n"
+        "   - Include statistical significance tests (t-tests, Wilcoxon, etc.)\n"
+        "   - Confidence intervals for key metrics\n\n"
+        
+        "7. PROVIDE HONEST LIMITATIONS:\n"
+        "   - Discuss when your method fails or underperforms\n"
+        "   - Acknowledge gaps between synthetic and real-world settings\n"
+        "   - Identify scenarios where assumptions don't hold\n"
+        "   - Be transparent about scope and applicability\n\n"
         
         "FORMATTING REQUIREMENTS (CRITICAL - NO EXCEPTIONS):\n"
         "- ALL content: use width=\\linewidth constraints (never exceed page width)\n"
@@ -3655,10 +3851,16 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
             "----- END COMPILATION STATUS -----\n\n"
         )
     
-    user += (
-        "Return ONLY the complete revised LaTeX file. CRITICAL: Apply proper size constraints to ALL figures, tables, and diagrams. "
-        "Ensure the paper is self-contained with embedded references and compiles without errors."
-    )
+    if use_diff_mode:
+        # Add diff format instructions
+        from utils.diff_utils import create_diff_prompt_suffix
+        user += create_diff_prompt_suffix()
+    else:
+        # Legacy full paper mode
+        user += (
+            "Return ONLY the complete revised LaTeX file. CRITICAL: Apply proper size constraints to ALL figures, tables, and diagrams. "
+            "Ensure the paper is self-contained with embedded references and compiles without errors."
+        )
     
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
 
@@ -4020,6 +4222,25 @@ def run_workflow(
             fig_issues = _validate_figure_generation(current_tex, sim_path, project_dir)
             quality_issues.extend(fig_issues)
         
+        # EXPERIMENTAL RIGOR VALIDATION
+        from utils.experimental_rigor_validator import validate_experimental_rigor
+        rigor_critical, rigor_warnings = validate_experimental_rigor(
+            current_tex,
+            sim_summary,
+            project_dir=project_dir
+        )
+        
+        # Add critical experimental rigor issues to quality issues
+        quality_issues.extend(rigor_critical)
+        
+        # Log rigor warnings separately
+        if rigor_warnings:
+            print(f"⚠ Experimental rigor warnings ({len(rigor_warnings)} total):")
+            for idx, warning in enumerate(rigor_warnings[:5], 1):
+                print(f"   {idx}. {warning}")
+            if len(rigor_warnings) > 5:
+                print(f"   ... and {len(rigor_warnings) - 5} more warnings")
+        
         if quality_issues:
             print(f"⚠ Quality issues detected ({len(quality_issues)} total):")
             for idx, issue in enumerate(quality_issues[:10], 1):  # Show first 10 issues
@@ -4093,6 +4314,7 @@ def run_workflow(
             output_diffs,
             paper_path,
             quality_issues,
+            is_initial_draft=False,  # Always use diff mode during revision iterations
         )
 
         _check_cancellation(cancel_event, f"iteration {i} post-review")
@@ -4230,8 +4452,43 @@ def run_workflow(
             
             logger.info(f"Final PDF generated: {final_pdf_path} ({file_size:,} bytes)")
         else:
-            print(f"⚠ PDF file not found after compilation")
-            logger.warning("Final PDF compilation did not produce output file")
+            print(f"⚠ PDF file not found after compilation - attempting error recovery...")
+            logger.warning("Final PDF compilation did not produce output file - attempting recovery")
+            
+            # Attempt automatic error recovery
+            try:
+                from utils.latex_error_recovery import recover_from_compilation_failure
+                
+                success, fixes_applied = recover_from_compilation_failure(paper_path, max_attempts=2)
+                
+                if success and fixes_applied:
+                    print(f"  ✓ Applied {len(fixes_applied)} automatic fixes:")
+                    for fix in fixes_applied:
+                        print(f"    - {fix}")
+                    
+                    # Retry compilation
+                    print(f"  → Retrying PDF compilation...")
+                    subprocess.run(
+                        ["pdflatex", "-interaction=nonstopmode", "paper.tex"],
+                        cwd=project_dir,
+                        capture_output=True,
+                        timeout=dynamic_timeout,
+                        check=False
+                    )
+                    
+                    if final_pdf_path.exists():
+                        print(f"  ✓ PDF generated successfully after auto-fix!")
+                        logger.info(f"PDF generated after error recovery: {fixes_applied}")
+                    else:
+                        print(f"  ⚠ Auto-fix applied but PDF still not generated")
+                        print(f"     Check {project_dir / 'paper.log'} for details")
+                else:
+                    print(f"  ⚠ No automatic fixes available - manual intervention required")
+                    print(f"     Check {project_dir / 'paper.log'} for error details")
+            except ImportError:
+                logger.warning("Error recovery module not available")
+            except Exception as e:
+                logger.error(f"Error recovery failed: {e}")
     except FileNotFoundError:
         print(f"⚠ pdflatex not found - PDF compilation skipped")
         print(f"  Install a LaTeX distribution (e.g., TeX Live, MiKTeX) to generate PDFs")
