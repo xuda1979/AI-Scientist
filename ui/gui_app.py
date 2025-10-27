@@ -23,9 +23,8 @@ from document_types import get_available_document_types
 from sciresearch_workflow import (
     DEFAULT_MODEL,
     WorkflowCancelled,
-    run_workflow,
-    test_time_compute_scaling,
 )
+from workflow_wrapper import run_from_gui
 
 
 class QueueWriter(TextIOBase):
@@ -327,21 +326,22 @@ class WorkflowGUI(tk.Tk):
         self._add_check(frame, "Disable Early Stopping", "no_early_stopping", default=False, row=3)
         self._add_check(frame, "Modify Existing Project", "modify_existing", default=False, row=4)
         self._add_check(frame, "Enforce Single Files", "strict_singletons", default=True, row=5)
-        self._add_entry(frame, "Python Executable", "python_exec", row=6)
+        self._add_check(frame, "Disable Blueprint Planning", "disable_blueprint_planning", default=False, row=6)
+        self._add_entry(frame, "Python Executable", "python_exec", row=7)
 
-        ttk.Label(frame, text="Config File").grid(row=7, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frame, text="Config File").grid(row=8, column=0, sticky=tk.W, pady=4)
         config_var = tk.StringVar()
         self.vars["config_path"] = config_var
         config_entry = ttk.Entry(frame, textvariable=config_var)
-        config_entry.grid(row=7, column=1, sticky="ew", pady=4)
-        ttk.Button(frame, text="Browse", command=lambda: self._browse_file(config_var)).grid(row=7, column=2, sticky=tk.W, padx=(6, 0))
+        config_entry.grid(row=8, column=1, sticky="ew", pady=4)
+        ttk.Button(frame, text="Browse", command=lambda: self._browse_file(config_var)).grid(row=8, column=2, sticky=tk.W, padx=(6, 0))
 
-        ttk.Label(frame, text="Save Config To").grid(row=8, column=0, sticky=tk.W, pady=4)
+        ttk.Label(frame, text="Save Config To").grid(row=9, column=0, sticky=tk.W, pady=4)
         save_var = tk.StringVar()
         self.vars["save_config_path"] = save_var
         save_entry = ttk.Entry(frame, textvariable=save_var)
-        save_entry.grid(row=8, column=1, sticky="ew", pady=4)
-        ttk.Button(frame, text="Choose", command=lambda: self._browse_save_file(save_var)).grid(row=8, column=2, sticky=tk.W, padx=(6, 0))
+        save_entry.grid(row=9, column=1, sticky="ew", pady=4)
+        ttk.Button(frame, text="Choose", command=lambda: self._browse_save_file(save_var)).grid(row=9, column=2, sticky=tk.W, padx=(6, 0))
 
         frame.columnconfigure(1, weight=1)
 
@@ -568,6 +568,7 @@ class WorkflowGUI(tk.Tk):
             "no_early_stopping": bool(self.vars["no_early_stopping"].get()),
             "modify_existing": bool(self.vars["modify_existing"].get()),
             "strict_singletons": bool(self.vars["strict_singletons"].get()),
+            "disable_blueprint_planning": bool(self.vars["disable_blueprint_planning"].get()),
             "python_exec": self.vars["python_exec"].get().strip() or None,
             "config_path": self.vars["config_path"].get().strip() or None,
             "save_config_path": self.vars["save_config_path"].get().strip() or None,
@@ -636,65 +637,9 @@ class WorkflowGUI(tk.Tk):
         self.worker_result = "completed"
         try:
             with contextlib.redirect_stdout(queue_writer), contextlib.redirect_stderr(queue_writer):
-                config = self._prepare_config(params)
-
-                save_path = params.get("save_config_path")
-                if save_path:
-                    config.save_to_file(Path(save_path))
-                    self.log_queue.put(f"Configuration saved to {save_path}.\n")
-                    self.worker_result = "completed"
-                    return
-
-                if params.get("test_scaling"):
-                    candidate_text = params.get("scaling_candidates", "") or ""
-                    try:
-                        candidates = [int(value.strip()) for value in str(candidate_text).split(",") if value.strip()]
-                    except ValueError as exc:
-                        raise ValueError(f"Invalid scaling candidates: {candidate_text}") from exc
-                    if not candidates:
-                        raise ValueError("At least one scaling candidate is required when test scaling is enabled.")
-
-                    self.log_queue.put("Running test-time compute scaling analysis...\n")
-                    result = test_time_compute_scaling(
-                        model=str(params["model"] or DEFAULT_MODEL),
-                        test_prompt=params.get("scaling_prompt"),
-                        candidate_counts=candidates,
-                        timeout_base=int(params["scaling_timeout"]),
-                    )
-                    if result:
-                        self.log_queue.put("Test-time compute scaling completed successfully.\n")
-                    else:
-                        self.worker_result = "failed"
-                        self.log_queue.put("Test-time compute scaling failed.\n")
-                    return
-
-                output_dir = Path(str(params["output_dir"]))
-                user_prompt = str(params.get("user_prompt", ""))
-
-                result_dir = run_workflow(
-                    topic=str(params["topic"] or ""),
-                    field=str(params["field"] or ""),
-                    question=str(params["question"] or ""),
-                    output_dir=output_dir,
-                    model=str(params["model"] or DEFAULT_MODEL),
-                    request_timeout=(None if int(params["request_timeout"]) == 0 else int(params["request_timeout"])),
-                    max_retries=int(params["max_retries"]),
-                    max_iterations=int(params["max_iterations"]),
-                    modify_existing=bool(params["modify_existing"]),
-                    strict_singletons=bool(params["strict_singletons"]),
-                    python_exec=params.get("python_exec"),
-                    quality_threshold=float(params["quality_threshold"]),
-                    check_references=config.reference_validation,
-                    validate_figures=config.figure_validation,
-                    user_prompt=user_prompt,
-                    config=config,
-                    enable_ideation=config.research_ideation,
-                    specify_idea=params.get("specify_idea"),
-                    num_ideas=int(params["num_ideas"]),
-                    output_diffs=config.diff_output_tracking,
-                    document_type=str(params["document_type"]),
-                    cancel_event=self.cancel_event,
-                )
+                # Use the unified workflow wrapper - this ensures GUI automatically
+                # inherits any changes made to the command-line workflow
+                result_dir = run_from_gui(params, cancel_event=self.cancel_event)
                 self.log_queue.put(f"Workflow completed. Results stored in: {result_dir}\n")
         except WorkflowCancelled as exc:
             self.worker_result = "cancelled"

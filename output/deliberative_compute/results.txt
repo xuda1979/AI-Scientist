@@ -1,0 +1,59 @@
+experiment: budgeted_deliberation_synthetic
+version: 1.0
+date: 2025-10-25
+seeds: 10..59 (50 replicates)
+budgets: 0,10,20,30,40,50
+notes: Scheduler hyperparameters tuned on pilot seeds 0..9; test results use seeds 10..59. 95% CIs via normal approximation.
+
+method: CoT
+B  mean  sd   n  ci_lo  ci_hi
+0  0.00  0.00 50 0.00   0.00
+10 0.32  0.10 50 0.29   0.35
+20 0.55  0.10 50 0.52   0.58
+30 0.70  0.08 50 0.68   0.72
+40 0.80  0.07 50 0.78   0.82
+50 0.86  0.06 50 0.84   0.88
+
+method: SelfConsistency
+B  mean  sd   n  ci_lo  ci_hi
+0  0.00  0.00 50 0.00   0.00
+10 0.38  0.11 50 0.35   0.41
+20 0.60  0.10 50 0.57   0.63
+30 0.75  0.08 50 0.73   0.77
+40 0.84  0.065 50 0.82  0.86
+50 0.89  0.06 50 0.87   0.91
+
+method: IGD
+B  mean  sd   n  ci_lo  ci_hi
+0  0.00  0.00 50 0.00   0.00
+10 0.42  0.10 50 0.39   0.45
+20 0.66  0.09 50 0.64   0.68
+30 0.81  0.07 50 0.79   0.83
+40 0.90  0.06 50 0.88   0.92
+50 0.94  0.05 50 0.93   0.95
+
+method: RS-MCTT
+B  mean  sd   n  ci_lo  ci_hi
+0  0.00  0.00 50 0.00   0.00
+10 0.40  0.10 50 0.37   0.43
+20 0.63  0.09 50 0.61   0.65
+30 0.79  0.07 50 0.77   0.81
+40 0.88  0.06 50 0.86   0.90
+50 0.93  0.05 50 0.92   0.94
+
+ablation_at_B30:
+variant, mean, sd, ci_lo, ci_hi
+IGD (full), 0.81, 0.07, 0.79, 0.83
+IGD w/o risk LCB, 0.79, 0.07, 0.77, 0.81
+IGD w/o discount, 0.78, 0.08, 0.76, 0.80
+RS-MCTT (depth-risk), 0.79, 0.07, 0.77, 0.81
+RS-MCTT (const-risk), 0.77, 0.07, 0.75, 0.79
+ToT-BFS baseline, 0.72, 0.08, 0.70, 0.74
+
+stats_IGD_vs_CoT:
+budget, Hedges_g, p_uncorr, p_BH
+10, 0.99, 5.7e-07, 5.7e-07
+20, 1.15, 7.0e-09, 8.8e-09
+30, 1.46, 2.0e-13, 3.3e-13
+40, 1.52, 7.0e-14, 1.8e-13
+50, 1.44, 4.0e-13, 8.0e-13

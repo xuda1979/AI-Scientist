@@ -1,0 +1,65 @@
+{
+  "query": "Pricing AI Adoption in China: Firm-Level Productivity, Profitability, and Expected Returns | Construct firm-level AI adoption measures for Chinese listed companies using patents, job postings, and supplier disclosures, and estimate their effects on TFP, ROIC, and margins v | Economics Pricing AI Adoption in China: Firm-Level Productivity, Profitability, and Expected Returns",
+  "field": "Economics",
+  "novelty_score": 0.558,
+  "diagnostics": "max similarity 0.59, avg similarity 0.41, recent overlap penalty 0.00",
+  "timestamp": "2025-10-16T12:50:47",
+  "retrieved_works": [
+    {
+      "title": "Resurrecting the Size Effect: Firm Size, Profitability Shocks, and Expected Stock Returns",
+      "url": "https://doi.org/10.2139/ssrn.1343280",
+      "year": 2009,
+      "doi": "10.2139/ssrn.1343280",
+      "similarity": 0.5921787709497207,
+      "source": "crossref"
+    },
+    {
+      "title": "Figure\u00a02.16. Digital adoption leads to higher firm level productivity",
+      "url": "https://doi.org/10.1787/888934194029",
+      "year": null,
+      "doi": "10.1787/888934194029",
+      "similarity": 0.5031446540880503,
+      "source": "crossref"
+    },
+    {
+      "title": "Expected profitability and the cross-section of stock returns",
+      "url": "https://doi.org/10.1016/j.econlet.2019.108547",
+      "year": 2019,
+      "doi": "10.1016/j.econlet.2019.108547",
+      "similarity": 0.422360248447205,
+      "source": "crossref"
+    },
+    {
+      "title": "Suppliers\u2019 AI adoption and customers\u2019 carbon emissions: firm-level evidence from China",
+      "url": "https://doi.org/10.1080/00036846.2025.2482246",
+      "year": 2025,
+      "doi": "10.1080/00036846.2025.2482246",
+      "similarity": 0.3978494623655914,
+      "source": "crossref"
+    },
+    {
+      "title": "Productivity Growth and Stock Returns: Firm- and Aggregate-Level Analyses",
+      "url": "https://doi.org/10.3386/w19462",
+      "year": 2013,
+      "doi": "10.3386/w19462",
+      "similarity": 0.36809815950920244,
+      "source": "crossref"
+    },
+    {
+      "title": "Review of: \"AI Adoption and Firm Demand for Workers and Skills: Insights from Online Job Postings\"",
+      "url": "https://doi.org/10.32388/zp9rd9",
+      "year": 2024,
+      "doi": "10.32388/zp9rd9",
+      "similarity": 0.302158273381295,
+      "source": "crossref"
+    },
+    {
+      "title": "The Relation between Expected Returns, Realized Returns, and Firm Risk Characteristics*",
+      "url": "https://doi.org/10.1111/j.1911-3846.2011.01096.x",
+      "year": 2011,
+      "doi": "10.1111/j.1911-3846.2011.01096.x",
+      "similarity": 0.2824858757062147,
+      "source": "crossref"
+    }
+  ]
+}

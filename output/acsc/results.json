@@ -1,0 +1,16 @@
+{
+  "alpha": 0.1,
+  "n_total": 1500,
+  "n_calib": 300,
+  "n_test": 1200,
+  "Kmax": 16,
+  "C": 8,
+  "tau": 0.375,
+  "calib_mean_vs_correct": 0.719375,
+  "calib_median_vs_correct": 0.75,
+  "coverage_anytime": 0.7225,
+  "avg_set_size_anytime": 1.0,
+  "avg_samples_used_anytime": 1.0,
+  "median_samples_used_anytime": 1.0,
+  "accuracy_fixedK_majority": 0.9475
+}

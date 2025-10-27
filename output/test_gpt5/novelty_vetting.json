@@ -1,0 +1,129 @@
+{
+  "query": "A Unified Framework for Integrating Multimodal Data into Large Language Models | Create a novel framework that seamlessly integrates text, audio, and visual data into large language models, enhancing their ability to perform multimodal tasks with higher accurac | Computer Science A Unified Framework for Integrating Multimodal Data into Large Language Models",
+  "field": "Computer Science",
+  "novelty_score": 0.508,
+  "diagnostics": "max similarity 0.64, avg similarity 0.44, recent overlap penalty 0.00",
+  "timestamp": "2025-10-16T12:40:53",
+  "retrieved_works": [
+    {
+      "title": "A unified framework for integrating spatial and single-cell transcriptomics data using deep generative models",
+      "url": "https://doi.org/10.14711/thesis-991013222955103412",
+      "year": null,
+      "doi": "10.14711/thesis-991013222955103412",
+      "similarity": 0.6417112299465241,
+      "source": "crossref"
+    },
+    {
+      "title": "Vl-Zsif: A Unified Framework for Vision-Language Tasks and Zero-Shot Image Classification Using Large Language Models",
+      "url": "https://doi.org/10.2139/ssrn.4918216",
+      "year": 2024,
+      "doi": "10.2139/ssrn.4918216",
+      "similarity": 0.5743589743589743,
+      "source": "crossref"
+    },
+    {
+      "title": "MCP: A Control-Theoretic Orchestration Framework for Synergistic Efficiency and Interpretability in Multimodal Large Language Models",
+      "url": "https://doi.org/10.20944/preprints202509.0093.v1",
+      "year": 2025,
+      "doi": "10.20944/preprints202509.0093.v1",
+      "similarity": 0.5726872246696035,
+      "source": "crossref"
+    },
+    {
+      "title": "A Unified Framework of Data Augmentation Using\u00a0Large Language Models for Text-Based Cross-Modal Retrieval",
+      "url": "https://doi.org/10.2139/ssrn.4957742",
+      "year": 2024,
+      "doi": "10.2139/ssrn.4957742",
+      "similarity": 0.546448087431694,
+      "source": "crossref"
+    },
+    {
+      "title": "Grounding Propagation of Partially-Defined Tokens in Multimodal Data Using Large Language Models: A Methodological Framework",
+      "url": "https://doi.org/10.36227/techrxiv.172926369.92547761/v1",
+      "year": 2024,
+      "doi": "10.36227/techrxiv.172926369.92547761/v1",
+      "similarity": 0.5247524752475248,
+      "source": "crossref"
+    },
+    {
+      "title": "Advancing Multimodal Diagnostics: Integrating Industrial Textual Data and Domain Knowledge with Large Language Models",
+      "url": "https://doi.org/10.2139/ssrn.4828127",
+      "year": 2024,
+      "doi": "10.2139/ssrn.4828127",
+      "similarity": 0.48205128205128206,
+      "source": "crossref"
+    },
+    {
+      "title": "Multimodal Integration in Large Language Models: A Case Study with Mistral LLM",
+      "url": "https://doi.org/10.31219/osf.io/9y5ds",
+      "year": 2024,
+      "doi": "10.31219/osf.io/9y5ds",
+      "similarity": 0.4393063583815029,
+      "source": "crossref"
+    },
+    {
+      "title": "Enhancing Audio Comprehension in Large Language Models: Integrating Audio Knowledge",
+      "url": "https://doi.org/10.36227/techrxiv.172684060.06923681/v1",
+      "year": 2024,
+      "doi": "10.36227/techrxiv.172684060.06923681/v1",
+      "similarity": 0.41825095057034223,
+      "source": "crossref"
+    },
+    {
+      "title": "HyperLLM: The Next Generation of Large Language Models with Multimodal Capabilities",
+      "url": "https://doi.org/10.20944/preprints202502.0662.v1",
+      "year": 2025,
+      "doi": "10.20944/preprints202502.0662.v1",
+      "similarity": 0.4044943820224719,
+      "source": "crossref"
+    },
+    {
+      "title": "Multimodal Large Language Models with Context-Aware Fusion Mechanisms",
+      "url": "https://doi.org/10.20944/preprints202501.2114.v1",
+      "year": 2025,
+      "doi": "10.20944/preprints202501.2114.v1",
+      "similarity": 0.3902439024390244,
+      "source": "crossref"
+    },
+    {
+      "title": "Comparing Large Language Models for Text Classification: Model Selection Across Tasks, Texts, and Languages",
+      "url": "https://doi.org/10.31219/osf.io/jvgc5_v2",
+      "year": 2025,
+      "doi": "10.31219/osf.io/jvgc5_v2",
+      "similarity": 0.3623693379790941,
+      "source": "crossref"
+    },
+    {
+      "title": "Enhancing Multimodal Large Language Models: From Multimodal Alignment, Fine-Grained Perception to Robust Reasoning",
+      "url": "https://doi.org/10.14711/thesis-hdl152419",
+      "year": null,
+      "doi": "10.14711/thesis-hdl152419",
+      "similarity": 0.36054421768707484,
+      "source": "crossref"
+    },
+    {
+      "title": "Assessing Audio Hallucination in Large Multimodal Models",
+      "url": "https://doi.org/10.31219/osf.io/f8ra7",
+      "year": 2024,
+      "doi": "10.31219/osf.io/f8ra7",
+      "similarity": 0.3474576271186441,
+      "source": "crossref"
+    },
+    {
+      "title": "Multimodal learning using 3D audio-visual data for audio-visual speech recognition",
+      "url": "https://doi.org/10.1109/ialp.2017.8300541",
+      "year": 2017,
+      "doi": "10.1109/ialp.2017.8300541",
+      "similarity": 0.31297709923664124,
+      "source": "crossref"
+    },
+    {
+      "title": "Revolutionizing Recruitment with Large Language Models: A Multimodal AI Framework Integrating Video, Social Media, and Traditional Screening for Efficient Talent Acquisition",
+      "url": "https://doi.org/10.1109/icdcc62744.2024.10960858",
+      "year": 2024,
+      "doi": "10.1109/icdcc62744.2024.10960858",
+      "similarity": 0.2549800796812749,
+      "source": "crossref"
+    }
+  ]
+}

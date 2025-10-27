@@ -1,0 +1,51 @@
+
+\documentclass{article}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric}
+\begin{document}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[scale=0.8]
+  % Timeline axis
+  \draw[thick,->] (0,0) -- (12,0) node[right] {Time};
+  % Event markers
+  \foreach \x/\label in {2/Pre-AI,5/AI Release,8/Post-AI} {
+    \draw[thick] (\x,0.1) -- (\x,-0.1) node[below,align=center] {\label};
+  }
+  % Treatment group line
+  \draw[blue,thick] (0,2) -- (2,2) -- (5,2.5) -- (8,3.5) -- (12,4) node[right] {High Exposure};
+  % Control group line  
+  \draw[red,thick] (0,1.5) -- (2,1.5) -- (5,1.7) -- (8,2) -- (12,2.3) node[right] {Low Exposure};
+  % Y-axis
+  \draw[thick,->] (0,0) -- (0,4.5) node[above] {Outcome};
+  % Shaded region for treatment period
+  \fill[gray!20] (5,0) rectangle (12,4.5);
+  \node at (8.5,4.2) {Treatment Period};
+\end{tikzpicture}
+\caption{Event-study timeline showing treatment and control groups around major AI release dates (GPT-3, GPT-4, etc.). The shaded region indicates the post-treatment period.}
+\end{figure}
+
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=2cm,auto]
+  \tikzstyle{block} = [rectangle, draw, fill=blue!20, text width=5em, text centered, rounded corners, minimum height=2em]
+  \tikzstyle{arrow} = [thick,->,>=stealth]
+  % Nodes
+  \node [block] (data) {Data Collection};
+  \node [block, right of=data, node distance=3.5cm] (process) {Processing};
+  \node [block, right of=process, node distance=3.5cm] (analysis) {Analysis};
+  \node [block, below of=process] (measure) {Measurement};
+  % Arrows
+  \path [arrow] (data) -- (process);
+  \path [arrow] (process) -- (analysis);
+  \path [arrow] (process) -- (measure);
+\end{tikzpicture}
+\caption{Data processing pipeline showing the flow from occupational databases through exposure measurement to asset pricing tests.}
+\end{figure}
+
+
+\end{document}

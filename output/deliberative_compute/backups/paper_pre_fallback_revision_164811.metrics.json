@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-10-25T16:48:11.579150",
+  "file": "output\\deliberative_compute\\paper.tex",
+  "backup": "output\\deliberative_compute\\backups\\paper_pre_fallback_revision_164811",
+  "metrics": {
+    "word_count": 2887,
+    "char_count": 25780,
+    "section_count": 9,
+    "subsection_count": 12,
+    "figure_count": 0,
+    "table_count": 0,
+    "equation_count": 10,
+    "citation_count": 24,
+    "paragraph_count": 77,
+    "page_estimate": 11.548
+  }
+}

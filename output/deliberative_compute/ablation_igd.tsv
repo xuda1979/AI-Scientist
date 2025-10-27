@@ -1,0 +1,7 @@
+Variant mean30 sd30 ci_lo30 ci_hi30
+IGD (full) 0.81 0.07 0.79 0.83
+IGD w/o risk LCB 0.79 0.07 0.77 0.81
+IGD w/o discount 0.78 0.08 0.76 0.80
+RS-MCTT (depth-risk) 0.79 0.07 0.77 0.81
+RS-MCTT (const-risk) 0.77 0.07 0.75 0.79
+ToT-BFS baseline 0.72 0.08 0.70 0.74

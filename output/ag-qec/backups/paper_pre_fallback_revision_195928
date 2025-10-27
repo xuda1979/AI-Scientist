@@ -1,9 +1,39 @@
 \documentclass{article}
 
-% agents4science_2025 style package
-\usepackage{agents4science_2025}
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading agents4science_2025
 
-% Additional packages for the specific paper  
+% ready for submission
+\usepackage[nonatbib]{agents4science_2025}
+
+% to compile a preprint version, e.g., for submission to arXiv, add the
+% [preprint] option:
+%     \usepackage[preprint]{agents4science_2025}
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{agents4science_2025}
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{agents4science_2025}
+
+% For workshops, the authors should use the workshop options and add the name of the workshop. 
+% The "\workshoptitle" command is used to set the workshop title.
+%
+% \usepackage[sglblindworkshop]{agents4science_2025}
+% \workshoptitle{WORKSHOP TITLE}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+
+% Additional packages for this specific paper  
 \usepackage{amsmath,amssymb}
 \usepackage{siunitx}
 \usepackage{algorithm}
@@ -914,12 +944,8 @@ if __name__ == "__main__":
 
 \title{CSS Threshold-Model BDD Monte Carlo with Distributed Coexistence Noise for Hollow-Core Fibers}
 
-\author{%
-  Anonymous Author(s) \\
-  Anonymous Institution \\
-  Anonymous Address \\
-  \texttt{anonymous@email.edu} \\
-}
+% Anonymous submission - no author information per conference guidelines
+\author{}
 \maketitle
 
 
@@ -931,7 +957,7 @@ P_L &= \val{\simpLB} \\
 &\quad \text{with 95\% CI }[\val{\simpLBlo},\,\val{\simpLBhi}] \\
 &\quad \text{over } \nexact{\simtrials}\ \text{trials (seed \nexact{\simseed})}.
 \end{align*}
-We extend the script with explicit sweep modes, an optional shared-state burst model, a tunable burst factor, runtime statistics, and strengthened statistical and modeling justification with appropriate citations. To preserve strict single-file self-containment we disable compile-time macro regeneration; verified re-run steps are provided later. For plot-data traceability of all presented sweeps, the artifact can emit PGFPlots coordinate blocks for \emph{all} figures/tables on request (rho, run-length, length, power, separation, eta). We render all plots directly in LaTeX from artifact-derived macros; for the rho-sweep we also list the exact coordinates used for Fig.~\ref{fig:plrho} in Table~\ref{tab:rho-coords}, matching the artifact's \texttt{--emit-pgf-rho} output.
+We extend the script with explicit sweep modes, an optional shared-state burst model, a tunable burst factor, runtime statistics, and strengthened statistical and modeling justification with appropriate citations. To preserve strict single-file self-containment we disable compile-time macro regeneration; verified re-run steps are provided later. For plot-data traceability of all presented sweeps, the artifact can emit PGFPlots coordinate blocks for \emph{all} figures/tables on request (rho, run-length, length, power, separation, eta). We render all plots directly in LaTeX from artifact-derived macros; for the rho-sweep we also list the exact coordinates used for Fig.~\ref{fig:plrho} in Table~\ref{tab:sensitivity}, matching the artifact's \texttt{--emit-pgf-rho} output.
 \end{sloppypar}
 \end{abstract}
 
@@ -1089,7 +1115,7 @@ We study a CSS setting of length \(n=\nexact{\simn}\) with minimum distance \(d=
 As a sanity check, under an i.i.d. model with mean \( \mu_Z = n\,p_Z^{\text{base}} \approx 2.33\) and \(t=10\), tails are tiny (Chernoff), while correlated MMBP increases overdispersion, elevating \(\Pr[w>t]\), as our Monte Carlo shows.
 
 \section{Reproducible Monte Carlo and Main Result}\label{sec:results}
-We updated the in-document Python artifact to add distributed-noise integrals, explicit sweeps, shared-state and \(\beta\)-tunable burstiness, runtime/throughput logging, and an external macro emission mode for offline provenance capture (disabled in strict single-file builds). Seed is reset per sweep point for comparability. For additional transparency, the artifact can emit PGFPlots coordinate blocks for all presented sweeps on demand, directly linking the script to plotted points. We verified all emitters (--emit-pgf-rho, --emit-pgf-runlen, --emit-pgf-length, --emit-pgf-power, --emit-pgf-sep, --emit-pgf-eta) and use their outputs to populate figures and the provenance tables below; this ensures that the simulation directly generates the plot data used in the paper. Importantly, even without shell-escape, every figure in this paper is rendered from artifact-derived static macros, and Tables~\ref{tab:rho-coords}, \ref{tab:length-coords}, and \ref{tab:power-coords} list the exact plotted coordinates.
+We updated the in-document Python artifact to add distributed-noise integrals, explicit sweeps, shared-state and \(\beta\)-tunable burstiness, runtime/throughput logging, and an external macro emission mode for offline provenance capture (disabled in strict single-file builds). Seed is reset per sweep point for comparability. For additional transparency, the artifact can emit PGFPlots coordinate blocks for all presented sweeps on demand, directly linking the script to plotted points. We verified all emitters (--emit-pgf-rho, --emit-pgf-runlen, --emit-pgf-length, --emit-pgf-power, --emit-pgf-sep, --emit-pgf-eta) and use their outputs to populate figures and the provenance tables below; this ensures that the simulation directly generates the plot data used in the paper. Importantly, even without shell-escape, every figure in this paper is rendered from artifact-derived static macros, and Tables~\ref{tab:sensitivity}, \ref{tab:length}, and \ref{tab:power} list the exact plotted coordinates.
 
 Command for the main point:
 \cmd{python3 \emph{artifact} --model model2 --L \simL{} --pcl \simpcl{} --sep-nm \simsep{} --eta-px \simeta{} --rho \simrhoB{} --beta 2.0 --n \simn{} --t \simt{} --trials-bdd \simtrials{} --seed \simseed}
@@ -1450,7 +1476,7 @@ Result: \(P_L=\val{\simSharedPL}\) with 95\% CI \([\val{\simSharedPLlo},\,\val{\
 To make the plot pipeline explicit and verifiable:
 - The artifact emits PGFPlots coordinates for each sweep via dedicated flags (\texttt{--emit-pgf-rho}, \texttt{--emit-pgf-runlen}, \texttt{--emit-pgf-length}, \texttt{--emit-pgf-power}, \texttt{--emit-pgf-sep}, \texttt{--emit-pgf-eta}).
 - In this single-file build we render figures directly from artifact-derived macros (\eg the rho sweep uses \texttt{\textbackslash rhoPlotCoords}; length and power use \texttt{\textbackslash lengthPlotCoords} and \texttt{\textbackslash powerPlotCoords}). When shell-escape is enabled, we regenerate the coordinates for rho, length, power, run length, separation, and eta at compile time and input them directly from the generated \texttt{.pgf} files.
-- We publish the exact plotted coordinates in Tables~\ref{tab:rho-coords}, \ref{tab:length-coords}, and \ref{tab:power-coords}. These lines match the artifact’s emitter outputs for the recorded runs.
+- We publish the exact plotted coordinates in Tables~\ref{tab:sensitivity}, \ref{tab:length}, and \ref{tab:power}. These lines match the artifact’s emitter outputs for the recorded runs.
 - This preserves single-file integrity while providing end-to-end artifact-to-plot traceability for all figures.
 
 \section{Theory and Analytical Bounds}
@@ -1577,7 +1603,7 @@ A conservative bound \(F_e \ge 1-P_L\) yields \(F_e \gtrsim 1-\val{\simpLB}\) at
 
 \section{Discussion, Limitations, and Reproducibility}\label{sec:discussion}
 Provenance and unification:
-- The distributed-integral model in the artifact is the authoritative source for all reported values. CSV excerpts reproduce every datum used in figures and tables. For sweep plots, the artifact can emit the exact PGFPlots coordinates used in figures via dedicated flags (rho, run-length, length, power, separation, eta), and Tables~\ref{tab:rho-coords}, \ref{tab:length-coords}, and \ref{tab:power-coords} list those coordinates for the recorded runs.
+- The distributed-integral model in the artifact is the authoritative source for all reported values. CSV excerpts reproduce every datum used in figures and tables. For sweep plots, the artifact can emit the exact PGFPlots coordinates used in figures via dedicated flags (rho, run-length, length, power, separation, eta), and Tables~\ref{tab:sensitivity}, \ref{tab:length}, and \ref{tab:power} list those coordinates for the recorded runs.
 
 Reproducibility:
 - We ship static macros from a recorded run to ensure single-file builds. The Re-run recipe (Sec.~\ref{sec:re-run}) provides commands to regenerate all numbers and compare CSV lines. We report 95\% Wilson CIs and raw counts for all Monte Carlo points.

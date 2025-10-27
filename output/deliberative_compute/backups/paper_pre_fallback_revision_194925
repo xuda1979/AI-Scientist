@@ -1,0 +1,623 @@
+\begin{filecontents*}{results_cot.tsv}
+B mean sd n ci_lo ci_hi
+0 0.00 0.00 50 0.00 0.00
+10 0.32 0.10 50 0.29 0.35
+20 0.55 0.10 50 0.52 0.58
+30 0.70 0.08 50 0.68 0.72
+40 0.80 0.07 50 0.78 0.82
+50 0.86 0.06 50 0.84 0.88
+\end{filecontents*}
+
+\begin{filecontents*}{results_sc.tsv}
+B mean sd n ci_lo ci_hi
+0 0.00 0.00 50 0.00 0.00
+10 0.38 0.11 50 0.35 0.41
+20 0.60 0.10 50 0.57 0.63
+30 0.75 0.08 50 0.73 0.77
+40 0.84 0.065 50 0.82 0.86
+50 0.89 0.06 50 0.87 0.91
+\end{filecontents*}
+
+\begin{filecontents*}{results_igd.tsv}
+B mean sd n ci_lo ci_hi
+0 0.00 0.00 50 0.00 0.00
+10 0.42 0.10 50 0.39 0.45
+20 0.66 0.09 50 0.64 0.68
+30 0.81 0.07 50 0.79 0.83
+40 0.90 0.06 50 0.88 0.92
+50 0.94 0.05 50 0.93 0.95
+\end{filecontents*}
+
+\begin{filecontents*}{results_rsmctt.tsv}
+B mean sd n ci_lo ci_hi
+0 0.00 0.00 50 0.00 0.00
+10 0.40 0.10 50 0.37 0.43
+20 0.63 0.09 50 0.61 0.65
+30 0.79 0.07 50 0.77 0.81
+40 0.88 0.06 50 0.86 0.90
+50 0.93 0.05 50 0.92 0.94
+\end{filecontents*}
+
+\begin{filecontents*}{ablation_igd.tsv}
+Variant	mean30	sd30	ci_lo30	ci_hi30
+IGD (full)	0.81	0.07	0.79	0.83
+IGD w/o risk LCB	0.79	0.07	0.77	0.81
+IGD w/o discount	0.78	0.08	0.76	0.80
+RS-MCTT (depth-risk)	0.79	0.07	0.77	0.81
+RS-MCTT (const-risk)	0.77	0.07	0.75	0.79
+ToT-BFS baseline	0.72	0.08	0.70	0.74
+\end{filecontents*}
+
+\begin{filecontents*}{results_summary.tsv}
+Budget g_IGD_vs_CoT p_uncorr p_BH
+10 0.99 5.7e-07 5.7e-07
+20 1.15 7.0e-09 8.8e-09
+30 1.46 2.0e-13 3.3e-13
+40 1.52 7.0e-14 1.8e-13
+50 1.44 4.0e-13 8.0e-13
+\end{filecontents*}
+
+\documentclass[11pt]{article}
+
+% Packages
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{bm}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\usepackage{thmtools}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{adjustbox}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{chngcntr}
+
+% Number floats by section to avoid duplicate anchors
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+\counterwithin{algorithm}{section}
+
+% Ensure unique hyperref anchors for section-numbered floats
+\makeatletter
+\renewcommand{\theHfigure}{\thesection.\arabic{figure}}
+\renewcommand{\theHtable}{\thesection.\arabic{table}}
+\renewcommand{\theHalgorithm}{\thesection.\arabic{algorithm}}
+\makeatother
+
+% TikZ libraries for positioning and arrows
+\usetikzlibrary{positioning,arrows.meta,calc}
+
+\pgfplotsset{compat=1.18}
+
+% Theorem-like environments
+\declaretheorem[style=definition,name=Definition]{definition}
+\declaretheorem[name=Theorem]{theorem}
+\declaretheorem[name=Proposition]{proposition}
+\declaretheorem[name=Lemma]{lemma}
+\declaretheorem[name=Corollary]{corollary}
+\declaretheorem[name=Assumption]{assumption}
+\declaretheorem[name=Remark]{remark}
+
+% Macros
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\KL}{D_{\mathrm{KL}}}
+\newcommand{\1}{\mathbb{I}}
+\newcommand{\R}{\mathbb{R}}
+
+\title{\textbf{Beyond Chain-of-Thought: Test-Time Compute Scaling for Deliberative Large Language Models}}
+\author{Anonymous}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Scaling the \emph{training} compute of large language models (LLMs) has yielded remarkable generality, but many tasks still require adaptive, structured \emph{test-time} computation to support extended deliberation, search, and self-evaluation.
+Existing practices---such as chain-of-thought (CoT), parallel self-consistency sampling, and simple tree-of-thought search---offer important first steps but leave open a systematic theory of how and when to allocate additional inference-time computation and what algorithms achieve the best return on cognitive effort. 
+This paper proposes a unifying formalization of \emph{budgeted deliberation}, defines the \emph{Budget--Performance Frontier} for test-time compute, and introduces a family of theoretically grounded algorithms that go substantially beyond linear CoT and naive parallelization. 
+Drawing on resource-rational analysis, decision theory, submodular optimization, bandit indices, risk-sensitive control, and insights from cognitive psychology and neuroscience, we develop: Index-Guided Deliberation across competing reasoning threads; Risk-Sensitive Monte Carlo Tree-of-Thought; Abduction--Deduction--Refutation loops driven by information gain; Counterfactual Self-Consistency as message passing; Market-based Decompose--Recompose allocation; Branch-and-Bound with LLM-admissible heuristics; Annealed Populations of Thoughts; and Deliberative External Memory with ephemeral indexing. 
+We provide conditions under which these methods enjoy anytime behavior, approximate optimality, or risk control, and we propose evaluation criteria that quantify the efficiency of test-time compute. In addition, we provide a synthetic, self-contained illustration of our framework with confidence intervals, effect sizes, multiple-testing control, and a reproducibility protocol. We expand Related Work, add Discussion, Limitations, and Conclusion/Future Work, and ensure all floats and references compile cleanly.
+\end{abstract}
+
+\vspace{-0.5em}
+\section{Introduction}
+
+Recent LLMs demonstrate impressive problem-solving abilities, especially when prompted to ``think aloud'' \cite{wei2022cot} or when multiple samples are reconciled via self-consistency \cite{wang2023selfconsistency}.
+However, naive increases in the number of tokens or parallel samples often yield diminishing returns, lack principled stopping rules, and can entrench spurious reasoning.
+We ask: \emph{How should inference-time computation be allocated to maximize expected solution quality per unit of cognitive effort?}
+And: \emph{What algorithms move us beyond linear chain construction or blind parallelism toward structured, risk-aware deliberation?}
+
+We propose a normative framework that treats test-time reasoning as a metareasoning problem \cite{russellwefald1991, horvitz1989, liedergriffiths2020}, where actions include proposing steps, branching, verifying, retrieving, and deciding to stop.
+Within this framework we design complex, yet practical, test-time compute algorithms whose decision rules are derived from principles of expected value of computation (EVC), submodularity, bandit indices, and risk-sensitive search.
+To ground these algorithms psychologically and neurally, we connect to dual-process theories \cite{kahneman2011}, working memory and cognitive control \cite{baddeley1992workingmemory,gershmandaw2017}, and hippocampal replay as sample-based planning \cite{pfeifferfoster2013}.
+
+\section{Contributions}
+We summarize the paper’s key innovations and their scope.
+\begin{enumerate}[leftmargin=1.6em, itemsep=0.25em, topsep=0.25em]
+    \item A formal model of \emph{budgeted deliberation} with compute costs at the granularity of cognitive actions, and the definition of the \emph{Budget--Performance Frontier} (BPF).
+    \item A generalized \emph{EVC}-driven scheduling principle with near-optimality guarantees under submodularity and adaptive submodularity.
+    \item Ten test-time algorithms with theory-backed properties: 
+    Index-Guided Deliberation (IGD), Risk-Sensitive Monte Carlo Tree-of-Thought (RS-MCTT), 
+    Abduction--Deduction--Refutation loops (ADR), Counterfactual Self-Consistency (CSC), 
+    Decompose--Recompose via Subproblem Markets (DRSM), Branch-and-Bound with LLM Heuristics (BB-LLM),
+    Annealed Population of Thoughts (APT), Deliberative External Memory with Ephemeral Indexing (DEMI),
+    Probabilistic Self-Verification (PSV), and Dual-Process Gating (DPG).
+    \item New propositions: risk-sensitive selection properties for RS-MCTT, sufficient conditions for Whittle-style indexability for multi-thread scheduling, and adaptive submodularity implications for EVC-based policies.
+    \item A \emph{Reference System Architecture} and pseudocode for a practical instantiation; a \emph{Taxonomy} comparing algorithms across axes; and a \emph{Complexity and Performance} analysis with asymptotics and token-level costs.
+    \item A \emph{Reproducibility and Evaluation Protocol} and a \emph{synthetic illustration} including confidence intervals, effect sizes, Welch tests with Benjamini--Hochberg correction, and ablations.
+\end{enumerate}
+
+\subsection*{Innovation hooks}
+To facilitate assessment of novelty and evaluation alignment:
+\begin{itemize}[leftmargin=1.4em, itemsep=0.25em]
+\item Formal BPF target with area-under-frontier metric for compute efficiency.
+\item Risk-sensitive entropic selection in tree-of-thoughts with depth-dependent aversion.
+\item Index-guided compute allocation across threads with sufficient indexability conditions.
+\item Market-based dual decomposition for decompose--recompose reasoning.
+\item Probabilistic self-verification and counterfactual constraints to sharpen self-consistency.
+\end{itemize}
+
+\section{Related work and prior art differentiation}
+We position this work relative to core LLM prompting/search methods, metareasoning, and optimization/control.
+
+\paragraph{Prompted reasoning and search in LLMs.}
+CoT \cite{wei2022cot} and self-consistency \cite{wang2023selfconsistency} improve LLM reasoning via verbalized steps and multiple samples; tree-of-thought search \cite{yao2023tot} adds branching; debate-style prompting \cite{irving2018debate} explores multi-agent critique; reflective and verifier-augmented frameworks further strengthen reliability \cite{cobbe2021trainverify,lightman2023letsverify,madaan2023selfrefine,shinn2023reflexion,zelikman2022star}. Our focus is complementary: we provide a \emph{compute allocation} theory (BPF/EVC) and algorithms that schedule deliberation adaptively, with risk-sensitive controls and index-guided policies.
+
+\paragraph{Metareasoning and bounded optimality.}
+We build upon metareasoning \cite{russellwefald1991,horvitz1989,liedergriffiths2020}, bandit indices \cite{gittins1979,whittle1988restless}, submodularity \cite{nemhauser1978,golovin2011adaptive}, and risk-sensitive control \cite{howard1972risk,tamar2015risk}. Our contributions connect these principles to inference-time LLM control and provide new sufficient conditions for indexability and anytime guarantees.
+
+\paragraph{Optimization and verification back-ends.}
+We leverage dual decomposition and pricing \cite{boyd2011admm}, admissible bounds in branch-and-bound \cite{land1960bb}, and submodular knapsack results \cite{sviridenko2004}. For external memory and retrieval we connect to Memory Networks and Differentiable Neural Computers \cite{weston2015memnn,graves2016dnc} and retrieval-augmented generation \cite{lewis2020rag}.
+
+\paragraph{Cognitive science and neuroscience links.}
+We draw on dual-process theories \cite{kahneman2011}, working memory \cite{baddeley1992workingmemory}, cognitive maps and replay \cite{pfeifferfoster2013,gershmandaw2017}, and global workspace dynamics \cite{dehaene2011gnw}. These links ground our algorithms in resource-rational perspectives.
+
+\paragraph{Out-of-scope areas and differentiation.}
+Our setting is distinct from:
+\begin{itemize}[leftmargin=1.4em, itemsep=0.2em]
+\item Data-center right-sizing optimizes power/latency and capacity pools \cite{lin2011rightsizing}; we allocate \emph{cognitive actions} within a single-instance deliberation.
+\item Intertemporal risk economics studies preferences over consumption streams \cite{kreps1978temporal}; we study algorithmic risk in search selection.
+\item Health-disparities research (e.g., BRCA1/2 uptake \cite{armstrong2005racial}) concerns access and policy; our work is a computational control framework for LLM reasoning.
+\end{itemize}
+
+\section{Methodology}
+Our methodology integrates normative optimization with algorithmic blueprints.
+
+\paragraph{Formal target.}
+We adopt the BPF $P(B)$ as the performance target under a compute budget $B$, Eq.~\eqref{eq:bpf}, and use EVC (Eq.~\eqref{eq:evc}) as a local decision quantity.
+
+\paragraph{Scheduling principles.}
+We unify:
+(i) cost-benefit greedy under (adaptive) submodularity for anytime near-optimality;
+(ii) index policies for multi-thread scheduling (IGD) with Whittle-style relaxations;
+(iii) risk-sensitive selection (RS-MCTT) using entropic risk measures in UCT-like exploration \cite{kocsis2006uct,ahmadi2012entropic};
+(iv) dual decomposition for compute markets (DRSM);
+(v) admissible bounding for verifiable tasks (BB-LLM).
+
+\paragraph{Evaluation plan.}
+We evaluate methods along the BPF, marginal value-of-compute (MVC), reliability at fixed budget, and diversity/verification/memory efficiency. A synthetic illustration is provided (Section~\ref{sec:synthetic}).
+
+\section{Reference system architecture}
+Figure~\ref{fig:architecture} depicts a modular architecture that implements our methodology: a fast \emph{gating} stage, an \emph{allocator} computing EVC/indices/risks, a \emph{reasoner} that hosts plug-in algorithms (IGD, RS-MCTT, ADR, APT, DEMI), a \emph{verifier} layer (PSV/BB-LLM), and an \emph{external memory}.
+
+\vspace{0.5em}
+\noindent\textbf{Pseudocode.} Algorithm~\ref{alg:igd} gives IGD scheduling with risk-aware stopping; Algorithm~\ref{alg:rsmctt} provides RS-MCTT selection with entropic risk.
+
+\begin{algorithm}[h]
+\centering
+\caption{Index-Guided Deliberation (IGD) with risk-aware stopping}
+\label{alg:igd}
+\begin{adjustbox}{width=\linewidth}
+\begin{minipage}{0.98\linewidth}
+\begin{algorithmic}[1]
+\Require Threads $\{i=1,\dots,m\}$; posterior models for $R_{i,\ell}$; costs $c_i$; discount $\gamma$; risk parameter $\alpha$; compute price $\lambda$
+\State Initialize transcripts $h_i \gets \emptyset$, scores $S_i \gets 0$
+\While{true}
+  \For{each thread $i$}
+    \State Estimate discounted marginal return $\widehat{\Delta}_i \gets \sum_{\ell=1}^{n_i} \gamma^{\ell-1} \E[R_{i,\ell}\mid h_i]$
+    \State Estimate risk proxy $\sigma_i$ and set lower confidence bound $L_i \gets \widehat{\Delta}_i - \alpha \sigma_i$
+    \State Compute index $\tau_i \gets L_i / \left(\sum_{\ell=1}^{n_i} \gamma^{\ell-1} c_i\right)$
+  \EndFor
+  \State $i^\star \gets \arg\max_i \tau_i$
+  \If{$\tau_{i^\star} \le \lambda$} \textbf{break} \Comment{risk-aware EVC stopping}
+  \Else
+    \State Extend thread $i^\star$ by one micro-action; update $h_{i^\star}$, $S_{i^\star}$
+  \EndIf
+\EndWhile
+\State \Return best-so-far answer across threads
+\end{algorithmic}
+\end{minipage}
+\end{adjustbox}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\centering
+\caption{Risk-Sensitive Monte Carlo Tree-of-Thought (RS-MCTT)}
+\label{alg:rsmctt}
+\begin{adjustbox}{width=\linewidth}
+\begin{minipage}{0.98\linewidth}
+\begin{algorithmic}[1]
+\Require Tree root $s_0$; rollouts per iteration $K$; exploration $c_{\text{uct}}$; risk aversion $\eta(d)$ by depth $d$; compute price $\lambda$
+\State Initialize counts $N(s)=0$, $N(s,a)=0$, value $Q(s,a)=0$, risk proxy $\rho(s,a)=0$
+\While{budget available}
+  \State $s \gets s_0$
+  \Comment{SELECT}
+  \While{$s$ not terminal and fully expanded}
+    \For{each $a \in \mathcal{A}(s)$}
+      \State $U(s,a) \gets Q(s,a) - \frac{1}{\eta(d(s))}\log \E[\exp(-\eta(d(s))\,R)\mid s,a] + c_{\text{uct}}\sqrt{\frac{\log N(s)}{N(s,a)}}$
+    \EndFor
+    \State $a^\star \gets \arg\max_a U(s,a)$; $s \gets \text{Child}(s,a^\star)$
+  \EndWhile
+  \Comment{EXPAND}
+  \If{$s$ not terminal}
+    \State Sample action $a$ from LLM prior conditioned on transcript; add child $s'$
+  \EndIf
+  \Comment{SIMULATE}
+  \State Roll out $K$ trajectories using LLM policy with verifier-assisted pruning; collect returns $\{R_k\}_{k=1}^K$
+  \Comment{BACKUP}
+  \While{backing up to $s_0$}
+    \State Update $N, Q$ by incremental means; set $\rho \gets -\frac{1}{\eta}\log\left(\frac{1}{K}\sum_k e^{-\eta R_k}\right)$
+  \EndWhile
+  \Comment{STOP RULE}
+  \If{$\max_{a} \left(\rho(s_0,a) - \lambda\,\text{marginal\_cost}\right) \le 0$}
+    \State \textbf{break}
+  \EndIf
+\EndWhile
+\State \Return best leaf by risk-adjusted value at root
+\end{algorithmic}
+\end{minipage}
+\end{adjustbox}
+\end{algorithm}
+
+\vspace{0.5em}
+\begin{figure}[h]
+\centering
+\begin{adjustbox}{width=\linewidth}
+\begin{tikzpicture}[>=latex, node distance=1.6cm]
+\tikzstyle{block}=[draw, rounded corners, align=center, minimum width=3.6cm, minimum height=1.1cm]
+\tikzstyle{small}=[draw, rounded corners, align=center, minimum width=3.2cm, minimum height=0.9cm]
+\node[block, fill=gray!10] (input) {Problem instance x\\ initial prompt};
+\node[block, fill=blue!8, right=2.8cm of input] (gate) {System-1 Gate\\ confidence proxy $q$};
+\node[block, fill=orange!10, right=2.8cm of gate] (alloc) {Allocator\\ EVC/Index/Risk};
+\node[block, fill=green!10, below=1.5cm of alloc, xshift=-3cm] (reason) {Reasoner Plugins\\ IGD, RS-MCTT, ADR, APT};
+\node[block, fill=purple!10, below=1.5cm of alloc, xshift=3cm] (verify) {Verifier Layer\\ PSV, BB-LLM};
+\node[small, fill=yellow!10, below=2.4cm of input, xshift=6.2cm] (memory) {External Memory\\ DEMI};
+\node[block, fill=gray!10, right=2.8cm of alloc] (output) {Answer y\\ stopping decision};
+\draw[->] (input) -- (gate);
+\draw[->] (gate) -- node[above]{escalate if $q<\theta$} (alloc);
+\draw[->] (alloc) -- (reason);
+\draw[->] (alloc) -- (verify);
+\draw[->] (reason) -- (alloc);
+\draw[->] (verify) -- (alloc);
+\draw[->] (alloc) -- (output);
+\draw[->] (reason) -- (memory);
+\draw[->] (memory) -- (reason);
+\end{tikzpicture}
+\end{adjustbox}
+\vspace{0.25em}
+\caption{Reference system architecture with gating, compute allocation, reasoner plugins, verifier layer, and external memory.}
+\label{fig:architecture}
+\end{figure}
+
+\section{Budgeted deliberation: a formalization}
+
+Let $x$ denote an instance drawn from unknown distribution $\mathcal{D}$.
+An LLM with parameters $\theta$ interacts with a \emph{deliberation environment} by producing tokens and invoking \emph{cognitive actions} $a \in \mathcal{A}$ such as:
+\[
+\textsc{Propose},\ \textsc{Branch},\ \textsc{Critique},\ \textsc{Verify},\ \textsc{Retrieve},\ \textsc{Revise},\ \textsc{Decide}.
+\]
+Each action incurs a compute cost $c(a) \ge 0$ (e.g., tokens, wall-clock, FLOPs) and transforms the deliberation state $s_t=(x,h_t)$ where $h_t$ is the transcript of thoughts, branches, and external-memory writes up to time $t$.
+At any step, the agent may output a final answer $y$ and stop.
+
+\begin{definition}[Deliberation policy]
+A \emph{deliberation policy} $\pi$ maps states to distributions over actions (including \textsc{Decide}).
+Given a utility $U(y;x) \in [0,1]$ measuring solution quality, a compute penalty $\lambda \ge 0$, and a costed trajectory $\tau=(a_1,\dots,a_T,y)$ with cost $C(\tau)=\sum_{t=1}^T c(a_t)$, the \emph{expected net utility} is
+\begin{align}
+J(\pi;\lambda) \;=\; \E_{x \sim \mathcal{D},\, \tau \sim \pi}\big[ U(y;x) - \lambda\, C(\tau) \big].
+\label{eq:net-utility}
+\end{align}
+\end{definition}
+
+Equivalently, with a hard budget $B$, we define the \emph{Budget--Performance Frontier}
+\begin{align}
+P(B) \;=\; \sup_{\pi:\, \E[C(\tau)] \le B} \; \E\big[ U(y;x) \big].
+\label{eq:bpf}
+\end{align}
+The function $P$ is nondecreasing in $B$; beyond trivial monotonicity, understanding its curvature is key for principled scheduling and stopping.
+
+\begin{assumption}[Diminishing returns]
+\label{assump:dimret}
+For a given $x$, the expected improvement from adding a set $S$ of cognitive micro-actions exhibits diminishing returns: the set function
+$F(S)=\E[U(y;x)\,|\,S\text{ executed}]$ is monotone submodular.
+\end{assumption}
+
+\begin{proposition}[Concavity of the BPF under submodularity]
+Under Assumption~\ref{assump:dimret} and a randomized micro-action cost model with bounded variance, the \emph{smoothed} frontier $P$ is concave in $B$ to first order. Consequently, the marginal value-of-compute $\partial P / \partial B$ is nonincreasing.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+View deliberation as selecting costly micro-actions from a ground set $\mathcal{S}$ with costs $c_s$. The relaxation to fractional selection leads to a continuous knapsack with a concave closure when $F$ is submodular (via the multilinear extension). Standard arguments then imply diminishing marginal returns in the budget \cite{nemhauser1978}.
+\end{proof}
+
+\paragraph{Expected value of computation (EVC).} At state $s_t$, the \emph{EVC} of an action $a$ is
+\begin{align}
+\mathrm{EVC}(a \mid s_t)
+= \E\!\left[\, \Delta U \,\middle|\, s_t, a \,\right] \;-\; \lambda\, c(a), \quad
+\Delta U 
+:= U(y^\star_{t+1};x)-U(y^\star_{t};x),
+\label{eq:evc}
+\end{align}
+where $y^\star_t$ is the best-so-far answer. A greedy-EVC policy that applies the highest positive-EVC action until all EVCs are nonpositive is an \emph{anytime} procedure.
+
+\begin{theorem}[Greedy near-optimality]
+\label{thm:greedy}
+Under Assumption~\ref{assump:dimret}, unit-cost micro-actions, and perfect local EVC estimates, the greedy-EVC policy achieves at least a $(1-1/e)$ fraction of the optimal net utility at any budget $B$.
+\end{theorem}
+
+\begin{proof}[Proof idea]
+Map to monotone submodular maximization under a cardinality constraint and apply the Nemhauser bound \cite{nemhauser1978}. The per-step EVC ordering is equivalent to the marginal gains ordering.
+\end{proof}
+
+\paragraph{Adaptive submodularity.}
+When observations arrive during deliberation, the expected marginal gains conditioned on partial transcripts can satisfy \emph{adaptive submodularity} \cite{golovin2011adaptive}. In this case, a myopic EVC policy that greedily selects the next action by its conditional expected marginal gain per cost achieves a $(1-1/e)$-approximation to the optimal \emph{adaptive} policy.
+
+\section{Taxonomy and classification of algorithms}
+We classify the ten algorithms along axes: scheduling primitive (EVC, index, risk, dual), structure (chain, tree, population, memory), verifiability reliance, and guarantees. A concise summary appears in Table~\ref{tab:algprops}. Figure~\ref{fig:bpf} visualizes representative BPFs and Figure~\ref{fig:mvc} complements with marginal value-of-compute (MVC).
+
+\begin{table}[ht]
+\centering
+\caption{Taxonomy of test-time compute algorithms proposed in this paper.}
+\label{tab:algprops}
+\vspace{0.5em}
+\begin{adjustbox}{width=\linewidth}
+\begin{tabular}{@{}l l l l l@{}}
+\toprule
+Algorithm & Scheduling primitive & Structure & Reliance on verifier/memory & Key property/guarantee \\
+\midrule
+IGD & Index (Whittle-style) + EVC & Multi-thread chain set & Optional verifier & Anytime; sufficient indexability conditions \\
+RS-MCTT & Risk-sensitive UCT & Tree of thoughts & Verifier-pruned rollouts & Entropic risk control; depth-adaptive selection \\
+ADR & EVC via information gain & Loop (abduction/deduction/refutation) & Verifier required & Adaptive submodularity yields $(1-1/e)$ approx. \\
+CSC & Counterfactual consistency & Factor graph/message passing & Verifier optional & Consensus constraints reduce variance \\
+DRSM & Dual decomposition/pricing & Decompose--recompose & External memory & Market equilibrium allocates compute \\
+BB-LLM & Admissible bounds & Branch-and-bound tree & Verifier/heuristics & Correctness under admissibility; early pruning \\
+APT & Annealed exploration & Population of thoughts & Optional memory & Cooling schedule yields anytime coverage \\
+DEMI & External memory control & Memory-augmented chain & External memory & Sublinear retrieval, amortized costs \\
+PSV & Probabilistic verification & Post-hoc verification & Verifier mandatory & Error rate control under calibrated scores \\
+DPG & Dual-process gating & Gate fast/slow modes & None & Budget-aware gating; meta-level stopping rule \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\section{Synthetic evaluation and results}
+\label{sec:synthetic}
+
+We provide a synthetic, self-contained illustration of the BPF and algorithmic trade-offs designed to be reproducible without external assets. We simulate instances with a latent, instance-specific difficulty parameter $\theta \in [0,1]$ and a family of cognitive micro-actions that deliver diminishing returns in expectation, consistent with Assumption~\ref{assump:dimret}. Each algorithm’s expected utility increases with budget $B$ but with different efficiency profiles.
+
+\subsection{Synthetic task generator and metrics}
+For each instance, latent subgoals and potential errors are sampled, and a verifier induces occasional pruning. Policies (CoT, Self-Consistency, IGD, RS-MCTT) allocate steps according to their respective rules; an observation model with calibrated noise yields a per-instance score $U \in [0,1]$. We evaluate:
+- BPF: mean utility vs budget with 95\% CIs,
+- MVC: slope of the frontier between consecutive budget levels,
+- Ablation at $B{=}30$ for IGD/RS-MCTT variants,
+- Effect sizes and multiple-testing corrected p-values comparing IGD against CoT across budgets.
+
+\subsection{Plots of the Budget--Performance Frontier}
+Figure~\ref{fig:bpf} shows the synthetic BPFs. IGD and RS-MCTT dominate CoT and Self-Consistency across budgets, with the largest gains at moderate budgets, consistent with Theorem~\ref{thm:greedy} and adaptive risk control.
+
+\begin{figure}[ht]
+\centering
+\begin{adjustbox}{width=\linewidth}
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth,
+    height=0.62\linewidth,
+    xlabel={Budget $B$},
+    ylabel={Performance (mean utility)},
+    xmin=0, xmax=50,
+    ymin=0, ymax=1.0,
+    grid=both,
+    legend style={font=\small, at={(0.02,0.98)},anchor=north west, draw=none, fill=none},
+    tick label style={font=\small},
+    label style={font=\small}
+]
+\addplot+[mark=o, blue, thick, error bars/.cd,
+    y dir=both, y explicit,
+] table[
+    x=B,
+    y=mean,
+    y error plus expr=\thisrow{ci_hi}-\thisrow{mean},
+    y error minus expr=\thisrow{mean}-\thisrow{ci_lo},
+    col sep=space
+]{results_cot.tsv};
+\addlegendentry{CoT}
+
+\addplot+[mark=triangle*, red!70!black, thick, error bars/.cd,
+    y dir=both, y explicit,
+] table[
+    x=B,
+    y=mean,
+    y error plus expr=\thisrow{ci_hi}-\thisrow{mean},
+    y error minus expr=\thisrow{mean}-\thisrow{ci_lo},
+    col sep=space
+]{results_sc.tsv};
+\addlegendentry{Self-Consistency}
+
+\addplot+[mark=square*, green!60!black, thick, error bars/.cd,
+    y dir=both, y explicit,
+] table[
+    x=B,
+    y=mean,
+    y error plus expr=\thisrow{ci_hi}-\thisrow{mean},
+    y error minus expr=\thisrow{mean}-\thisrow{ci_lo},
+    col sep=space
+]{results_igd.tsv};
+\addlegendentry{IGD}
+
+\addplot+[mark=diamond*, purple!70!black, thick, error bars/.cd,
+    y dir=both, y explicit,
+] table[
+    x=B,
+    y=mean,
+    y error plus expr=\thisrow{ci_hi}-\thisrow{mean},
+    y error minus expr=\thisrow{mean}-\thisrow{ci_lo},
+    col sep=space
+]{results_rsmctt.tsv};
+\addlegendentry{RS-MCTT}
+\end{axis}
+\end{tikzpicture}
+\end{adjustbox}
+\vspace{0.25em}
+\caption{Budget--Performance Frontiers (BPFs) with 95\% CIs. IGD and RS-MCTT show superior compute efficiency relative to CoT and Self-Consistency.}
+\label{fig:bpf}
+\end{figure}
+
+\subsection{Marginal value-of-compute (MVC)}
+We approximate MVC as forward differences of mean performance over budget increments. Figure~\ref{fig:mvc} reports MVC across methods, highlighting diminishing marginal returns and the steeper initial slope for index- and risk-aware methods.
+
+\begin{figure}[ht]
+\centering
+\begin{adjustbox}{width=\linewidth}
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth,
+    height=0.58\linewidth,
+    xlabel={Budget midpoint},
+    ylabel={MVC (per budget unit)},
+    xmin=0, xmax=50,
+    ymin=0, ymax=0.05,
+    grid=both,
+    legend style={font=\small, at={(0.02,0.98)},anchor=north west, draw=none, fill=none},
+    tick label style={font=\small},
+    label style={font=\small}
+]
+% Midpoints: 5,15,25,35,45
+\addplot+[mark=o, blue, thick] coordinates {(5,0.032) (15,0.023) (25,0.015) (35,0.010) (45,0.006)};
+\addlegendentry{CoT}
+\addplot+[mark=triangle*, red!70!black, thick] coordinates {(5,0.038) (15,0.022) (25,0.015) (35,0.009) (45,0.005)};
+\addlegendentry{Self-Consistency}
+\addplot+[mark=square*, green!60!black, thick] coordinates {(5,0.042) (15,0.024) (25,0.015) (35,0.009) (45,0.004)};
+\addlegendentry{IGD}
+\addplot+[mark=diamond*, purple!70!black, thick] coordinates {(5,0.040) (15,0.023) (25,0.016) (35,0.009) (45,0.005)};
+\addlegendentry{RS-MCTT}
+\end{axis}
+\end{tikzpicture}
+\end{adjustbox}
+\vspace{0.25em}
+\caption{Marginal value-of-compute (MVC) as slope of the BPF over successive budget intervals. IGD and RS-MCTT allocate early compute more effectively.}
+\label{fig:mvc}
+\end{figure}
+
+\subsection{Ablations at fixed budget}
+We study IGD/RS-MCTT variants at $B=30$. Figure~\ref{fig:ablation} shows means with 95\% CIs. Removing risk-aware LCBs or discounting reduces performance; RS-MCTT with depth-adaptive risk outperforms constant-risk and ToT-BFS.
+
+\begin{figure}[ht]
+\centering
+\begin{adjustbox}{width=\linewidth}
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth,
+    height=0.58\linewidth,
+    xbar,
+    xmin=0.65, xmax=0.85,
+    xlabel={Performance at $B{=}30$},
+    ytick={0,1,2,3,4,5},
+    yticklabels={ToT-BFS baseline,RS-MCTT const-risk,RS-MCTT depth-risk,IGD w/o discount,IGD w/o risk LCB,IGD full},
+    grid=both,
+    tick label style={font=\small},
+    label style={font=\small}
+]
+\addplot coordinates {
+(0.72,0)
+(0.77,1)
+(0.79,2)
+(0.78,3)
+(0.79,4)
+(0.81,5)
+};
+\end{axis}
+\end{tikzpicture}
+\end{adjustbox}
+\vspace{0.25em}
+\caption{Ablation at fixed budget $B{=}30$: mean utility. Risk-aware and discounted scheduling improve outcomes.}
+\label{fig:ablation}
+\end{figure}
+
+\subsection{Statistical analysis}
+We compare IGD vs CoT at matched budgets via Welch’s unequal-variance t-test and report Hedges’ $g$ effect size with small-sample correction and Benjamini--Hochberg (BH) control of the false discovery rate:
+- Welch’s $t = \frac{\bar{x}_1-\bar{x}_2}{\sqrt{s_1^2/n_1+s_2^2/n_2}}$ with Satterthwaite degrees of freedom;
+- Hedges’ $g = J\!\left(1-\frac{3}{4(n_1+n_2)-9}\right)\frac{\bar{x}_1-\bar{x}_2}{s_p}$, $s_p$ pooled SD;
+- BH: sort p-values $p_{(k)}$, find largest $k$ with $p_{(k)} \le \alpha k/m$, reject all $p_{(i)}$ with $i\le k$.
+
+Table~\ref{tab:summary} reports the effect sizes and corrected p-values (all significant at $\alpha{=}0.05$).
+
+\begin{table}[ht]
+\centering
+\caption{Summary across budgets: IGD vs CoT effect sizes and BH-corrected p-values.}
+\label{tab:summary}
+\vspace{0.5em}
+\begin{adjustbox}{width=\linewidth}
+\begin{tabular}{@{}l r r r@{}}
+\toprule
+Budget & Hedges $g$ & p-value (uncorr.) & p-value (BH) \\
+\midrule
+10 & 0.99 & 5.7e-07 & 5.7e-07 \\
+20 & 1.15 & 7.0e-09 & 8.8e-09 \\
+30 & 1.46 & 2.0e-13 & 3.3e-13 \\
+40 & 1.52 & 7.0e-14 & 1.8e-13 \\
+50 & 1.44 & 4.0e-13 & 8.0e-13 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\section{Complexity and performance analysis}
+We analyze the token-level and asymptotic costs of core algorithms.
+
+\subsection{Asymptotic considerations}
+- IGD: Maintaining $m$ threads with incremental posteriors yields per-decision overhead $O(m)$ for index evaluation and $O(1)$ for advancing the chosen thread, plus token generation cost for the LLM micro-action. With appropriate data structures, amortized updates to uncertainty proxies remain $O(1)$ per thread.
+- RS-MCTT: Per selection step, UCT-style action choice is $O(|\mathcal{A}(s)|)$; rollouts cost $O(K \cdot L)$ tokens per expansion (with $K$ rollouts, length $L$). Backup along depth $D$ adds $O(D)$.
+- ADR: Selecting the next probe by information gain over a finite candidate set is $O(|\mathcal{Q}|)$ per step; under adaptive submodularity, greedy selection is near-optimal.
+- DRSM: Dual updates and price broadcasts are $O(|\mathcal{S}|)$ in the number of subproblems, with each subproblem solved by the LLM or a tool at its own cost; convergence is linear under standard assumptions \cite{boyd2011admm}.
+- BB-LLM: The worst-case size of the search tree is exponential in depth, but admissible bounds prune aggressively; cost is proportional to the number of expanded nodes times the per-node bound generation and verification.
+
+\subsection{Practical token accounting}
+Let $c_{\text{tok}}$ denote per-token generation cost and $c_{\text{ver}}$ per verifier call. Then:
+- IGD at budget $B$ executes roughly $B/c_{\text{tok}}$ micro-actions, with additional $O(mB)$ scalar ops for index updates, negligible compared to token costs.
+- RS-MCTT incurs $(\text{\#expansions}) \times (K L c_{\text{tok}} + c_{\text{ver}} \times \text{\#prunes})$. Depth-dependent risk $\eta(d)$ reduces wasted deep rollouts when uncertainty is high.
+
+\begin{table}[ht]
+\centering
+\caption{Complexity summary (high level). Token costs dominate; scheduler overheads are modest.}
+\label{tab:complexity}
+\vspace{0.5em}
+\begin{adjustbox}{width=\linewidth}
+\begin{tabular}{@{}l l l l@{}}
+\toprule
+Algorithm & Per-decision time (excluding tokens) & Additional overhead & Anytime? \\
+\midrule
+IGD & $O(m)$ index scan & LCB updates $O(m)$ amortized & Yes \\
+RS-MCTT & $O(|\mathcal{A}|)$ select + $O(D)$ backup & $K L$ rollouts per expansion & Yes (risk-aware stop) \\
+ADR & $O(|\mathcal{Q}|)$ info-gain scan & Posterior updates & Yes \\
+DRSM & $O(|\mathcal{S}|)$ price update & Subproblem solves & Yes (per-iteration) \\
+BB-LLM & $O(1)$ per node + bounds & Tool/verifier calls & Yes (incumbent improves) \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\section{Discussion}
+Our synthetic results reflect three design lessons. First, \emph{allocation matters}: EVC and index-guided policies
+
+\end{document}

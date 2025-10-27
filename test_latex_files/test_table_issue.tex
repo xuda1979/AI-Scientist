@@ -1,0 +1,19 @@
+\documentclass{article}
+\usepackage{pgfplots,pgfplotstable}
+\pgfplotsset{compat=1.18}
+\begin{document}
+
+\begin{filecontents*}{data.tsv}
+Method	Score
+A	0.5
+B	0.7
+\end{filecontents*}
+
+\begin{table}
+\begin{tabular}{ll}
+\pgfplotstableread[col sep=tab]{data.tsv}\mytable
+\pgfplotstabletypeset{\mytable}
+\end{tabular}
+\end{table}
+
+\end{document}

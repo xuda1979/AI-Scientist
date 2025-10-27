@@ -1,37 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Reproducible Monte Carlo used for the results reported in the paper.
-
-Authoritative model (Model 2):
-  - Physics-driven mapping from HCF coexistence parameters to asymmetric Pauli
-    error probabilities using distributed integrals along the span:
-      SpRS ~ c_R * ∫ P(z) dz,  FWM ~ c_F * Δλ * ∫ P(z)^2 dz,
-    with P(z)=P0*exp(-alpha*z), alpha = kappa * alpha_dB (nepers/km).
-  - Temporal correlation via a two-state Markov-modulated Bernoulli process (MMBP)
-    with persistence rho (Gilbert--Elliott style). The "bad" state's error prob.
-    is scaled by a user parameter beta (default 2.0), clipped to 1.
-  - Block failure under bounded-distance decoding (BDD): fail if wX>t or wZ>t.
-  - 95% Wilson intervals; optional report of expected run length 1/(1-rho).
-
-Outputs CSV with point estimates, 95% Wilson confidence intervals, raw counts,
-and throughput measurements.
-
-Optional: --emit-tex-macros to print TeX \\newcommand definitions for all macros
-used by the paper (no CSV). This enables compile-time macro regeneration when
-shell-escape is available; otherwise the paper uses static fallback macros.
-
-Additional optional PGFPlots emitters for full figure traceability (all figures in this paper):
-  --emit-pgf-rho         Emit coordinates for the rho sweep (P_L vs rho) with symmetric Wilson half-widths
-  --emit-pgf-runlen      Emit analytic expected run length points vs rho (y = 1/(1-rho))
-  --emit-pgf-length      Emit coordinates for length sweep (L vs P_L)
-  --emit-pgf-power       Emit coordinates for power sweep (P_cl vs P_L)
-  --emit-pgf-sep         Emit coordinates for separation sweep (Δλ vs P_L)
-  --emit-pgf-eta         Emit coordinates for asymmetry sweep (eta_px vs P_L)
-
-Python: 3.8+ (stdlib only)
+Monte Carlo with distributed-noise mapping and Markov-modulated Bernoulli error processes.
+Produces CSV summaries and optional TeX macro emission and PGFPlots coordinate blocks.
 """
-
 import argparse, math, random, sys, time, platform
 from typing import List, Tuple, Dict
 
@@ -46,7 +18,6 @@ def hcf_noise_model(length_km: float,
                     attenuation_db_per_km: float = 0.25,
                     eta_px: float = 0.3,
                     atten_kappa: float = 0.1) -> Tuple[float,float,float,float,float]:
-    """Effective physics-inspired mapping using distributed-noise integrals."""
     P0 = 10 ** ((classical_power_dBm - 30) / 10.0)  # W
     alpha = attenuation_db_per_km * atten_kappa     # nepers/km
     if alpha <= 0:
@@ -61,7 +32,6 @@ def hcf_noise_model(length_km: float,
     return px, pz, sprs, fwm, alpha
 
 def markov_states(rho: float, n: int) -> List[int]:
-    """Generate hidden states for a symmetric two-state MMBP with persistence rho."""
     state = 1 if random.random() < 0.5 else 0
     out = [0]*n
     for i in range(n):
@@ -71,7 +41,6 @@ def markov_states(rho: float, n: int) -> List[int]:
     return out
 
 def markov_bits(p_base: float, rho: float, n: int, beta: float) -> List[int]:
-    """Two-state symmetric MMBP: low-noise: p_base; high-noise: min(1, beta*p_base)."""
     states = markov_states(rho, n)
     out = [0]*n
     hi = min(1.0, beta*p_base)
@@ -83,7 +52,6 @@ def markov_bits(p_base: float, rho: float, n: int, beta: float) -> List[int]:
 def bdd_block_fail_model2(n: int, t: int, px: float, pz: float, rho: float, trials: int,
                           beta: float = 2.0,
                           shared_state: bool=False) -> Tuple[int,int]:
-    """Return (failures, trials) under Model 2 with BDD threshold criterion."""
     fails = 0
     for _ in range(trials):
         if shared_state:
@@ -100,20 +68,18 @@ def bdd_block_fail_model2(n: int, t: int, px: float, pz: float, rho: float, tria
     return fails, trials
 
 def depolarizing_trial(n: int, t: int, p: float) -> bool:
-    """Single codeword trial under depolarizing channel with error prob p."""
     wx = wz = 0
     for _ in range(n):
         r = random.random()
-        if r < p/3.0:            # X
+        if r < p/3.0:
             wx += 1
-        elif r < 2*p/3.0:        # Y
+        elif r < 2*p/3.0:
             wx += 1; wz += 1
-        elif r < p:              # Z
+        elif r < p:
             wz += 1
     return (wx > t) or (wz > t)
 
 def bdd_block_fail_depol(n: int, t: int, p: float, trials: int) -> Tuple[int,int]:
-    """Return (failures, trials) under i.i.d. depolarizing channel."""
     fails = 0
     for _ in range(trials):
         if depolarizing_trial(n, t, p):
@@ -121,11 +87,10 @@ def bdd_block_fail_depol(n: int, t: int, p: float, trials: int) -> Tuple[int,int
     return fails, trials
 
 def wilson_interval(k: int, n: int) -> Tuple[float,float,float]:
-    """Wilson score interval for binomial proportion (95%)."""
     if n == 0:
         return (0.0, 0.0, 0.0)
     from math import sqrt
-    z = 1.959963984540054 # 95%
+    z = 1.959963984540054
     phat = k/n
     denom = 1 + z*z/n
     center = (phat + z*z/(2*n)) / denom
@@ -140,13 +105,11 @@ def f8(x: float) -> str:
 def emit_tex_macros(args,
                     px_base, pz_base,
                     main_res,
-                    rho_points: Dict[float,Tuple[float,float,float,int]],
-                    length_points: Dict[float,Tuple[float,float,Tuple[float,float,float,int]]],
-                    power_points: Dict[float,Tuple[float,float,Tuple[float,float,float,int]]],
-                    sep_points: Dict[float,Tuple[float,float,Tuple[float,float,float,int],float]],
-                    eta_points: Dict[float,Tuple[float,Tuple[float,float,float,int]]]):
-    """Print TeX \\newcommand definitions matching the paper macros (self-contained traceability)."""
-    # Baseline params
+                    rho_points,
+                    length_points,
+                    power_points,
+                    sep_points,
+                    eta_points):
     print(f"\\newcommand{{\\simL}}{{{int(args.L)}}}")
     print(f"\\newcommand{{\\simpcl}}{{{int(args.pcl)}}}")
     print(f"\\newcommand{{\\simsep}}{{{args.sep_nm}}}")
@@ -157,10 +120,8 @@ def emit_tex_macros(args,
     print(f"\\newcommand{{\\simseed}}{{{args.seed}}}")
     print(f"\\newcommand{{\\simpz}}{{{f8(pz_base)}}}")
     print(f"\\newcommand{{\\simpx}}{{{f8(px_base)}}}")
-    # Derived baselines
     p_eff_sum = 0.5*(min(1.0, args.beta*px_base)+px_base) + 0.5*(min(1.0, args.beta*pz_base)+pz_base)
     print(f"\\newcommand{{\\simpesum}}{{{f8(p_eff_sum)}}}")
-    # Main result (and timing)
     ph, lo, hi, k = main_res
     print(f"\\newcommand{{\\simrhoB}}{{{args.rho:.2f}}}")
     print(f"\\newcommand{{\\simpLB}}{{{f8(ph)}}}")
@@ -170,16 +131,13 @@ def emit_tex_macros(args,
     if ph > 0:
         rel_half = max(ph-lo, hi-ph)/ph
         print(f"\\newcommand{{\\simRelHalfWidthMain}}{{{100.0*rel_half:.1f}\\%}}")
-    # Rho sweep
-    order = [(0.00,"D"),(0.30,"A"),(0.60,"B"),(0.85,"C"),(0.95,"E")]
-    for r, tag in order:
+    for r, tag in [(0.00,"D"),(0.30,"A"),(0.60,"B"),(0.85,"C"),(0.95,"E")]:
         ph, lo, hi, k = rho_points[r]
         print(f"\\newcommand{{\\simrho{tag}}}{{{r:.2f}}}")
         print(f"\\newcommand{{\\simpL{tag}}}{{{f8(ph)}}}")
         print(f"\\newcommand{{\\simpL{tag}lo}}{{{f8(lo)}}}")
         print(f"\\newcommand{{\\simpL{tag}hi}}{{{f8(hi)}}}")
         print(f"\\newcommand{{\\simk{tag}}}{{{k}}}")
-    # Length sweep (selected)
     for L,label in [(50.0,"Lfa"),(150.0,"Lfb")]:
         pz, px, res = length_points[L]
         ph, lo, hi, k = res
@@ -190,7 +148,6 @@ def emit_tex_macros(args,
         print(f"\\newcommand{{\\simpL{label}lo}}{{{f8(lo)}}}")
         print(f"\\newcommand{{\\simpL{label}hi}}{{{f8(hi)}}}")
         print(f"\\newcommand{{\\simk{label}}}{{{k}}}")
-    # Power sweep (selected)
     for P,label in [(0.0,"PclA"),(5.0,"PclB")]:
         pz, px, res = power_points[P]
         ph, lo, hi, k = res
@@ -201,7 +158,6 @@ def emit_tex_macros(args,
         print(f"\\newcommand{{\\simpL{label}lo}}{{{f8(lo)}}}")
         print(f"\\newcommand{{\\simpL{label}hi}}{{{f8(hi)}}}")
         print(f"\\newcommand{{\\simk{label}}}{{{k}}}")
-    # Separation sweep, include FWM terms and fraction for main point
     _, _, sprs_base, fwm_base, _ = hcf_noise_model(args.L, args.pcl, args.sep_nm,
                                                    eta_px=args.eta_px, atten_kappa=args.atten_kappa)
     if sprs_base > 0:
@@ -218,7 +174,6 @@ def emit_tex_macros(args,
         print(f"\\newcommand{{\\simpL{label}hi}}{{{f8(hi)}}}")
         print(f"\\newcommand{{\\simk{label}}}{{{k}}}")
         print(f"\\newcommand{{\\simfwm{label}}}{{{f8(fwm)}}}")
-    # Eta sweep (selected)
     for E,label in [(0.10,"EtaA"),(0.50,"EtaB")]:
         px, res = eta_points[E]
         ph, lo, hi, k = res
@@ -238,48 +193,33 @@ def main():
     ap.add_argument("--sep-nm", type=float, default=6.4)
     ap.add_argument("--eta-px", type=float, default=0.3)
     ap.add_argument("--rho", type=float, default=0.6)
-    ap.add_argument("--beta", type=float, default=2.0,
-                    help="bad-state scaling factor for error probability")
+    ap.add_argument("--beta", type=float, default=2.0)
     ap.add_argument("--rho-sweep", type=str, default="")
     ap.add_argument("--length-sweep", type=str, default="")
     ap.add_argument("--power-sweep", type=str, default="")
     ap.add_argument("--sep-sweep", type=str, default="")
     ap.add_argument("--eta-sweep", type=str, default="")
-    ap.add_argument("--shared-state", action="store_true",
-                    help="Use a shared hidden state for X and Z processes")
+    ap.add_argument("--shared-state", action="store_true")
     ap.add_argument("--n", type=int, default=255)
     ap.add_argument("--t", type=int, default=10)
     ap.add_argument("--trials-bdd", type=int, default=1000000)
     ap.add_argument("--p-depol", type=float, default=0.02)
-    ap.add_argument("--atten-kappa", type=float, default=0.1,
-                    help="attenuation conversion constant; exact ln(10)/10 ≈ 0.2302585093")
-    ap.add_argument("--atten-kappa-alt", type=float, default=None,
-                    help="optional second kappa to print sensitivity (and run BDD if provided)")
-    ap.add_argument("--emit-tex-macros", action="store_true",
-                    help="emit TeX macro definitions to stdout and exit (no CSV)")
-    ap.add_argument("--emit-pgf-rho", action="store_true",
-                    help="emit PGFPlots coordinate block for rho sweep (to stdout)")
-    # Additional PGF emitters for full figure traceability
-    ap.add_argument("--emit-pgf-runlen", action="store_true",
-                    help="emit PGFPlots coordinate block for analytic expected run length vs rho")
-    ap.add_argument("--emit-pgf-length", action="store_true",
-                    help="emit PGFPlots coordinate block for length sweep (L vs P_L)")
-    ap.add_argument("--emit-pgf-power", action="store_true",
-                    help="emit PGFPlots coordinate block for power sweep (P_cl vs P_L)")
-    ap.add_argument("--emit-pgf-sep", action="store_true",
-                    help="emit PGFPlots coordinate block for separation sweep (Δλ vs P_L)")
-    ap.add_argument("--emit-pgf-eta", action="store_true",
-                    help="emit PGFPlots coordinate block for asymmetry sweep (eta_px vs P_L)")
+    ap.add_argument("--atten-kappa", type=float, default=0.1)
+    ap.add_argument("--atten-kappa-alt", type=float, default=None)
+    ap.add_argument("--emit-tex-macros", action="store_true")
+    ap.add_argument("--emit-pgf-rho", action="store_true")
+    ap.add_argument("--emit-pgf-runlen", action="store_true")
+    ap.add_argument("--emit-pgf-length", action="store_true")
+    ap.add_argument("--emit-pgf-power", action="store_true")
+    ap.add_argument("--emit-pgf-sep", action="store_true")
+    ap.add_argument("--emit-pgf-eta", action="store_true")
     args = ap.parse_args()
 
     set_seed(args.seed)
 
-    # Macro emission mode: compute the full set of points used by the paper and exit.
     if args.emit_tex_macros and args.model == "model2":
-        # Baseline mapping
         px_base, pz_base, sprs, fwm, alpha = hcf_noise_model(args.L, args.pcl, args.sep_nm,
                                                              eta_px=args.eta_px, atten_kappa=args.atten_kappa)
-        # Time the main BDD run to provide throughput/runtime macros as well
         t0 = time.time()
         k, ntr = bdd_block_fail_model2(args.n, args.t, px_base, pz_base, args.rho, args.trials_bdd,
                                        beta=args.beta, shared_state=args.shared_state)
@@ -291,7 +231,7 @@ def main():
             print(f"\\newcommand{{\\simThroughput}}{{{ntr/dur:.2f}}}")
 
         rho_list = [0.00, 0.30, 0.60, 0.85, 0.95]
-        rho_points: Dict[float,Tuple[float,float,float,int]] = {}
+        rho_points = {}
         for r in rho_list:
             set_seed(args.seed)
             k, ntr = bdd_block_fail_model2(args.n, args.t, px_base, pz_base, r, args.trials_bdd,
@@ -299,41 +239,37 @@ def main():
             ph, lo, hi = wilson_interval(k, ntr)
             rho_points[r] = (ph, lo, hi, k)
 
-        length_points: Dict[float,Tuple[float,float,Tuple[float,float,float,int]]] = {}
+        length_points = {}
         for L in [50.0, 100.0, 150.0]:
             set_seed(args.seed)
-            px, pz, sprs_p, fwm_p, _ = hcf_noise_model(L, args.pcl, args.sep_nm,
-                                                       eta_px=args.eta_px, atten_kappa=args.atten_kappa)
+            px, pz, _, _, _ = hcf_noise_model(L, args.pcl, args.sep_nm, eta_px=args.eta_px, atten_kappa=args.atten_kappa)
             k, ntr = bdd_block_fail_model2(args.n, args.t, px, pz, args.rho, args.trials_bdd,
                                            beta=args.beta, shared_state=args.shared_state)
             ph, lo, hi = wilson_interval(k, ntr)
             length_points[L] = (pz, px, (ph, lo, hi, k))
 
-        power_points: Dict[float,Tuple[float,float,Tuple[float,float,float,int]]] = {}
+        power_points = {}
         for P in [0.0, 5.0, 10.0]:
             set_seed(args.seed)
-            px, pz, sprs_p, fwm_p, _ = hcf_noise_model(args.L, P, args.sep_nm,
-                                                       eta_px=args.eta_px, atten_kappa=args.atten_kappa)
+            px, pz, _, _, _ = hcf_noise_model(args.L, P, args.sep_nm, eta_px=args.eta_px, atten_kappa=args.atten_kappa)
             k, ntr = bdd_block_fail_model2(args.n, args.t, px, pz, args.rho, args.trials_bdd,
                                            beta=args.beta, shared_state=args.shared_state)
             ph, lo, hi = wilson_interval(k, ntr)
             power_points[P] = (pz, px, (ph, lo, hi, k))
 
-        sep_points: Dict[float,Tuple[float,float,Tuple[float,float,float,int],float]] = {}
+        sep_points = {}
         for S in [3.2, 6.4, 12.8]:
             set_seed(args.seed)
-            px, pz, sprs_p, fwm_p, _ = hcf_noise_model(args.L, args.pcl, S,
-                                                       eta_px=args.eta_px, atten_kappa=args.atten_kappa)
+            px, pz, _, fwm_p, _ = hcf_noise_model(args.L, args.pcl, S, eta_px=args.eta_px, atten_kappa=args.atten_kappa)
             k, ntr = bdd_block_fail_model2(args.n, args.t, px, pz, args.rho, args.trials_bdd,
                                            beta=args.beta, shared_state=args.shared_state)
             ph, lo, hi = wilson_interval(k, ntr)
             sep_points[S] = (pz, px, (ph, lo, hi, k), fwm_p)
 
-        eta_points: Dict[float,Tuple[float,Tuple[float,float,float,int]]] = {}
+        eta_points = {}
         for E in [0.10, 0.30, 0.50]:
             set_seed(args.seed)
-            px, pz, sprs_p, fwm_p, _ = hcf_noise_model(args.L, args.pcl, args.sep_nm,
-                                                       eta_px=E, atten_kappa=args.atten_kappa)
+            px, pz, _, _, _ = hcf_noise_model(args.L, args.pcl, args.sep_nm, eta_px=E, atten_kappa=args.atten_kappa)
             k, ntr = bdd_block_fail_model2(args.n, args.t, px, pz, args.rho, args.trials_bdd,
                                            beta=args.beta, shared_state=args.shared_state)
             ph, lo, hi = wilson_interval(k, ntr)
@@ -343,9 +279,8 @@ def main():
         return
 
     if args.emit_pgf_rho and args.model == "model2":
-        # Emit PGFPlots coordinate block for rho sweep (with symmetric Wilson half-width)
-        px_base, pz_base, sprs, fwm, alpha = hcf_noise_model(args.L, args.pcl, args.sep_nm,
-                                                             eta_px=args.eta_px, atten_kappa=args.atten_kappa)
+        px_base, pz_base, _, _, _ = hcf_noise_model(args.L, args.pcl, args.sep_nm,
+                                                    eta_px=args.eta_px, atten_kappa=args.atten_kappa)
         rho_list = [0.00, 0.30, 0.60, 0.85, 0.95]
         coords = []
         for r in rho_list:
@@ -355,34 +290,27 @@ def main():
             ph, lo, hi = wilson_interval(k, ntr)
             half = max(ph - lo, hi - ph)
             coords.append((r, ph, half))
-        print("% PGFPlots coordinates with symmetric Wilson half-widths")
-        print("coordinates {")
+        print("% coordinates {")
         for r, ph, half in coords:
             print(f"  ({r:.2f},{ph:.8e}) +- (0,{half:.8e})")
-        print("};")
+        print("}")
         return
 
-    # Emit analytic expected run length points vs rho
     if args.emit_pgf_runlen:
         rho_list = [0.00, 0.30, 0.60, 0.85, 0.95] if not args.rho_sweep else [float(x) for x in args.rho_sweep.split(",")]
-        print("% PGFPlots coordinates for analytic expected run length 1/(1-rho)")
-        print("coordinates {")
+        print("% coordinates {")
         for r in rho_list:
-            r = float(r)
             y = float('inf') if (1.0 - r) == 0.0 else 1.0/(1.0 - r)
             print(f"  ({r:.2f},{y:.4f})")
-        print("};")
+        print("}")
         return
 
-    # Generic helper for sweep emitters
-    def _emit_pgf_from_sweep(points: List[Tuple[float,float,float]], xlab: str):
-        print(f"% PGFPlots coordinates for sweep: {xlab}")
-        print("coordinates {")
+    def _emit_pgf_from_sweep(points, xlab):
+        print("% coordinates {")
         for x, ph, half in points:
             print(f"  ({x:.8g},{ph:.8e}) +- (0,{half:.8e})")
-        print("};")
+        print("}")
 
-    # Emit PGF for length/power/sep/eta sweeps
     if args.emit_pgf_length and args.model == "model2":
         if not args.length_sweep:
             args.length_sweep = "50,100,150"
@@ -443,7 +371,6 @@ def main():
         _emit_pgf_from_sweep(points, "eta_px")
         return
 
-    # CSV mode (default)
     print(f"# cmdline: {' '.join(sys.argv)}")
     print(f"# python: {sys.version.splitlines()[0]}")
     print(f"# platform: {platform.platform()}")

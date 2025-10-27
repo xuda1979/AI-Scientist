@@ -131,7 +131,7 @@ def _run_cmd(cmd: list[str], cwd: Path) -> Tuple[int, str, str]:
 
 def compile_latex(project_dir: Path, tex_file: str = "paper.tex") -> Tuple[bool, str]:
     """
-    Attempt to compile with latexmk; fallback to pdflatex twice.
+    Attempt to compile with latexmk; fallback to full pdflatex+bibtex workflow.
     Returns (success, log_text).
     """
     if shutil.which("latexmk"):
@@ -145,14 +145,60 @@ def compile_latex(project_dir: Path, tex_file: str = "paper.tex") -> Tuple[bool,
         log = out + "\n" + err
         return rc == 0, log
 
-    # Fallback to pdflatex (twice)
+    # Fallback to full pdflatex+bibtex workflow for proper bibliography handling
     ok = True
     all_logs = []
-    for _ in range(2):
+    
+    # Step 1: First pdflatex run
+    rc, out, err = _run_cmd(["pdflatex", "-interaction=nonstopmode", tex_file], project_dir)
+    all_logs.append("=== First pdflatex run ===\n" + out + "\n" + err)
+    if rc != 0:
+        ok = False
+    
+    # Step 2: Check if we need bibtex (look for .aux file and bibliography commands)
+    tex_content = ""
+    try:
+        tex_content = (project_dir / tex_file).read_text(encoding="utf-8", errors="ignore")
+    except:
+        pass
+    
+    aux_file = project_dir / tex_file.replace(".tex", ".aux")
+    needs_bibtex = False
+    
+    # Check if paper uses external bibliography (not embedded thebibliography)
+    has_embedded_bib = r"\begin{thebibliography}" in tex_content
+    has_bib_command = r"\bibliography{" in tex_content or r"\bibliographystyle{" in tex_content
+    
+    if not has_embedded_bib and (has_bib_command or aux_file.exists()):
+        needs_bibtex = True
+        # Also check .aux file for \bibdata or \bibstyle commands
+        if aux_file.exists():
+            try:
+                aux_content = aux_file.read_text(encoding="utf-8", errors="ignore")
+                if r"\bibdata{" in aux_content or r"\bibstyle{" in aux_content:
+                    needs_bibtex = True
+            except:
+                pass
+    
+    # Step 3: Run bibtex if needed
+    if needs_bibtex and shutil.which("bibtex"):
+        aux_name = tex_file.replace(".tex", "")
+        rc, out, err = _run_cmd(["bibtex", aux_name], project_dir)
+        all_logs.append("=== BibTeX run ===\n" + out + "\n" + err)
+        # Don't fail on bibtex errors, but log them
+        
+        # Step 4: Second pdflatex run (after bibtex)
         rc, out, err = _run_cmd(["pdflatex", "-interaction=nonstopmode", tex_file], project_dir)
-        all_logs.append(out + "\n" + err)
+        all_logs.append("=== Second pdflatex run (after bibtex) ===\n" + out + "\n" + err)
         if rc != 0:
             ok = False
+    
+    # Step 5: Final pdflatex run to resolve all references
+    rc, out, err = _run_cmd(["pdflatex", "-interaction=nonstopmode", tex_file], project_dir)
+    all_logs.append("=== Final pdflatex run ===\n" + out + "\n" + err)
+    if rc != 0:
+        ok = False
+    
     return ok, "\n".join(all_logs)
 
 def compile_with_autofix(

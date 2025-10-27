@@ -300,7 +300,7 @@ def run_workflow(output_dir: Path, topic: str = "", field: str = "", question: s
             review, decision = run_review_revision_step(
                 current_tex, sim_summary, latex_errors, project_dir, user_prompt,
                 i, model, 3600, config, pdf_path, config.diff_output_tracking,
-                paper_path, quality_issues
+                paper_path, quality_issues, is_initial_draft=False
             )
         
         print(f"Review completed")

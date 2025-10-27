@@ -1,0 +1,41 @@
+{
+  "issues": [
+    "Missing statistical significance testing and p-value reporting",
+    "Missing confidence interval reporting",
+    "No evidence of multiple experimental runs with different seeds",
+    "Missing effect size reporting - statistical significance without practical significance",
+    "Missing multiple testing correction when comparing multiple methods/conditions",
+    "Simulation code lacks proper random seed control",
+    "Simulation lacks statistical testing implementation",
+    "Insufficient baseline comparison discussion - need at least 3 relevant baselines",
+    "Missing proper validation methodology (cross-validation or train/test splits)",
+    "Missing hyperparameter tuning methodology and fairness discussion",
+    "Missing computational complexity analysis",
+    "Missing preprocessing and data preparation details",
+    "Missing reproducibility information and implementation details",
+    "Missing detailed training procedure specification",
+    "Insufficient references: 3 < 15",
+    "CRITICAL: Missing a dedicated Contributions section that summarises the paper's novel innovations.",
+    "Missing error bars or uncertainty quantification in results",
+    "WARNING: Related work Proceedings of the 27th ACM Symposium on Operating Systems Principles (2019) shares key themes (similarity 0.51). Highlight differentiation.",
+    "WARNING: Related work Proceedings of the 26th Symposium on Operating Systems Principles (2017) shares key themes (similarity 0.49). Highlight differentiation.",
+    "WARNING: Related work MCP: A Control-Theoretic Orchestration Framework for Synergistic Efficiency and Interpretability in Multimodal Large Language Models (2025) shares key themes (similarity 0.45). Highlight differentiation.",
+    "INFO: Novelty diagnostics summary \u2014 max similarity 0.51, avg similarity 0.33, recent overlap penalty 0.00",
+    "WARNING: Only 2 figures found - General Research documents typically include 3+ visuals",
+    "WARNING: May contain abstract descriptions without concrete implementation details",
+    "FORMATTING: Found plain text bullets '- ' that should be \\begin{itemize}\\item",
+    "WARNING: Fair scoring failed ('charmap' codec can't encode character '\\U0001f4ca' in position 0: character maps to <undefined>)"
+  ],
+  "scores": {
+    "statistical_rigor": 0.04999999999999996,
+    "experimental_design": 0.30000000000000004,
+    "methodology_clarity": 0.65,
+    "literature_review": 0.8,
+    "innovation_focus": 0.5499999999999999,
+    "results_presentation": 0.85,
+    "formatting": 1.0,
+    "novelty": 0.644,
+    "review_readiness": 0.8,
+    "overall": 0.6271111111111112
+  }
+}

@@ -1,0 +1,2 @@
+alpha,n_total,n_calib,n_test,Kmax,C,tau,calib_mean_vs_correct,calib_median_vs_correct,coverage_anytime,avg_set_size_anytime,avg_samples_used_anytime,median_samples_used_anytime,accuracy_fixedK_majority
+0.1,1500,300,1200,16,8,0.375,0.719375,0.75,0.7225,1.0,1.0,1.0,0.9475

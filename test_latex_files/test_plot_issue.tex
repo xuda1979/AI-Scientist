@@ -1,0 +1,15 @@
+\documentclass{article}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+
+\begin{tikzpicture}
+\begin{axis}[
+    symbolic y coords={IGD (full),RS-MCTT (const-risk),MCTT (const-risk)},
+    ytick=data,
+]
+\addplot coordinates {(0,IGD (full)) (1,RS-MCTT (const-risk))};
+\end{axis}
+\end{tikzpicture}
+
+\end{document}

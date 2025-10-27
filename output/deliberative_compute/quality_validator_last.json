@@ -1,0 +1,35 @@
+{
+  "issues": [
+    "Missing confidence interval reporting",
+    "Insufficient baseline comparison discussion - need at least 3 relevant baselines",
+    "Missing proper validation methodology (cross-validation or train/test splits)",
+    "Missing detailed model architecture specification",
+    "Missing dedicated related work or literature review section",
+    "WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections.",
+    "INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence.",
+    "Potential equation overflow - long equations should use align or split environments",
+    "WARNING: Related work A comparison of fixed item parameter calibration methods and reporting score scales in the development of an item pool (n.d.) shares key themes (similarity 0.31). Highlight differentiation.",
+    "WARNING: Related work Racial Differences in the Use of &lt;EMPH&gt;BRCA1/2&lt;/EMPH&gt; Testing Among Women With a Family History of Breast or Ovarian Cancer (2005) shares key themes (similarity 0.30). Highlight differentiation.",
+    "WARNING: Related work Orthorhombic SrHfO3 (0 0 1) surfaces: Surface structure and electronic properties with first-principles calculations (2012) shares key themes (similarity 0.30). Highlight differentiation.",
+    "INFO: Novelty diagnostics summary \u2014 max similarity 0.31, avg similarity 0.21, recent overlap penalty 0.00",
+    "FAIR: WARNING: Related work A comparison of fixed item parameter calibration methods and reporting score scales in the development of an item pool (n.d.) shares key themes (similarity 0.31). Highlight differentiation.",
+    "FAIR: WARNING: Related work Racial Differences in the Use of &lt;EMPH&gt;BRCA1/2&lt;/EMPH&gt; Testing Among Women With a Family History of Breast or Ovarian Cancer (2005) shares key themes (similarity 0.30). Highlight differentiation.",
+    "FAIR: WARNING: Related work Orthorhombic SrHfO3 (0 0 1) surfaces: Surface structure and electronic properties with first-principles calculations (2012) shares key themes (similarity 0.30). Highlight differentiation.",
+    "FAIR: INFO: Novelty diagnostics summary \u2014 max similarity 0.31, avg similarity 0.21, recent overlap penalty 0.00",
+    "FAIR: INFO: Novelty diagnostics \u2014 max similarity 0.31, avg similarity 0.21, recent overlap penalty 0.00"
+  ],
+  "scores": {
+    "statistical_rigor": 0.85,
+    "experimental_design": 0.55,
+    "methodology_clarity": 0.85,
+    "literature_review": 0.9,
+    "innovation_focus": 0.85,
+    "results_presentation": 1.0,
+    "formatting": 0.95,
+    "novelty": 0.842,
+    "review_readiness": 1.0,
+    "fair_final": 0.9156299999999999,
+    "fair_penalty_adjusted": 0.9521,
+    "overall": 0.8781572727272727
+  }
+}

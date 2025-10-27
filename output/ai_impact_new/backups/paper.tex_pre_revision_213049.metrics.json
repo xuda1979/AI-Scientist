@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-10-16T21:30:49.164081",
+  "file": "output\\ai_impact_new\\paper.tex",
+  "backup": "output\\ai_impact_new\\backups\\paper.tex_pre_revision_213049",
+  "metrics": {
+    "word_count": 4019,
+    "char_count": 33491,
+    "section_count": 9,
+    "subsection_count": 0,
+    "figure_count": 4,
+    "table_count": 4,
+    "equation_count": 3,
+    "citation_count": 32,
+    "paragraph_count": 62,
+    "page_estimate": 16.076
+  }
+}
