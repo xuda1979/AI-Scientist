@@ -2696,6 +2696,16 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "6. ❌ Weak statistical rigor → ✓ Multiple runs, confidence intervals, significance tests\n"
         "7. ❌ Hiding limitations → ✓ Honest discussion of when method fails\n\n"
         
+        "📚 CONTENT DEPTH & QUALITY CHECKLIST:\n"
+        "Transform superficial papers into comprehensive research:\n"
+        "1. ❌ Short sections (<300 words) → ✓ Expand to 500-1500 words with subsections\n"
+        "2. ❌ Simple tables (3x3) → ✓ Rich tables (5+ rows, 4+ cols, mean±std, significance)\n"
+        "3. ❌ Basic plots → ✓ Multi-panel figures with error bars and professional styling\n"
+        "4. ❌ Few equations → ✓ Detailed mathematical derivations with step-by-step proofs\n"
+        "5. ❌ Simple code (1-2 functions) → ✓ Modular design (5+ functions, classes, numpy/scipy)\n"
+        "6. ❌ Brief explanations → ✓ Concrete examples, walkthroughs, detailed comparisons\n"
+        "7. ❌ Minimal Related Work → ✓ 15-25 citations with critical comparative analysis\n\n"
+        
         "REVISION OUTPUT FORMAT:\n"
         "Always provide complete revised file contents in this exact format:\n\n"
         "```tex\n"
@@ -3248,6 +3258,47 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "   - Identify scenarios where assumptions don't hold\n"
         "   - Future work should address real limitations, not generic extensions\n\n"
         
+        "📚 CONTENT DEPTH & QUALITY REQUIREMENTS (PREVENTS SUPERFICIAL PAPERS):\n"
+        "Professional papers require comprehensive, detailed content - not superficial summaries:\n\n"
+        
+        "1. SECTION DEPTH & LENGTH:\n"
+        "   - Each major section: 500-1500 words (not 100-200)\n"
+        "   - Must have 2-5 subsections with hierarchical organization\n"
+        "   - 3-5 substantive paragraphs per subsection\n"
+        "   - Total paper: 5000-8000 words (excluding references) - NOT 2000-3000\n"
+        "   - Detailed explanations with concrete examples, not brief summaries\n"
+        "   - Critical comparison in Related Work (15-25 citations with analysis)\n\n"
+        
+        "2. VISUALIZATION QUALITY:\n"
+        "   - Tables: 5+ rows, 4+ columns, NOT simple 3x3 grids\n"
+        "   - Show mean±std dev, confidence intervals, significance markers (*, **, ***)\n"
+        "   - Multi-panel figures: (a), (b), (c) showing different views/conditions\n"
+        "   - Plots MUST have: error bars/shaded CI, grid lines, legends, proper labels\n"
+        "   - Professional styling: consistent colors, readable fonts, high data density\n"
+        "   - Simulation code must: run multiple trials, calculate statistics, generate publication-quality plots\n\n"
+        
+        "3. MATHEMATICAL RIGOR:\n"
+        "   - Formal problem formulation with mathematical notation\n"
+        "   - Step-by-step derivations (not just final equations)\n"
+        "   - Use 'therefore', 'it follows', 'substituting' to show reasoning\n"
+        "   - Theorems/Lemmas: formal statements with complete proofs\n"
+        "   - Complexity bounds: Big-O for ALL algorithms with justification\n"
+        "   - Consistent mathematical notation throughout (define all symbols)\n\n"
+        
+        "4. CODE SOPHISTICATION:\n"
+        "   - Modular design: 5+ well-structured functions (not simple 1-2 function scripts)\n"
+        "   - Use professional libraries: numpy, scipy, pandas for numerical work\n"
+        "   - Class-based architecture for complex systems (OOP where appropriate)\n"
+        "   - Comprehensive implementation showing technical depth\n"
+        "   - NOT toy examples - production-quality code demonstrating expertise\n\n"
+        
+        "5. DETAILED EXPLANATIONS:\n"
+        "   - Concrete examples illustrating abstract concepts\n"
+        "   - Walk through specific instances step-by-step\n"
+        "   - Related Work: Don't just cite - COMPARE and CONTRAST with detailed analysis\n"
+        "   - Limitations: Specific scenarios where method fails (honest discussion)\n"
+        "   - Future Work: Concrete research directions, not vague statements\n\n"
+        
         "Provide specific, actionable feedback with concrete suggestions for improvement. "
         "If the paper violates any of the 12 mandatory requirements, mark it as needing major revision. "
         "Pay special attention to reference authenticity, results documentation, figure generation, filename removal, structural appropriateness, and figure/table placement relative to references."
@@ -3747,6 +3798,47 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "   - Identify scenarios where assumptions don't hold\n"
         "   - Be transparent about scope and applicability\n\n"
         
+        "📚 CONTENT DEPTH & QUALITY REQUIREMENTS (CREATE COMPREHENSIVE PAPERS):\n"
+        "Transform superficial content into publication-quality depth:\n\n"
+        
+        "1. EXPAND SECTION DEPTH:\n"
+        "   - Target 500-1500 words per major section (if currently <300, EXPAND substantially)\n"
+        "   - ADD 2-5 subsections to each major section for hierarchical organization\n"
+        "   - WRITE 3-5 detailed paragraphs per subsection (not single paragraphs)\n"
+        "   - AIM for 5000-8000 word total (excluding refs) - add comprehensive content\n"
+        "   - INCLUDE: concrete examples, detailed explanations, step-by-step walkthroughs\n"
+        "   - RELATED WORK: Expand to 15-25 citations with critical comparative analysis\n\n"
+        
+        "2. ENHANCE VISUALIZATIONS:\n"
+        "   - EXPAND tables to 5+ rows, 4+ columns (consolidate or add more experimental conditions)\n"
+        "   - ADD statistical measures: mean±std, 95% CI, significance markers (*, **, ***)\n"
+        "   - CREATE multi-panel figures using subfigure: (a) Method A, (b) Method B, (c) Comparison\n"
+        "   - UPDATE simulation.py to: run 10+ trials, calculate mean/std, plot with error bars\n"
+        "   - ADD to plots: plt.grid(), plt.legend(), error bars, shaded confidence regions\n"
+        "   - USE professional styling: seaborn themes, consistent colors, readable fonts\n\n"
+        
+        "3. STRENGTHEN MATHEMATICS:\n"
+        "   - ADD formal problem formulation: 'Given... find... such that...'\n"
+        "   - SHOW step-by-step derivations: 'Starting from Eq. X... Substituting... Therefore...'\n"
+        "   - INCLUDE intermediate steps (not just initial and final equations)\n"
+        "   - ADD theorems: \\begin{theorem} Formal statement \\end{theorem} with proofs\n"
+        "   - PROVIDE complexity analysis: 'Time: O(n log n) because... Space: O(n) for...'\n"
+        "   - DEFINE all mathematical symbols in notation table or inline\n\n"
+        
+        "4. IMPROVE CODE SOPHISTICATION:\n"
+        "   - REFACTOR into 5+ modular functions (separate concerns: data loading, preprocessing, training, evaluation, visualization)\n"
+        "   - ADD classes for complex systems: class Model, class Trainer, class Evaluator\n"
+        "   - USE numpy/scipy: np.array operations, scipy.optimize, scipy.stats\n"
+        "   - IMPLEMENT comprehensive functionality (not minimal toy examples)\n"
+        "   - ADD proper error handling, input validation, logging\n\n"
+        
+        "5. ADD DETAILED EXPLANATIONS:\n"
+        "   - INCLUDE 2-3 concrete examples per major concept: 'For example, consider...'\n"
+        "   - WALK THROUGH specific instances: 'Step 1:... Step 2:... Step 3:...'\n"
+        "   - COMPARE in Related Work: 'While [Ref] uses X, our approach uses Y because...'\n"
+        "   - DISCUSS limitations honestly: 'Our method fails when... because...'\n"
+        "   - SPECIFY future work: 'Extending to handle X by modifying Y would enable...'\n\n"
+        
         "FORMATTING REQUIREMENTS (CRITICAL - NO EXCEPTIONS):\n"
         "- ALL content: use width=\\linewidth constraints (never exceed page width)\n"
         "- ALL wide tables: \\begin{adjustbox}{width=\\linewidth}...\\end{adjustbox}\n"
@@ -4240,6 +4332,25 @@ def run_workflow(
                 print(f"   {idx}. {warning}")
             if len(rigor_warnings) > 5:
                 print(f"   ... and {len(rigor_warnings) - 5} more warnings")
+        
+        # CONTENT DEPTH & QUALITY VALIDATION
+        from utils.content_depth_validator import validate_content_quality
+        depth_critical, depth_warnings = validate_content_quality(
+            current_tex,
+            sim_summary,
+            project_dir=project_dir
+        )
+        
+        # Add critical content depth issues to quality issues
+        quality_issues.extend(depth_critical)
+        
+        # Log depth warnings separately
+        if depth_warnings:
+            print(f"⚠ Content depth warnings ({len(depth_warnings)} total):")
+            for idx, warning in enumerate(depth_warnings[:5], 1):
+                print(f"   {idx}. {warning}")
+            if len(depth_warnings) > 5:
+                print(f"   ... and {len(depth_warnings) - 5} more warnings")
         
         if quality_issues:
             print(f"⚠ Quality issues detected ({len(quality_issues)} total):")
