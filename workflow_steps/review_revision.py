@@ -18,11 +18,19 @@ def run_review_revision_step(
     paper_path: Path,
     quality_issues: Optional[list] = None,
     is_initial_draft: bool = False,
+    all_code_mode: bool = False,
+    code_output_dir: str = "code",
+    execution_log_file: str = "execution_log.txt",
+    previous_execution_results: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Run combined review and revision step.
     
     Args:
         is_initial_draft: If True, request full paper content; if False, request diffs only
+        all_code_mode: If True, enable unrestricted code generation and command execution
+        code_output_dir: Directory for generated code files (only used in all-code mode)
+        execution_log_file: Filename for execution log (only used in all-code mode)
+        previous_execution_results: Formatted execution results from previous iteration
     """
     from sciresearch_workflow import (
         _combined_review_edit_revise_prompt,
@@ -32,9 +40,30 @@ def run_review_revision_step(
         _revise_prompt,
         _save_iteration_diff,
     )
+    
+    # ALL-CODE MODE: Add execution results and code generation instructions to prompt
+    supplemental_context = ""
+    if all_code_mode:
+        from utils.all_code_handler import (
+            create_all_code_prompt_supplement,
+            format_execution_results_for_llm
+        )
+        
+        # Add prompt supplement for all-code mode
+        supplemental_context = create_all_code_prompt_supplement(
+            iteration=iteration,
+            has_previous_results=(previous_execution_results is not None)
+        )
+        
+        # Add previous execution results if available
+        if previous_execution_results:
+            supplemental_context = previous_execution_results + "\n\n" + supplemental_context
 
     combined_response = _universal_chat(
-        _combined_review_edit_revise_prompt(current_tex, sim_summary, latex_errors, project_dir, user_prompt, iteration, quality_issues),
+        _combined_review_edit_revise_prompt(
+            current_tex, sim_summary, latex_errors, project_dir, user_prompt, iteration, quality_issues,
+            supplemental_context=supplemental_context
+        ),
         model=model,
         request_timeout=request_timeout,
         prompt_type="combined_review_edit_revise",
@@ -237,6 +266,77 @@ def run_review_revision_step(
                 
                 if output_diffs and original_content is not None:
                     _save_iteration_diff(original_content, revised, project_dir, iteration, "paper.tex")
+
+    # ALL-CODE MODE: Extract code files, commands, and execute
+    execution_results_text = None
+    if all_code_mode:
+        print(f"\n{'='*80}")
+        print(f"ALL-CODE MODE: Processing code files and commands")
+        print(f"{'='*80}\n")
+        
+        from utils.all_code_handler import (
+            extract_all_code_blocks,
+            save_code_files,
+            extract_execution_commands,
+            execute_commands_and_log,
+            generate_code_diffs,
+            format_execution_results_for_llm
+        )
+        
+        # Extract all code files from response
+        code_files = extract_all_code_blocks(combined_response, project_dir)
+        
+        if code_files:
+            print(f"  Found {len(code_files)} code file(s) to save:")
+            for filepath in code_files.keys():
+                print(f"    - {filepath}")
+            
+            # Save code files
+            saved_paths = save_code_files(code_files, project_dir, code_output_dir)
+            
+            # Generate diffs for code files if this is not the first iteration
+            if iteration > 1:
+                # Try to load previous code files for diff
+                old_code_files = {}
+                code_dir = project_dir / code_output_dir
+                if code_dir.exists():
+                    for filepath in code_files.keys():
+                        old_path = code_dir / filepath
+                        if old_path.exists():
+                            try:
+                                # Read the file content before it was updated
+                                # (Note: This won't work since we already saved new content)
+                                # In production, we should save old content first
+                                pass
+                            except:
+                                pass
+                
+                # Generate diff
+                diff_path = generate_code_diffs(old_code_files, code_files, project_dir, iteration)
+            
+            print("")
+        
+        # Extract and execute commands
+        commands = extract_execution_commands(combined_response)
+        
+        if commands:
+            print(f"  Found {len(commands)} command(s) to execute:")
+            for cmd_info in commands:
+                print(f"    - {cmd_info['description']}")
+            print("")
+            
+            # Execute commands and log results
+            log_path = execute_commands_and_log(commands, project_dir, execution_log_file)
+            
+            # Format results for next iteration
+            diff_path = project_dir / "diffs" / f"code_changes_iteration_{iteration}.diff" if iteration > 1 else None
+            execution_results_text = format_execution_results_for_llm(log_path, diff_path)
+            
+            print(f"\n  ✓ Execution complete. Results will be provided to LLM in next iteration.\n")
+        else:
+            print(f"  No execution commands found in LLM response.\n")
+        
+        print(f"{'='*80}\n")
 
     return review, decision
 

@@ -2608,7 +2608,16 @@ def _collect_project_files(project_dir: Path) -> str:
     else:
         return "No additional project files found."
 
-def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, iteration_count: int = 1, quality_issues: Optional[List[str]] = None) -> List[Dict[str, str]]:
+def _combined_review_edit_revise_prompt(
+    paper_tex: str, 
+    sim_summary: str, 
+    latex_errors: str = "", 
+    project_dir: Path = None, 
+    user_prompt: Optional[str] = None, 
+    iteration_count: int = 1, 
+    quality_issues: Optional[List[str]] = None,
+    supplemental_context: str = ""
+) -> List[Dict[str, str]]:
     """Combined prompt for review and revision with diff output."""
     sys_prompt = (
         "You are a combined AI system acting as: (1) Top-tier journal reviewer and (2) Paper author. "
@@ -2813,6 +2822,10 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "## REVISION DIFFS\n"
         "[Complete revised file contents for all files that need changes]\n"
     )
+    
+    # Add supplemental context (for all-code mode execution results)
+    if supplemental_context:
+        user += "\n\n" + supplemental_context
     
     return [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}]
 
@@ -3979,7 +3992,10 @@ def run_workflow(
     output_diffs: bool = False,       # Optional diff output for each review/revision cycle
     document_type: str = "auto",     # Document type to generate
     enable_blueprint_planning: Optional[bool] = None,  # Pre-draft planning toggle
-    cancel_event: Optional[threading.Event] = None  # Optional cancellation signal from GUI
+    cancel_event: Optional[threading.Event] = None,  # Optional cancellation signal from GUI
+    all_code_mode: bool = False,     # Enable unrestricted code generation mode
+    code_output_dir: str = "code",   # Directory for generated code files
+    execution_log_file: str = "execution_log.txt"  # Execution log filename
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
 
@@ -4263,6 +4279,9 @@ def run_workflow(
 
     _check_cancellation(cancel_event, "pre-iteration setup")
 
+    # Track execution results for all-code mode
+    previous_execution_results = None
+
     # Review-Revise loop with quality tracking
     for i in range(1, config.max_iterations + 1):
         _check_cancellation(cancel_event, f"iteration {i} start")
@@ -4426,7 +4445,25 @@ def run_workflow(
             paper_path,
             quality_issues,
             is_initial_draft=False,  # Always use diff mode during revision iterations
+            all_code_mode=all_code_mode,
+            code_output_dir=code_output_dir,
+            execution_log_file=execution_log_file,
+            previous_execution_results=previous_execution_results,
         )
+        
+        # In all-code mode, execution results are returned via a global or instance variable
+        # We need to capture them for the next iteration
+        if all_code_mode:
+            execution_log_path = project_dir / execution_log_file
+            if execution_log_path.exists():
+                from utils.all_code_handler import format_execution_results_for_llm
+                diff_path = project_dir / "diffs" / f"code_changes_iteration_{i}.diff"
+                previous_execution_results = format_execution_results_for_llm(
+                    execution_log_path,
+                    diff_path if diff_path.exists() else None
+                )
+            else:
+                previous_execution_results = None
 
         _check_cancellation(cancel_event, f"iteration {i} post-review")
 
@@ -4842,6 +4879,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--use-test-time-scaling", action="store_true", help="Enable test-time compute scaling during revision cycles")
     p.add_argument("--revision-candidates", type=int, default=3, help="Number of revision candidates to generate when using test-time scaling")
     p.add_argument("--draft-candidates", type=int, default=1, help="Number of initial draft candidates to generate")
+    
+    # All-code mode: Allow LLM to generate any code files, execute commands, and iterate
+    p.add_argument("--all-code", action="store_true", help="Enable unrestricted code generation mode: LLM can create any code files (not just simulation.py), generate execution commands, and iterate based on results")
+    p.add_argument("--code-output-dir", type=str, default="code", help="Directory name within project for generated code files (default: 'code')")
+    p.add_argument("--execution-log", type=str, default="execution_log.txt", help="Filename for logging command execution results")
     
     args = p.parse_args(argv)
     
@@ -5764,7 +5806,10 @@ if __name__ == "__main__":
             num_ideas=ns.num_ideas,
             output_diffs=ns.output_diffs,
             document_type=ns.document_type,
-            enable_blueprint_planning=ns.enable_blueprint_planning
+            enable_blueprint_planning=ns.enable_blueprint_planning,
+            all_code_mode=ns.all_code,
+            code_output_dir=ns.code_output_dir,
+            execution_log_file=ns.execution_log
         )
         print(f" Workflow completed! Results in: {result_dir}")
     except WorkflowCancelled as e:
