@@ -1179,7 +1179,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
             try:
                 # For Google AI, we need to upload the file using the file API
                 # This is a simplified approach - in production you might want to use the proper file upload API
-                import google.generativeai as genai
+                # Note: genai is already imported at the top of the file
                 
                 # Upload the PDF file
                 uploaded_file = genai.upload_file(path=str(pdf_path), mime_type="application/pdf")
