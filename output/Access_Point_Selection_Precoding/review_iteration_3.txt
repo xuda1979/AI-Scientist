@@ -1,0 +1,87 @@
+REVIEW - Iteration 3
+================================================================================
+
+Model: gemini-2.5-pro
+Timestamp: 2025-11-13T17:57:48.622323
+Quality Issues Count: 42
+LaTeX Status: ✗ Errors present
+
+================================================================================
+REVIEW CONTENT
+================================================================================
+
+**Overall Assessment:**
+The paper presents an innovative approach to joint access point (AP) selection and precoding in cell-free massive MIMO systems using a two-level framework involving Quadratic Unconstrained Binary Optimization (QUBO) and a Coherent Ising Machine (CIM). While the core idea is promising, the manuscript is critically underdeveloped and lacks the necessary depth and structure to meet the standards of a top-tier journal. Significant expansion and restructuring are required.
+
+**Major Concerns:**
+
+1. **Lack of Structure and Content:** The paper is missing several standard sections of a research article, including a comprehensive Introduction, Related Work, detailed Methodology, comprehensive Experimental Evaluation, and a Discussion/Conclusion. The existing sections are brief and lack the necessary detail to be understandable or reproducible.
+
+2. **Insufficient Literature Review:** The paper does not adequately situate the work within the current state-of-the-art. A thorough literature review is essential to discuss prior work on AP selection in cell-free systems and the emerging application of QUBO/Ising models in wireless communications. A minimum of 15-20 references is expected.
+
+3. **Absence of Experimental Rigor:**
+   - **No Baselines:** The paper claims a "5–20%" improvement over greedy selection but provides no definition of the baseline, no implementation, and no comparative data. A robust evaluation requires comparison against multiple well-established baselines.
+   - **No Results Presented:** There are no figures, tables, or quantitative results within the paper itself. The simulation output shows a sum spectral efficiency of 0.001 b/s/Hz, which is physically impossible and points to a severe bug in the simulation.
+   - **No Statistical Analysis:** The methodology should involve averaging results over many random channel realizations to report mean performance with measures of variance (e.g., standard deviation or confidence intervals shown as error bars).
+
+4. **Methodological Opacity:** The description of the QUBO formulation is too high-level. Key details are missing, such as the justification for the interference coupling term, the specific implementation of the penalty functions, the choice of penalty parameters, and the details of the simulated CIM solver.
+
+5. **Critically Flawed Simulation:** A review of the simulation code reveals multiple serious bugs:
+   - **Incorrect SINR Evaluation:** The `evaluate_selection` function calculates interference using the sparse effective channel matrix `H_A`. Interference propagates through the true physical channel `H`, so this is incorrect and is the primary cause of the near-zero SINR results. The precoder should be designed based on the selected links (`H_A`), but its performance must be evaluated on the complete physical system (`H`).
+   - **Flawed Effective Channel Construction:** The method for creating `H_A` is convoluted. The standard approach is a simple element-wise product `H_A = H * A`, where `A` is the selection matrix.
+   - **Incorrect Constraint Penalty:** The user constraint penalty implementation in `build_qubo` is non-standard and incorrect for a quadratic penalty. It should be expanded from $(\sum x_i - L)^2$.
+
+6. **No Complexity or Limitation Analysis:** The paper fails to analyze the computational complexity of the QUBO construction and solving process. It also omits any discussion of the limitations of the approach, such as the approximation quality of the QUBO model, the impact of CSI errors, or fronthaul requirements.
+
+**Recommendation:** Reject and Resubmit.
+
+The paper should be rejected in its current form. However, the core idea is valuable. The authors are strongly encouraged to perform a complete rewrite, addressing all the points above. This includes restructuring the paper, adding a comprehensive literature review (15-20+ citations), providing a detailed methodology, thoroughly debugging and extending the simulation code, conducting a rigorous experimental study with strong baselines and statistical analysis, and adding a discussion on complexity and limitations. To significantly increase the contribution, we also recommend exploring the flexibility of the QUBO framework by designing an objective that targets user fairness, a key concern in cell-free systems.
+
+================================================================================
+EDITORIAL DECISION: REVISE
+================================================================================
+
+QUALITY ISSUES DETECTED:
+--------------------------------------------------------------------------------
+1. Uncited references found: bashar2019uplink, chen2018channel, zhang2021improving
+2. Systems paper should include system design or architecture section
+3. Systems paper should include performance evaluation section
+4. Missing Methodology section
+5. Missing Experiments section
+6. No evidence of multiple experimental runs with different seeds
+7. Missing effect size reporting - statistical significance without practical significance
+8. Missing multiple testing correction when comparing multiple methods/conditions
+9. Simulation lacks statistical testing implementation
+10. Missing proper validation methodology (cross-validation or train/test splits)
+11. Missing hyperparameter tuning methodology and fairness discussion
+12. Missing computational complexity analysis
+13. Missing reproducibility information and implementation details
+14. CRITICAL: Missing a dedicated Contributions section that summarises the paper's novel innovations.
+15. WARNING: Add a labelled prior art differentiation subsection contrasting against closest existing work.
+16. WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections.
+17. INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence.
+18. Insufficient figures for results presentation - need at least 2-3 figures
+19. Missing tables for numerical results presentation
+20. Potential equation overflow - long equations should use align or split environments
+21. WARNING: Related work Quadratic Unconstrained Binary Optimization (QUBO) Modeling (2023) shares key themes (similarity 0.42). Highlight differentiation.
+22. WARNING: Related work QUBO: Quadratic Unconstrained Binary Optimization Problem (2024) shares key themes (similarity 0.39). Highlight differentiation.
+23. WARNING: Related work Comparison of the Performance of Two Diagonal Approximations in the Framework of SOM (2018) shares key themes (similarity 0.36). Highlight differentiation.
+24. INFO: Novelty diagnostics summary — max similarity 0.42, avg similarity 0.20, recent overlap penalty 0.00
+25. CRITICAL: No domain benchmarks mentioned (e.g., GSM8K)
+26. CRITICAL: No figures found despite template requirements
+27. WARNING: Only 0 tables found - expected at least 1 to summarise quantitative results
+28. WARNING: May contain abstract descriptions without concrete implementation details
+29. FAIR: MAJOR: No machine learning benchmarks mentioned (e.g., GSM8K)
+30. FAIR: CRITICAL: No figures or tables found - add visuals to support results
+31. FAIR: MINOR: Limited dataset diversity
+32. FAIR: MINOR: Paper could be longer (3220 words)
+33. FAIR: WARNING: Related work Quadratic Unconstrained Binary Optimization (QUBO) Modeling (2023) shares key themes (similarity 0.42). Highlight differentiation.
+34. FAIR: WARNING: Related work QUBO: Quadratic Unconstrained Binary Optimization Problem (2024) shares key themes (similarity 0.39). Highlight differentiation.
+35. FAIR: WARNING: Related work Comparison of the Performance of Two Diagonal Approximations in the Framework of SOM (2018) shares key themes (similarity 0.36). Highlight differentiation.
+36. FAIR: INFO: Novelty diagnostics summary — max similarity 0.42, avg similarity 0.20, recent overlap penalty 0.00
+37. FAIR: INFO: Novelty diagnostics — max similarity 0.42, avg similarity 0.20, recent overlap penalty 0.00
+38. FAIR: MINOR: No hyperparameter details provided
+39. CRITICAL: FairPaperScorer final score 0.29 below acceptance threshold 0.55
+40. CRITICAL LATEX STRUCTURE: File must start with \begin{filecontents*}{refs.bib} on line 1. Currently starts with: % Added missing references
+41. CRITICAL: Paper proposes 7 methods/algorithms but only 2 appear to be empirically evaluated. Reviewers will find this overwhelming and the analysis too shallow. Either reduce the number of proposed methods or provide comprehensive experimental validation for all. Consider moving some methods to appendix as future work.
+42. CRITICAL: Sections are too short and lack depth: 'Related Work' (182 words), 'Two-Level Algorithm with Feasibility Projection' (184 words), 'Baselines' (86 words). Serious research papers require comprehensive sections (500-1500 words each) with detailed explanations, examples, and thorough analysis. ADD: More detailed explanations, multiple subsections, concrete examples, literature comparison, technical details, and comprehensive discussion.

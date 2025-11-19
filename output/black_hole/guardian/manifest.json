@@ -1,0 +1,791 @@
+{
+  "versions": [
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_221129_preflight.tex",
+      "timestamp": "20251102_221129",
+      "label": "preflight",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T22:11:29.314789",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_222816_iteration_1_pre.tex",
+      "timestamp": "20251102_222816",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T22:28:16.201461",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_224623_iteration_1_pre.tex",
+      "timestamp": "20251102_224623",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T22:46:23.218815",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_230930_iteration_1_pre.tex",
+      "timestamp": "20251102_230930",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T23:09:30.567580",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_231659_iteration_2_pre.tex",
+      "timestamp": "20251102_231659",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T23:16:59.371748",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_193219_iteration_1_pre.tex",
+      "timestamp": "20251103_193219",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149864,
+        "lines": 2200,
+        "hash": "71bc6cc7d08cc4c4e15866562a2d521af837443950319835343eb9e66c5d0154",
+        "timestamp": "2025-11-03T19:32:19.553895",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_194018_iteration_2_pre.tex",
+      "timestamp": "20251103_194018",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149864,
+        "lines": 2200,
+        "hash": "71bc6cc7d08cc4c4e15866562a2d521af837443950319835343eb9e66c5d0154",
+        "timestamp": "2025-11-03T19:40:18.713031",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_194851_iteration_3_pre.tex",
+      "timestamp": "20251103_194851",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149864,
+        "lines": 2200,
+        "hash": "71bc6cc7d08cc4c4e15866562a2d521af837443950319835343eb9e66c5d0154",
+        "timestamp": "2025-11-03T19:48:51.156383",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_225459_iteration_1_pre.tex",
+      "timestamp": "20251103_225459",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149399,
+        "lines": 2208,
+        "hash": "47bfa6845936e0efb1aeb75190c78d563ec2231c25036896d1a08e16f864bdb3",
+        "timestamp": "2025-11-03T22:54:59.772946",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_230810_iteration_1_pre.tex",
+      "timestamp": "20251103_230810",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:08:10.277658",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_231234_iteration_2_pre.tex",
+      "timestamp": "20251103_231234",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:12:34.362861",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_232603_iteration_3_pre.tex",
+      "timestamp": "20251103_232603",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:26:03.014629",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_233719_iteration_1_pre.tex",
+      "timestamp": "20251103_233719",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:37:19.434995",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_144738_iteration_1_pre.tex",
+      "timestamp": "20251104_144738",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151298,
+        "lines": 2217,
+        "hash": "aaf5b713bbaaf04d9ec44c3f991a3e43e602b1ccac61f4f7336a2f1e3c9485ec",
+        "timestamp": "2025-11-04T14:47:38.845126",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_145247_iteration_2_pre.tex",
+      "timestamp": "20251104_145247",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151241,
+        "lines": 2217,
+        "hash": "53a6730b7e6d116784b31b3f0fd3df8f59cf7e50cd158b62c3d815aba49d2d18",
+        "timestamp": "2025-11-04T14:52:47.472624",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_145923_iteration_3_pre.tex",
+      "timestamp": "20251104_145923",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151241,
+        "lines": 2217,
+        "hash": "53a6730b7e6d116784b31b3f0fd3df8f59cf7e50cd158b62c3d815aba49d2d18",
+        "timestamp": "2025-11-04T14:59:23.829348",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_150629_iteration_4_pre.tex",
+      "timestamp": "20251104_150629",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151241,
+        "lines": 2217,
+        "hash": "53a6730b7e6d116784b31b3f0fd3df8f59cf7e50cd158b62c3d815aba49d2d18",
+        "timestamp": "2025-11-04T15:06:29.898005",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_160051_iteration_1_pre.tex",
+      "timestamp": "20251104_160051",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 152507,
+        "lines": 2243,
+        "hash": "c49ddbaeb4119efca029b9438870708375af1c4018d9ff3ecc457a9aaf140ee6",
+        "timestamp": "2025-11-04T16:00:51.675058",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_161429_iteration_2_pre.tex",
+      "timestamp": "20251104_161429",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 152507,
+        "lines": 2243,
+        "hash": "c49ddbaeb4119efca029b9438870708375af1c4018d9ff3ecc457a9aaf140ee6",
+        "timestamp": "2025-11-04T16:14:29.910309",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_162453_iteration_3_pre.tex",
+      "timestamp": "20251104_162453",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151434,
+        "lines": 2242,
+        "hash": "93b92aea6e4884a6bccb7e0217924b630804a4fb4da906d804e77fe75e60e068",
+        "timestamp": "2025-11-04T16:24:53.849091",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_162943_iteration_4_pre.tex",
+      "timestamp": "20251104_162943",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151700,
+        "lines": 2241,
+        "hash": "4b59ec6fb7efa812b44cd4165bcf89b3602d88cafd426552092071ede6f3973e",
+        "timestamp": "2025-11-04T16:29:43.788845",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_163624_iteration_5_pre.tex",
+      "timestamp": "20251104_163624",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151724,
+        "lines": 2242,
+        "hash": "e2501553a54c0cc6c47b8d0b904e06ec79057d3d642a7d41ac072d2817ccd858",
+        "timestamp": "2025-11-04T16:36:24.950211",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_191323_iteration_1_pre.tex",
+      "timestamp": "20251104_191323",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151023,
+        "lines": 2215,
+        "hash": "8af19085ef860ccc41a998515857fed48ffb4d96042fedd58e6a6a7752537607",
+        "timestamp": "2025-11-04T19:13:23.428188",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251105_155122_iteration_1_pre.tex",
+      "timestamp": "20251105_155122",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 162691,
+        "lines": 2368,
+        "hash": "6944c6f898f114fac7eed4a6ec068fa84f709237a8e123b3d090c678d67b7ad0",
+        "timestamp": "2025-11-05T15:51:22.960863",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 17,
+        "subsection_count": 36
+      }
+    }
+  ],
+  "safe_versions": [
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_221129_preflight.tex",
+      "timestamp": "20251102_221129",
+      "label": "preflight",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T22:11:29.314789",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_222816_iteration_1_pre.tex",
+      "timestamp": "20251102_222816",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T22:28:16.201461",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_224623_iteration_1_pre.tex",
+      "timestamp": "20251102_224623",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T22:46:23.218815",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_230930_iteration_1_pre.tex",
+      "timestamp": "20251102_230930",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T23:09:30.567580",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251102_231659_iteration_2_pre.tex",
+      "timestamp": "20251102_231659",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 148130,
+        "lines": 2176,
+        "hash": "f3affaab89b8cdd5f0b11da060938786e16950fad0d602bea0ae1c74a8f51ad3",
+        "timestamp": "2025-11-02T23:16:59.371748",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 18,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_193219_iteration_1_pre.tex",
+      "timestamp": "20251103_193219",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149864,
+        "lines": 2200,
+        "hash": "71bc6cc7d08cc4c4e15866562a2d521af837443950319835343eb9e66c5d0154",
+        "timestamp": "2025-11-03T19:32:19.553895",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_194018_iteration_2_pre.tex",
+      "timestamp": "20251103_194018",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149864,
+        "lines": 2200,
+        "hash": "71bc6cc7d08cc4c4e15866562a2d521af837443950319835343eb9e66c5d0154",
+        "timestamp": "2025-11-03T19:40:18.713031",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_194851_iteration_3_pre.tex",
+      "timestamp": "20251103_194851",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149864,
+        "lines": 2200,
+        "hash": "71bc6cc7d08cc4c4e15866562a2d521af837443950319835343eb9e66c5d0154",
+        "timestamp": "2025-11-03T19:48:51.156383",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_225459_iteration_1_pre.tex",
+      "timestamp": "20251103_225459",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149399,
+        "lines": 2208,
+        "hash": "47bfa6845936e0efb1aeb75190c78d563ec2231c25036896d1a08e16f864bdb3",
+        "timestamp": "2025-11-03T22:54:59.772946",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 30
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_230810_iteration_1_pre.tex",
+      "timestamp": "20251103_230810",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:08:10.277658",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_231234_iteration_2_pre.tex",
+      "timestamp": "20251103_231234",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:12:34.362861",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_232603_iteration_3_pre.tex",
+      "timestamp": "20251103_232603",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:26:03.014629",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251103_233719_iteration_1_pre.tex",
+      "timestamp": "20251103_233719",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 149474,
+        "lines": 2189,
+        "hash": "352d9e202ff069a9389fb1ca73422596558e280f6298bc3bfe5d452a6bfc3cda",
+        "timestamp": "2025-11-03T23:37:19.434995",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 29
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_144738_iteration_1_pre.tex",
+      "timestamp": "20251104_144738",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151298,
+        "lines": 2217,
+        "hash": "aaf5b713bbaaf04d9ec44c3f991a3e43e602b1ccac61f4f7336a2f1e3c9485ec",
+        "timestamp": "2025-11-04T14:47:38.845126",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_145247_iteration_2_pre.tex",
+      "timestamp": "20251104_145247",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151241,
+        "lines": 2217,
+        "hash": "53a6730b7e6d116784b31b3f0fd3df8f59cf7e50cd158b62c3d815aba49d2d18",
+        "timestamp": "2025-11-04T14:52:47.472624",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_145923_iteration_3_pre.tex",
+      "timestamp": "20251104_145923",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151241,
+        "lines": 2217,
+        "hash": "53a6730b7e6d116784b31b3f0fd3df8f59cf7e50cd158b62c3d815aba49d2d18",
+        "timestamp": "2025-11-04T14:59:23.829348",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_150629_iteration_4_pre.tex",
+      "timestamp": "20251104_150629",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151241,
+        "lines": 2217,
+        "hash": "53a6730b7e6d116784b31b3f0fd3df8f59cf7e50cd158b62c3d815aba49d2d18",
+        "timestamp": "2025-11-04T15:06:29.898005",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_160051_iteration_1_pre.tex",
+      "timestamp": "20251104_160051",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 152507,
+        "lines": 2243,
+        "hash": "c49ddbaeb4119efca029b9438870708375af1c4018d9ff3ecc457a9aaf140ee6",
+        "timestamp": "2025-11-04T16:00:51.675058",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_161429_iteration_2_pre.tex",
+      "timestamp": "20251104_161429",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 152507,
+        "lines": 2243,
+        "hash": "c49ddbaeb4119efca029b9438870708375af1c4018d9ff3ecc457a9aaf140ee6",
+        "timestamp": "2025-11-04T16:14:29.910309",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_162453_iteration_3_pre.tex",
+      "timestamp": "20251104_162453",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151434,
+        "lines": 2242,
+        "hash": "93b92aea6e4884a6bccb7e0217924b630804a4fb4da906d804e77fe75e60e068",
+        "timestamp": "2025-11-04T16:24:53.849091",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_162943_iteration_4_pre.tex",
+      "timestamp": "20251104_162943",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151700,
+        "lines": 2241,
+        "hash": "4b59ec6fb7efa812b44cd4165bcf89b3602d88cafd426552092071ede6f3973e",
+        "timestamp": "2025-11-04T16:29:43.788845",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_163624_iteration_5_pre.tex",
+      "timestamp": "20251104_163624",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151724,
+        "lines": 2242,
+        "hash": "e2501553a54c0cc6c47b8d0b904e06ec79057d3d642a7d41ac072d2817ccd858",
+        "timestamp": "2025-11-04T16:36:24.950211",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251104_191323_iteration_1_pre.tex",
+      "timestamp": "20251104_191323",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 151023,
+        "lines": 2215,
+        "hash": "8af19085ef860ccc41a998515857fed48ffb4d96042fedd58e6a6a7752537607",
+        "timestamp": "2025-11-04T19:13:23.428188",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 16,
+        "subsection_count": 31
+      }
+    },
+    {
+      "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251105_155122_iteration_1_pre.tex",
+      "timestamp": "20251105_155122",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\black_hole\\paper.tex",
+        "size": 162691,
+        "lines": 2368,
+        "hash": "6944c6f898f114fac7eed4a6ec068fa84f709237a8e123b3d090c678d67b7ad0",
+        "timestamp": "2025-11-05T15:51:22.960863",
+        "has_end_document": true,
+        "has_bibliography": true,
+        "section_count": 17,
+        "subsection_count": 36
+      }
+    }
+  ],
+  "blocked_edits": [],
+  "last_known_good": {
+    "checkpoint": "output\\black_hole\\guardian\\checkpoint_20251105_155122_iteration_1_pre.tex",
+    "timestamp": "20251105_155122",
+    "label": "iteration_1_pre",
+    "stats": {
+      "path": "output\\black_hole\\paper.tex",
+      "size": 162691,
+      "lines": 2368,
+      "hash": "6944c6f898f114fac7eed4a6ec068fa84f709237a8e123b3d090c678d67b7ad0",
+      "timestamp": "2025-11-05T15:51:22.960863",
+      "has_end_document": true,
+      "has_bibliography": true,
+      "section_count": 17,
+      "subsection_count": 36
+    }
+  }
+}

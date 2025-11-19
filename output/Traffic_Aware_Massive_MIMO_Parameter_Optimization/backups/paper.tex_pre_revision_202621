@@ -1,0 +1,64 @@
+\documentclass[10pt,conference]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts,bm}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+  doi={10.1109/TWC.2010.092810.091092},
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\1}{\mathbf{1}}
+\begin{document}
+
+\title{Traffic-Aware Massive MIMO Parameter Optimization with QUBO and Coherent Ising Machines}
+\author{Anonymous}
+\maketitle
+  doi={10.1561/2000000093},
+
+\begin{abstract}
+We address operational tuning of Massive MIMO parameters---active antenna count, vertical downtilt, and pilot reuse---
+to maximize coverage or capacity under time-varying traffic. We formulate a discrete optimization across cells,
+transform it to a QUBO with structured pairwise couplings that model inter-cell interference and pilot contamination,
+and solve it using a coherent Ising machine (CIM) surrogate. The method yields near-real-time, per-interval parameter
+updates and is directly integrable with self-organizing network (SON) loops.
+\end{abstract}
+
+\section{Formulation}
+  doi={10.1109/JSTSP.2019.2914252},
+Consider $B$ sectors. For each sector $b$ choose
+(i) antenna count $M_b\in\mathcal{M}$, (ii) vertical downtilt $\theta_b\in\Theta$, and (iii) pilot reuse factor $\rho_b\in\mathcal{R}$.
+Let binary one-hot variables $x^{(M)}_{b,m}$, $x^{(\theta)}_{b,t}$, $x^{(\rho)}_{b,r}$ encode the choices.
+Given user spatial density $\lambda_b$ and large-scale channel maps, define
+the per-sector utility
+\begin{equation}
+U_b = \alpha \, C_b(M_b,\theta_b,\rho_b) - \beta \, E_b(M_b) - \gamma \, V_b(M_b,\theta_b),
+\end{equation}
+where $C_b$ is capacity (sum rate), $E_b$ is energy cost (roughly linear in active RF chains), and $V_b$ penalizes
+coverage violation probability. Scalars $(\alpha,\beta,\gamma)$ trade objectives.
+  doi={10.1109/TCOMM.2013.020413.110848},
+
+\section{QUBO}
+Stack all binaries into $\bm{x}$ and define
+\begin{equation}
+E(\bm{x}) = -\sum_b \sum_m u^{(M)}_{b,m} x^{(M)}_{b,m} - \sum_b \sum_t u^{(\theta)}_{b,t} x^{(\theta)}_{b,t} 
+- \sum_b \sum_r u^{(\rho)}_{b,r} x^{(\rho)}_{b,r} + \sum_{i<j} q_{ij} x_i x_j,
+\end{equation}
+where $u$'s are single-parameter utilities derived from link budget models and traffic weights, and the couplings $q_{ij}$ account for
+inter-cell interference and pilot contamination between neighboring sectors when certain parameter pairs are activated.
+One-hot constraints per parameter are enforced via penalties $\lambda\left(\sum x -1\right)^2$.
+The mapping to Ising $(J,h)$ follows as before.
+
+\section{Interference and Coverage Models}
+We approximate beamforming gain as $G_b \approx M_b$ (array gain) with vertical antenna pattern $A_v(\Delta\theta)= -\min\{12(\Delta\theta/\theta_{\mathrm{3dB}})^2,A_{\max}\}$ dB.
+Inter-cell interference scales with $G_{b'} A_v$ toward the victim user. Pilot reuse $\rho$ reduces contamination at the cost of overhead factor $\eta_{\mathrm{OH}}(\rho)$.
+These ingredients determine $C_b$ and $V_b$ over the spatial distribution of users.
+
+\section{Simulation}
+We provide a simulator that builds the QUBO from sector geometry and traffic, runs the CIM-inspired solver,
+and reports capacity and coverage impacts. Typical results show that during high-load periods the optimizer increases $M_b$ and $\theta_b$
+for hot spots while staggering downtilt among neighbors to suppress interference, and selects higher pilot reuse only when contamination is dominant.
+
+\section{Conclusion}
+QUBO+CIM enables fast, traffic-aware Massive MIMO parameter tuning with explicit interference modeling and practical constraints.
+\end{document}

@@ -1,0 +1,46 @@
+{
+  "seed": 42,
+  "iterations": 180,
+  "learning_rate": 0.15,
+  "best_loss": -4.99999999992882,
+  "best_cost": 4.99999999992882,
+  "final_cost_from_probs": 4.99999999992882,
+  "target_strings": [
+    "10100",
+    "10110",
+    "01001",
+    "01011"
+  ],
+  "target_mass": 0.9999999999295534,
+  "edges": [
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ]
+  ],
+  "entangler_kind": "ring",
+  "layers": 2,
+  "elapsed_sec": 2.6016104221343994,
+  "use_shots": false,
+  "shots": 0
+}

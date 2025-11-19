@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-11-14T17:07:13.575214",
+  "file": "output\\max_cut\\paper.tex",
+  "backup": "output\\max_cut\\backups\\paper_pre_fallback_revision_170713",
+  "metrics": {
+    "word_count": 4563,
+    "char_count": 39173,
+    "section_count": 16,
+    "subsection_count": 21,
+    "figure_count": 2,
+    "table_count": 1,
+    "equation_count": 8,
+    "citation_count": 41,
+    "paragraph_count": 73,
+    "page_estimate": 18.252
+  }
+}

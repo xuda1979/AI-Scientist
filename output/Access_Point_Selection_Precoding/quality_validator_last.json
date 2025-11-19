@@ -1,0 +1,43 @@
+{
+  "issues": [
+    "Missing effect size reporting - statistical significance without practical significance",
+    "Missing multiple testing correction when comparing multiple methods/conditions",
+    "Simulation lacks statistical testing implementation",
+    "Missing proper validation methodology (cross-validation or train/test splits)",
+    "Missing hyperparameter tuning methodology and fairness discussion",
+    "Missing computational complexity analysis",
+    "CRITICAL: Missing a dedicated Contributions section that summarises the paper's novel innovations.",
+    "WARNING: Add a labelled prior art differentiation subsection contrasting against closest existing work.",
+    "WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections.",
+    "INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence.",
+    "Potential equation overflow - long equations should use align or split environments",
+    "WARNING: Related work Power Allocation Scheme for Sum Rate and Fairness Trade-Off in Downlink Noma Networks (2023) shares key themes (similarity 0.43). Highlight differentiation.",
+    "WARNING: Related work Quadratic Unconstrained Binary Optimization (QUBO) Modeling (2023) shares key themes (similarity 0.42). Highlight differentiation.",
+    "WARNING: Related work QUBO: Quadratic Unconstrained Binary Optimization Problem (2024) shares key themes (similarity 0.39). Highlight differentiation.",
+    "INFO: Novelty diagnostics summary \u2014 max similarity 0.43, avg similarity 0.24, recent overlap penalty 0.00",
+    "WARNING: May contain abstract descriptions without concrete implementation details",
+    "FORMATTING: Found plain text bullets '- ' that should be \\begin{itemize}\\item",
+    "FAIR: MINOR: Limited dataset diversity",
+    "FAIR: MINOR: Poor LaTeX formatting (using - instead of itemize)",
+    "FAIR: WARNING: Related work Power Allocation Scheme for Sum Rate and Fairness Trade-Off in Downlink Noma Networks (2023) shares key themes (similarity 0.43). Highlight differentiation.",
+    "FAIR: WARNING: Related work Quadratic Unconstrained Binary Optimization (QUBO) Modeling (2023) shares key themes (similarity 0.42). Highlight differentiation.",
+    "FAIR: WARNING: Related work QUBO: Quadratic Unconstrained Binary Optimization Problem (2024) shares key themes (similarity 0.39). Highlight differentiation.",
+    "FAIR: INFO: Novelty diagnostics summary \u2014 max similarity 0.43, avg similarity 0.24, recent overlap penalty 0.00",
+    "FAIR: INFO: Novelty diagnostics \u2014 max similarity 0.43, avg similarity 0.24, recent overlap penalty 0.00",
+    "FAIR: MINOR: No hyperparameter details provided"
+  ],
+  "scores": {
+    "statistical_rigor": 0.7000000000000001,
+    "experimental_design": 0.55,
+    "methodology_clarity": 1.0,
+    "literature_review": 1.0,
+    "innovation_focus": 0.1,
+    "results_presentation": 1.0,
+    "formatting": 0.95,
+    "novelty": 0.721,
+    "review_readiness": 0.9,
+    "fair_final": 0.78663,
+    "fair_penalty_adjusted": 0.81105,
+    "overall": 0.7744254545454545
+  }
+}

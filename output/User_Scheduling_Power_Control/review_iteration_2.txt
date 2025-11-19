@@ -1,0 +1,104 @@
+REVIEW - Iteration 2
+================================================================================
+
+Model: gemini-2.5-pro
+Timestamp: 2025-11-04T18:36:51.693050
+Quality Issues Count: 61
+LaTeX Status: ✗ Errors present
+
+================================================================================
+REVIEW CONTENT
+================================================================================
+
+This paper presents a promising approach for joint user scheduling and discrete power control in a multi-cell OFDMA system by formulating the problem as a Quadratic Unconstrained Binary Optimization (QUBO) program and solving it with a Coherent Ising Machine (CIM) inspired annealer. The core idea of mapping interference as quadratic penalties in the QUBO is elegant and relevant for emerging physics-inspired computing hardware. However, the current manuscript is at a very early stage and falls significantly short of the standards required for a top-tier journal publication. It reads more like a brief abstract or a proposal than a full research paper.
+
+The following are major areas that require substantial revision:
+
+**1. Lack of Depth and Context:**
+*   **Missing Sections:** The paper is critically missing standard sections, including a proper Introduction that motivates the problem, a comprehensive Related Work section that situates the work within the existing literature, a detailed Experimental Evaluation section, and a Discussion of the results and their limitations.
+*   **Superficial Content:** All existing sections are extremely brief. For instance, the System Model lacks detail on channel modeling, the QUBO Transformation section glosses over key derivations and the challenging mapping of inequality constraints, and the Results section presents a qualitative summary without any data, figures, or tables.
+*   **Word Count and References:** The paper is severely underdeveloped, with a word count under 1000 words and zero citations. A full research paper is expected to be in the 5000-8000 word range with 15-20+ references to foundational and contemporary work.
+
+**2. Methodological and Formulation Issues:**
+*   **Incorrect Power Budget Constraint:** The QUBO formulation for the power budget constraint, $\lambda_{\text{pow}} (\sum P_i x_i - P_b^{\max})^2$, is incorrect for an inequality constraint ($\le$). This formulation penalizes solutions for being *under* the power budget, which is undesirable. The standard method is to introduce binary slack variables to convert the inequality into an equality, which should be implemented and explained.
+*   **Lack of Justification for Penalty Parameters:** The paper mentions that "Large enough $\lambda_{\text{1hot}}$ and $\lambda_{\text{pow}}$ enforce feasibility" without any discussion on how these crucial hyperparameters are selected. A sensitivity analysis or at least a principled discussion on their scaling is necessary.
+
+**3. Insufficient Experimental Rigor and Validation:**
+*   **No Baselines:** The performance of the proposed method is not compared against any standard baseline algorithms (e.g., greedy schedulers, iterative water-filling, or even a simple random allocation). Without this comparison, the claims of effectiveness are unsubstantiated.
+*   **No Quantitative Results:** The paper lacks figures, tables, and any quantitative performance metrics. Claims like "closely matches a greedy water-filling baseline" must be supported with data, including mean performance, standard deviation, and/or confidence intervals over multiple simulation runs (e.g., 100 random "drops").
+*   **Missing Ablation Study:** The key contribution is the interference-aware coupling term. An ablation study comparing the full model to one without these terms would powerfully demonstrate their importance.
+*   **Scalability Analysis:** While the paper mentions scalability, it does not provide evidence. An experiment showing how performance and runtime scale with the number of users, cells, or RBs is needed.
+
+**4. Code and Reproducibility:**
+*   The provided Python code is a good starting point but reflects the paper's shortcomings. It lacks implementations of baseline algorithms, does not perform statistical analysis over multiple runs, and contains the same flawed power budget penalty formulation as the paper. The code must be updated to support the rigorous experimental evaluation required.
+*   The reference to `simulation.py` in the main text is inappropriate for a formal publication. This should be moved to a "Code Availability" statement or footnote.
+
+In summary, the paper needs to be fundamentally restructured and massively expanded. The authors should build upon the current core idea by adding the necessary theoretical depth, formulating the QUBO constraints correctly, conducting a rigorous and comparative experimental evaluation, and situating their work properly within the scientific literature. The revisions should transform this manuscript from a preliminary sketch into a complete and convincing scientific contribution.
+
+================================================================================
+EDITORIAL DECISION: REVISE
+================================================================================
+
+QUALITY ISSUES DETECTED:
+--------------------------------------------------------------------------------
+1. CRITICAL: No embedded bibliography found - all references must be embedded in paper.tex using filecontents or thebibliography
+2. Insufficient references: only 0 found (minimum 15 required for research_paper)
+3. CRITICAL: Filenames found in paper text: simulation.py
+4. Systems paper should include system design or architecture section
+5. Systems paper should include performance evaluation section
+6. Missing Introduction section
+7. Missing Related Work section
+8. Missing Methodology section
+9. Missing Experiments section
+10. Only 0 bibliography entries (template recommends at least 15)
+11. Missing statistical significance testing and p-value reporting
+12. Missing confidence interval reporting
+13. No evidence of multiple experimental runs with different seeds
+14. Missing effect size reporting - statistical significance without practical significance
+15. Missing multiple testing correction when comparing multiple methods/conditions
+16. Simulation lacks statistical testing implementation
+17. Missing proper validation methodology (cross-validation or train/test splits)
+18. Missing hyperparameter tuning methodology and fairness discussion
+19. Missing computational complexity analysis
+20. Missing ablation studies to analyze component contributions
+21. Missing detailed model architecture specification
+22. Missing preprocessing and data preparation details
+23. Insufficient references: 0 < 15
+24. Missing recent work from the last 2-3 years
+25. Missing dedicated related work or literature review section
+26. Missing discussion of limitations in existing approaches
+27. CRITICAL: Missing a dedicated Contributions section that summarises the paper's novel innovations.
+28. WARNING: Add a labelled prior art differentiation subsection contrasting against closest existing work.
+29. WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections.
+30. INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence.
+31. INFO: Consider adding a forward-looking impact or vision statement to contextualise the innovations.
+32. Insufficient figures for results presentation - need at least 2-3 figures
+33. Missing tables for numerical results presentation
+34. Missing error bars or uncertainty quantification in results
+35. Missing statistical significance testing for method comparisons
+36. Missing failure case analysis and method limitations
+37. Missing introduction section
+38. Missing references section
+39. Potential equation overflow - long equations should use align or split environments
+40. WARNING: Related work Identification of an apical  \batchmode \documentclass[fleqn,10pt,legalpaper]{article} \usepackage{amssymb} \usepackage{amsfonts} \usepackage{amsmath} \pagestyle{empty} \begin{document} \(\mathrm{Cl}^{-}{/}\mathrm{HCO}_{3}^{-}\) \end{document}  exchanger in rat kidney proximal tubule (2003) shares key themes (similarity 0.14). Highlight differentiation.
+41. WARNING: Related work Coordinate Roles of Gag and RNA Helicase A in Promoting the Annealing of \batchmode \documentclass[fleqn,10pt,legalpaper]{article} \usepackage{amssymb} \usepackage{amsfonts} \usepackage{amsmath} \pagestyle{empty} \begin{document} \(\mathrm{tRNA}_{3}^{\mathrm{Lys}}\) \end{document} to HIV-1 RNA (2011) shares key themes (similarity 0.13). Highlight differentiation.
+42. WARNING: Related work Roles of Gag and NCp7 in Facilitating \batchmode \documentclass[fleqn,10pt,legalpaper]{article} \usepackage{amssymb} \usepackage{amsfonts} \usepackage{amsmath} \pagestyle{empty} \begin{document} \(\mathbf{tRNA}_{3}^{\mathbf{Lys}}\) \end{document} Annealing to Viral RNA in Human Immunodeficiency Virus Type 1 (2009) shares key themes (similarity 0.13). Highlight differentiation.
+43. INFO: Novelty diagnostics summary — max similarity 0.14, avg similarity 0.07, recent overlap penalty 0.00
+44. CRITICAL: No domain benchmarks mentioned (e.g., GSM8K)
+45. CRITICAL: No figures found despite template requirements
+46. WARNING: Only 0 tables found - expected at least 1 to summarise quantitative results
+47. WARNING: May contain abstract descriptions without concrete implementation details
+48. FAIR: MAJOR: No machine learning benchmarks mentioned (e.g., GSM8K)
+49. FAIR: MAJOR: No statistical significance testing mentioned
+50. FAIR: MINOR: No confidence intervals or error bars mentioned
+51. FAIR: CRITICAL: No figures or tables found - add visuals to support results
+52. FAIR: MINOR: No pseudocode provided - reduces clarity
+53. FAIR: MAJOR: Limited baseline comparisons
+54. FAIR: MAJOR: No ablation study performed
+55. FAIR: MINOR: Limited dataset diversity
+56. FAIR: MAJOR: Paper very short (829 words)
+57. FAIR: MINOR: Missing some standard paper sections
+58. CRITICAL: FairPaperScorer final score 0.00 below acceptance threshold 0.55
+59. CRITICAL: Sections are too short and lack depth: 'System Model' (88 words), 'Optimization Problem' (47 words), 'QUBO Transformation' (195 words). Serious research papers require comprehensive sections (500-1500 words each) with detailed explanations, examples, and thorough analysis. ADD: More detailed explanations, multiple subsections, concrete examples, literature comparison, technical details, and comprehensive discussion.
+60. CRITICAL: Paper is too short (829 words). Serious research papers should be 5000-8000 words (excluding references). Expand all sections with: detailed methodology, comprehensive results analysis, thorough literature review, extensive discussion, and complete derivations.
+61. CRITICAL: No limitations discussed. Every serious paper must acknowledge limitations: (1) Assumptions that may not hold, (2) Scenarios where method fails, (3) Computational constraints, (4) Generalization concerns. Add a Limitations section or Discussion subsection.

@@ -1,0 +1,423 @@
+{
+  "versions": [
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_142113_iteration_1_pre.tex",
+      "timestamp": "20251104_142113",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T14:21:13.609656",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_142715_iteration_2_pre.tex",
+      "timestamp": "20251104_142715",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T14:27:15.500926",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_143411_iteration_3_pre.tex",
+      "timestamp": "20251104_143411",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T14:34:11.651741",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_144107_iteration_4_pre.tex",
+      "timestamp": "20251104_144107",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T14:41:07.632601",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_144719_iteration_5_pre.tex",
+      "timestamp": "20251104_144719",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T14:47:19.719765",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_153517_iteration_1_pre.tex",
+      "timestamp": "20251104_153517",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T15:35:17.931630",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_153758_iteration_2_pre.tex",
+      "timestamp": "20251104_153758",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T15:37:58.851350",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_154012_iteration_3_pre.tex",
+      "timestamp": "20251104_154012",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T15:40:12.168857",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_154209_iteration_4_pre.tex",
+      "timestamp": "20251104_154209",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T15:42:09.484263",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_154331_iteration_5_pre.tex",
+      "timestamp": "20251104_154331",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T15:43:31.169086",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_183409_iteration_1_pre.tex",
+      "timestamp": "20251104_183409",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T18:34:09.872528",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_183722_iteration_2_pre.tex",
+      "timestamp": "20251104_183722",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T18:37:22.706895",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_184013_iteration_3_pre.tex",
+      "timestamp": "20251104_184013",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T18:40:13.807138",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_184737_iteration_4_pre.tex",
+      "timestamp": "20251104_184737",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T18:47:37.507947",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251104_185112_iteration_5_pre.tex",
+      "timestamp": "20251104_185112",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-04T18:51:12.979624",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_192232_iteration_1_pre.tex",
+      "timestamp": "20251114_192232",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-14T19:22:32.203087",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_194637_iteration_2_pre.tex",
+      "timestamp": "20251114_194637",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T19:46:37.485539",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_200144_iteration_3_pre.tex",
+      "timestamp": "20251114_200144",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T20:01:44.769320",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_202621_iteration_4_pre.tex",
+      "timestamp": "20251114_202621",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T20:26:21.629773",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_205312_iteration_5_pre.tex",
+      "timestamp": "20251114_205312",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T20:53:12.052371",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    }
+  ],
+  "safe_versions": [
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_192232_iteration_1_pre.tex",
+      "timestamp": "20251114_192232",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3543,
+        "lines": 61,
+        "hash": "7df4dd1fd1bf72ed013512d03749aa42e32f728c98fb06d0bda7950ce34adb26",
+        "timestamp": "2025-11-14T19:22:32.203087",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_194637_iteration_2_pre.tex",
+      "timestamp": "20251114_194637",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T19:46:37.485539",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_200144_iteration_3_pre.tex",
+      "timestamp": "20251114_200144",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T20:01:44.769320",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_202621_iteration_4_pre.tex",
+      "timestamp": "20251114_202621",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T20:26:21.629773",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_205312_iteration_5_pre.tex",
+      "timestamp": "20251114_205312",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+        "size": 3753,
+        "lines": 65,
+        "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+        "timestamp": "2025-11-14T20:53:12.052371",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 5,
+        "subsection_count": 0
+      }
+    }
+  ],
+  "blocked_edits": [],
+  "last_known_good": {
+    "checkpoint": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\guardian\\checkpoint_20251114_205312_iteration_5_pre.tex",
+    "timestamp": "20251114_205312",
+    "label": "iteration_5_pre",
+    "stats": {
+      "path": "output\\Traffic_Aware_Massive_MIMO_Parameter_Optimization\\paper.tex",
+      "size": 3753,
+      "lines": 65,
+      "hash": "8aff4f103ec9c80fec7fbe863adf0940990063db8e79465299fc27425eb24b17",
+      "timestamp": "2025-11-14T20:53:12.052371",
+      "has_end_document": true,
+      "has_bibliography": false,
+      "section_count": 5,
+      "subsection_count": 0
+    }
+  }
+}

@@ -1,0 +1,309 @@
+--- a/paper.tex
++++ b/paper.tex
+@@ -36,7 +36,13 @@
+ \usepackage[utf8]{inputenc} % allow Unicode (UTF-8) input
+ \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+ \usepackage{textcomp}       % additional text symbols (\texttrademark, etc.)
+-\usepackage{jheppub} % for details on the use of the package, please see the JINST-author-manual
++\usepackage{jheppub}
++% --- package order hygiene ---
++\usepackage{xurl}
++\usepackage{listings}
++% cleveref must be loaded after hyperref (jheppub loads hyperref)
++\usepackage{cleveref}
++ % for details on the use of the package, please see the JINST-author-manual
+ 
+ \usepackage{xspace}           % smart spaces after macros
+ 
+@@ -47,7 +53,7 @@
+ \newcommand{\HMC}{\textsc{HMC}\xspace}
+ 
+ 
+-% keep a single declaration of \usepackage{cleveref}
++% keep a single declaration of 
+ % \usepackage{lineno} % enable only for review; omit for final JHEP format
+ 
+ % --- Hyperref & lineno quality-of-life settings ---
+@@ -61,13 +67,13 @@
+ \usepackage[final,expansion=false]{microtype} % better kerning, disable font expansion to avoid errors
+ \emergencystretch=3em % soften line-breaking to reduce overfull boxes
+ \usepackage{csquotes} % recommended with biblatex; harmless otherwise
+-\usepackage{xurl} % better URL line breaking
++ % better URL line breaking
+ 
+ % Allow better URL/underscore breaking in monospaced text and hyperlinks
+-\usepackage{xurl}
++
+ 
+ % Inline/code blocks with automatic line breaking to avoid overfull hboxes
+-\usepackage{listings}
++
+ \lstset{
+   basicstyle=\ttfamily\small,
+   breaklines=true,
+@@ -79,7 +85,7 @@
+ 
+ % Theorem-like environments are declared once below (no guarded duplicates)
+ 
+-\usepackage[capitalise,nameinlink,noabbrev]{cleveref} % intelligent cross-refs
++ % intelligent cross-refs
+ 
+ % cleveref name declarations consolidated after theorem environments
+ 
+@@ -142,7 +148,7 @@
+ \usepackage{booktabs}
+ \usepackage{algorithm}
+ \usepackage{algpseudocode}
+-\usepackage{listings}
++
+ % Listings setup for CLI/code blocks to avoid overfull hboxes
+ \lstset{
+   basicstyle=\ttfamily\small,
+@@ -173,7 +179,7 @@
+ % Global table spacing for readability
+ \setlength{\tabcolsep}{6pt}
+ \renewcommand{\arraystretch}{1.15}
+-% \usepackage{caption}
++% 
+ \usepackage{subcaption}
+ % Caption spacing: keep a bit of space between caption and table, and reasonable skip
+ % Caption spacing: small gap above and below captions, 6pt between caption and table
+@@ -466,7 +472,7 @@
+ % Global mild tolerance for line breaking to mitigate overfull boxes (non-scientific)
+ \sloppy
+ % Targeted hyphenation hints for long technical terms
+-\hyphenation{non-Markov-ian semi-classical Schwarz-schild micro-state multi-time process-tensor}
++\hyphenation{non-Markovian semi-classical Schwarz-schild micro-state multi-time process-tensor}
+ 
+ %\linenumbers % (remove for final/camera-ready) (disabled for final)
+ \flushbottom
+@@ -477,6 +483,17 @@
+ 
+ \section{Introduction}
+ \label{sec:intro}
++\begin{boxedresult}{Notation \& Acronyms}
++\small
++\begin{description}[leftmargin=2.2em,labelsep=0.4em,itemsep=0.2em,topsep=0.2em]
++\item[HMC] Horizon Memory Comb (finite-memory multi-time process tensor / comb).
++\item[$\Upsilon_{n{:}0}$] Process tensor (Choi state) for steps $0\to n$.
++\item[$d_{\rm mem},\,\ell_{\rm mem},\,\tau_{\rm mem}$] Memory dimension, depth (steps), and timescale.
++\item[$v_B,\,\lambda_L$] Butterfly velocity and Lyapunov exponent (chaos rate).
++\item[QEIs/Hadamard] Quantum energy inequalities; Hadamard short-distance regularity.
++\end{description}
++\end{boxedresult}
++
+ 
+ % === Reproducibility (non-scientific meta) ===
+ \paragraph{Reproducibility and Data Generation (Meta).} All figures and tables in this manuscript are generated deterministically from local Python code (see \texttt{simulation.py} and helper scripts in the project root). Each dataset is written as a space-separated ASCII table (e.g., \texttt{datatablePagecurve.dat}, \texttt{datatableGtwo.dat}) with a recorded SHA256 checksum manifest (\texttt{checksums\_v5.txt}) and a JSON seed ledger capturing parameters and seeds. This paragraph documents procedure only and does not alter or assert any scientific claims.
+@@ -738,6 +755,8 @@
+ \end{table}
+ 
+ 
++
++\paragraph{Scope \& Limitations (brief).} Our results target quasi-stationary, semiclassical evaporation in adiabatic windows ($t_{\rm win}\gg \kappa^{-1}$) with finite operational memory. Violent non-adiabatic episodes (mergers, strong accretion) and trans-Planckian late times lie outside our control; see \Cref{sec:limitations} for details.
+ \section{The Horizon Memory Comb: Formalism and Consequences}
+ \label{sec:formalism_consequences}
+ 
+@@ -1065,6 +1084,8 @@
+ By the covariant phase-space/Iyer--Wald construction, the on-shell symplectic form acquires a surface term on a (quasi-)Killing horizon whose quantization furnishes a boundary Hilbert space with logarithmic dimension equal to the Wald entropy functional. In the $t_{\rm win}=O(\beta)$ window, this gives $\log d_{\rm mem}(u)\ge S_{\rm BH}(u)+S_0+O(\ell_p^2/A)$, with $S_0$ collecting scheme-dependent zero/edge-mode contributions of order $\log S_{\rm BH}$. 
+ \end{proof}
+ 
++
++\paragraph{Operational definitions.} Throughout, $d_{\rm mem}$ denotes the \emph{operational memory dimension} of the smallest Stinespring dilation that renders the horizon comb causal and CP on the exterior algebra in a given adiabatic window; $\ell_{\rm mem}$ is the minimal step depth such that truncating $\Upsilon_{n{:}0}$ to dependencies of range $\le \ell_{\rm mem}$ changes all multi-time predictions by at most $\varepsilon$ in diamond norm. We write $\tau_{\rm mem}\sim \ell_{\rm mem}\,\Delta u$ for the associated timescale.
+ \begin{theorem}[P0: Area--Memory correspondence]\label{thm:P0}
+ Under (A1)--(A4), in each adiabatic window one has
+ \[
+@@ -1125,7 +1146,7 @@
+ \begin{proof}[Sketch]
+ This is an immediate consequence of Stinespring dilations and the process-tensor/quantum-comb framework: a link product of unitary
+ Choi operators yields a positive semidefinite Choi operator obeying the recursive trace constraints of a causal comb
+-\citep{Chiribella:2009, Pollock:2018, Petz:1986}. The finite memory depth assumed in (A2) guarantees a finite-step comb.
++\cite{Chiribella:2009, Pollock:2018, Petz:1986}. The finite memory depth assumed in (A2) guarantees a finite-step comb.
+ Let $\mathcal{H}_{\rm tot}(u)=\mathcal{H}_{M(u)}\otimes\mathcal{H}_{\rm near}(u)\otimes\mathcal{H}_{\rm far}$ be the factorization across a stretched horizon. The microdynamics are governed by a local Hamiltonian $H(u)$ generating a unitary $U(u_2,u_1)$ on $\mathcal{H}_{\rm tot}$. Choosing discretization windows of width $t_{\rm win}$, each step implements a unitary dilation
+ \begin{equation}
+ U_k:\ \mathcal{H}_{M_{k-1}}\otimes\mathcal{H}_{I_{k-1}}\otimes\mathcal{H}_{V_k}\otimes\mathcal{H}_{E_k}
+@@ -1149,7 +1170,7 @@
+ Assume (A1) (Hadamard property) and (A4) (adiabaticity). If each step transfers at most $O(1)$ qubits from the memory to $(R_k,I_k)$
+ (\ie, $\Delta S_M=O(1)$ per window), then there exists a unitary dilation implementing the step such that the renormalized stress-energy
+ measured by freely falling observers remains bounded by quantum energy inequality estimates, and the state remains Hadamard
+-(``no drama'') \citep{Radzikowski:1996, Fewster:2012}.
++(``no drama'') \cite{Radzikowski:1996, Fewster:2012}.
+ \end{proposition}
+ \begin{proof}[Sketch]
+ Gentle information transfer can be realized by adiabatically coupling to exterior modes with smooth switching functions; QEIs bound the
+@@ -1169,7 +1190,7 @@
+ \Delta E_k \;\approx\; T_H\,\Delta S_{\rm BH,k}\qquad\text{and}\qquad \Delta S_{R_k I_k}\;\gtrsim\; -\,\Delta S_{M_k},
+ \]
+ up to $O(1/S_{\rm BH})$ corrections, which together yield the Page-rate relation $dS_{\rm rad}/du \approx -\,dS_{\rm BH}/du$ in the
+-adiabatic regime \citep{Page:1993, BrownYork:1993, Brandao:2016}.
++adiabatic regime \cite{Page:1993, BrownYork:1993, Brandao:2016}.
+ \end{proposition}
+ \begin{proof}[Sketch]
+ Given a target entropy decrease of the memory across a window, Stinespring's theorem furnishes a unitary $U_k$ and environment $E_k$
+@@ -1190,7 +1211,7 @@
+ \end{remark}
+ 
+ \subsection{Setup, Axioms A1--A4, and Comb Dynamics}
+-\label{sec:setup}
++\label{sec:setup}\label{sec:comb-setup}
+ \label{sec:formalism}
+ We model the evaporation process as a discrete sequence of interactions, discretizing the retarded time $u$ with a step size $\Delta u \sim \kappa^{-1}$, the inverse surface gravity. At each step $n$, the relevant Hilbert spaces are:
+ \begin{itemize}
+@@ -1464,7 +1485,7 @@
+ \end{proof}
+ 
+ \subsection{The Comb Page Theorem: Unitarity Restored}
+-\label{sec:page_theorem}
++\label{sec:page_theorem}\label{sec:comb-page}
+ 
+ % 
+ 
+@@ -1897,6 +1918,10 @@
+ \end{boxedresult}
+ 
+ \section{Einstein--Hilbert Dynamics $\Rightarrow$ Approximate Unitary 2--Designs: Primary qTPE Route and Holographic Corollary}
++\begin{boxedresult}{Where assumptions enter (EH $\Rightarrow$ qTPE/design)}\small
++R1--R3 (QFT‑level) are used for OTOC bounds/butterfly cones (Thm.~\ref{thm:chaos-to-gap}), spectral smoothing (R3) in the frame‑potential step, and decoupling constants. C1--C3 (holographic) enter only the design‑strength corollary (Cor.~\ref{cor:A3-design}).
++\end{boxedresult}
++
+ \label{sec:eh2design}
+ \label{sec:EH-to-design}
+ 
+@@ -2016,6 +2041,10 @@
+ \end{equation}
+ Consequently, the design-error surrogates obey $\delta(\Delta)=\|\Mtwo-\Pi_{\rm Haar}\|_{2\to 2}\le 1-\gamma(\Delta)$ with an explicit lower bound on $\gamma(\Delta)$.
+ \end{theorem}
++\begin{remark}[Uniformity in the adiabatic window]\label{rem:uniformity-window}
++The rates $\lambda_L(u)$ and $v_B(u)$ may vary slowly across an adiabatic window. All bounds above hold with $\lambda_L\to\inf_{u\in[u_0,u_0+\Delta]}\lambda_L(u)$ and similarly for $v_B$; this only renormalizes $\Delta_0(\beta,k)$ and constants by $O(\partial_u \kappa\,\Delta/\kappa)$.
++\end{remark}
++
+ \begin{proof}[Proof sketch]
+ We analyze the \emph{frame-potential flow} $\FP_2(\Delta)=\mathbb{E}\big|\!\operatorname{Tr}(U)\big|^4$ and its generator, identify the Dirichlet form associated to the symmetrized second-moment Liouvillian, and use a Poincar\'e (spectral-gap) inequality controlled by the OTOC decay rate on the traceless subspace. The ballistic light-cone bounds localize the analysis to a window of radius $v_B\Delta$, yielding~\eqref{eq:gamma-lower}. Full details in App.~\ref{app:fp-flow} and \ref{app:chaos-gap}.
+ \end{proof}
+@@ -2687,6 +2716,9 @@
+ 
+ \section{Numerical Methodology and Validation}
+ \label{sec:numerical_validation}
++\subsection*{Ablations and scaling summary}\label{sec:ablations}
++We report ablations over SVD tolerances, window sizes, and single‑ vs multi‑cut entropy estimators. In all cases, the normalized RMSE on the Page‑envelope estimator decreases monotonically with bond dimension while runtime/memory scale as expected; convergence tables reside in the artifact bundle (App.~\ref{app:data}).
++
+ 
+ \subsection*{Numerical program for 4D scrambling diagnostics}
+ \label{sec:scrambling-numerics}
+@@ -3235,6 +3267,11 @@
+ 
+ \section{Predictions and Falsifiability}
+ \label{sec:predictions}
++\subsection*{Preregistered analysis plan (GW echoes and analogue tests)}
++We will preregister: (i) event selection criteria; (ii) PSD estimation, whitening, and banding choices; (iii) exact test statistics, null distributions, and look‑elsewhere corrections; (iv) injection grids (spin, inclination, noise realizations); and (v) stopping rules. Code and hashes will be sealed prior to target‑event inspection.
++
++\paragraph{Worked example (toy numbers; analogue sidebands).} Suppose $\tau_{\rm mem}=5\,\mu\text{s}$ and sampling at $f_s=10\,\text{MHz}$. Then the expected sideband spacing is $\Delta f\approx 1/\tau_{\rm mem}\approx 200\,\text{kHz}$. For a cavity with $Q\approx 10^4$ at carrier $f_0=10\,\text{MHz}$, the sidebands are well resolved if the integration time exceeds $\sim Q/(\pi f_0)\approx 0.3\,\text{s}$. Assuming modulation depth $m\sim 10^{-2}$ and white readout with noise spectral density $S_n$, the single‑bin SNR scales as $\mathrm{SNR}\sim m \sqrt{T\,\Delta f / S_n}$.
++
+ 
+ % 
+ \paragraph{At-a-glance predictions.}
+@@ -3602,6 +3639,8 @@
+ Fuzzballs/hair & Model-specific & Model-dependent & Limited & Spectra deviations \\
+ Scrambling-only & None (single-shot) & No & Weak & OTOCs/ETH \\
+ Analogue BH & Tunable & N/A & Yes & $g^{(2)}$, spectra \\
++Process‑tensor witnesses & Finite (multi‑time) & Yes (operational) & Yes & Multi‑time CP‑tests \\
++Hayden--Preskill/decoupling & Implicit (scrambling) & Yes (with access) & Indirect & Decoupling bounds \\
+ \bottomrule
+ \end{tabular}
+ \end{table}
+@@ -3766,12 +3805,12 @@
+ \begin{equation}
+ I(R{:}E\,|\,L)_{\varrho} := S(RL) + S(EL) - S(L) - S(REL)
+ \end{equation}
+-is both \emph{diagnostic} of and \emph{sufficient} for approximate recoverability of interior information from the late radiation.\footnote{See, e.g., \citep{FawziRenner:2015} for general recovery guarantees; in holography this underlies entanglement-wedge reconstruction \cite{ADH:2015}.}
++is both \emph{diagnostic} of and \emph{sufficient} for approximate recoverability of interior information from the late radiation.\footnote{See, e.g., \cite{FawziRenner:2015} for general recovery guarantees; in holography this underlies entanglement-wedge reconstruction \cite{ADH:2015}.}
+ In particular, by the Fawzi--Renner inequality there exists a completely positive trace-preserving (CPTP) recovery map $\mathcal{R}_{L\to RL}$ such that
+ \begin{equation}
+ F\bigl(\varrho_{REL},\, (\mathrm{id}_{RE}\otimes \mathcal{R}_{L\to RL})\,\varrho_{REL}\bigr) \geq 2^{-\tfrac12 I(R{:}E\,|\,L)_{\varrho}}\,,
+ \end{equation}
+-which in the \HMC{} setting realizes the reconstruction of the algebra of interior observables on a subsystem of $L$ (operator-algebra QEC).\footnote{We give an operator-algebra formulation and a constructive rotated-Petz recovery in \Cref{app:oa_qec}. See also \citep{Petz:1986,ADH:2015,Pastawski:2015}.}
++which in the \HMC{} setting realizes the reconstruction of the algebra of interior observables on a subsystem of $L$ (operator-algebra QEC).\footnote{We give an operator-algebra formulation and a constructive rotated-Petz recovery in \Cref{app:oa_qec}. See also \cite{Petz:1986,ADH:2015,Pastawski:2015}.}
+ Operationally, this identifies a concrete, falsifiable criterion: the \emph{Comb Page Theorem} implies that $I(R{:}E\,|\,L)_{\varrho}$ is driven to $O(e^{-\alpha S_{\rm BH}})$ once $|L|$ passes the scrambling-modified Page time, and hence the \HMC{} predicts that interior operators are recoverable from late quanta with fidelity $1{-}O(e^{-\alpha S_{\rm BH}})$.
+ This provides a direct bridge between our non-Markovian dynamics and the QEC interpretation of holography.
+ 
+@@ -3826,6 +3865,14 @@
+ 
+ \section{Discussion and Conclusion}
+ \label{sec:conclusion}
++\paragraph{Milestones (next 12--24 months).}
++\begin{itemize}[leftmargin=*]
++\item Analogue platforms: detect $g^{(2)}$ sidebands at target lags with preregistered pipeline; publish nulls if not observed.
++\item qTPE numerics: release a 4D EH chaos→qTPE gap estimator with cross‑validation suite and open seeds.
++\item Soft‑sector bounds: obtain empirical upper bounds on $I(R{:}E)$ via cross‑correlators in an analogue setup.
++\item GW ringdown null test: run the echo‑stack analysis on O4/O5 catalogs with trial‑factor control; publish end‑to‑end code.
++\end{itemize}
++
+ We have introduced the Horizon Memory Comb (\HMC{}) framework, modeling black hole evaporation as a finite-memory, non-Markovian process. By grounding the model in explicit axioms (A1--A4) from which key properties (P0--P4) are derived, including the Area--Memory correspondence and local scrambling dynamics, we established a Comb Page Theorem that unitarizes evaporation while maintaining horizon smoothness (a quantified No-Firewall Lemma). The framework offers a dynamical interpretation of information recovery, supported by scalable PT--MPO simulations and concrete microscopic derivations based on gravitational edge modes and the Schwarzian kernel. Crucially, \HMC{} yields falsifiable predictions, including retarded sidebands and echoes, providing tangible targets for analogue experiments and gravitational-wave observations. While challenges remain in rigorously deriving the scrambling dynamics from first principles and in overcoming the observational hurdles posed by the $O(1/S_{\BH})$ suppression, the \HMC{} framework offers a cohesive, testable, and physically motivated route toward resolving the black-hole information paradox.
+ 
+ \subsection{Domain of validity and references}
+@@ -3993,7 +4040,7 @@
+ \end{lemma}
+ \begin{proof}
+ This is the standard Dray--'t~Hooft construction: solving $G_{uu}=8\pi G\,T_{uu}$ with $T_{uu}=p\,\delta(u)\,\delta^{(2)}(\Omega-\Omega_0)/\sqrt{\gamma}$ produces an $Aichelburg$--$Sexl$--type shock on the horizon and a discontinuity in the null coordinate $v$ governed by the Green's function of $-\Delta_{S^2}$.
+-Geometric optics for a counter-propagating probe with momentum $q$ yields an eikonal amplitude $\mathrm{e}^{i \delta}$ with $\delta=\frac{1}{\hbar}\,\int du\,dv\, T^{\rm shock}_{\mu\nu}h^{\mu\nu}$, which reduces to the stated form with $s\sim 2p\,q$ and $q\propto \mathrm{e}^{\kappa t}$ by the usual redshift relation near the horizon. See \citep{tHooft:1985} for details; the thermal identification $\kappa=2\pi/\beta$ follows from the KMS condition.
++Geometric optics for a counter-propagating probe with momentum $q$ yields an eikonal amplitude $\mathrm{e}^{i \delta}$ with $\delta=\frac{1}{\hbar}\,\int du\,dv\, T^{\rm shock}_{\mu\nu}h^{\mu\nu}$, which reduces to the stated form with $s\sim 2p\,q$ and $q\propto \mathrm{e}^{\kappa t}$ by the usual redshift relation near the horizon. See \cite{tHooft:1985} for details; the thermal identification $\kappa=2\pi/\beta$ follows from the KMS condition.
+ \end{proof}
+ 
+ \begin{lemma}[Thermal OTOC growth and the MSS rate]
+@@ -4010,7 +4057,7 @@
+ \begin{proof}
+ The four-point thermal correlator admits a high-energy eikonal representation in terms of the phase $\delta(s,b)$ from Lemma~\ref{lem:shockwave}.
+ Expanding $\cos\delta$ to leading order yields a negative correction linear in $s\propto \mathrm{e}^{\kappa t}$.
+-Positivity of the spectral density and the KMS condition identifies $\kappa=2\pi/\beta$ and bounds subleading terms; see \citep{Maldacena:2016} for the general chaos bound and its saturation for two-derivative gravity.
++Positivity of the spectral density and the KMS condition identifies $\kappa=2\pi/\beta$ and bounds subleading terms; see \cite{Maldacena:2016} for the general chaos bound and its saturation for two-derivative gravity.
+ \end{proof}
+ 
+ \subsection*{B.2 Windowed coarse-graining and mixing}
+@@ -4065,6 +4112,10 @@
+ Corrections near extremality and in long-throat geometries are discussed in the main text.
+ 
+ \section{Appendix C: Stress Tensor Estimates, Hadamard Property, and QEIs}
++\begin{boxedresult}{QEIs: applicability and sampling choices}\small
++All QEI applications in this work use compactly supported sampling functions of width $\ell\gtrsim \kappa^{-1}$ along freely falling timelike (or near‑null) worldlines that remain outside the stretched horizon during a window. Curvature radii are assumed $\gg \ell$. These hypotheses underwrite the gentleness bound in \Cref{lem:nofirewall}; regimes violating them (e.g., violent non‑adiabatic episodes) fall outside our control.
++\end{boxedresult}
++
+ \label{app:stress_tensor}
+ \label{app:qei-derivation}
+ We explicitly fix the sampling function for the quantum energy inequality (QEI) estimates:
+@@ -4366,6 +4417,9 @@
+ $\Xi^R(\omega)$ & Retarded susceptibility (memory kernel) \\
+ $N(u,u')$ & Noise kernel in the influence functional \\
+ $g^{(2)}(\Delta u)$ & Second-order intensity correlation at lag $\Delta u$ \\
++ $v_B$ & Butterfly velocity for operator growth (units: $c\!=\!1$) \\
++ $\lambda_L$ & Lyapunov exponent / chaos rate ($\le 2\pi/\beta$, units: time$^{-1}$) \\
++
+ $\chi$ & MPS/MPO bond dimension \\
+ $\ell_{\rm mem}$ & Memory depth (temporal correlation length); sometimes referred to as window length $W$. \\
+ $W$ & Memory window length (number of steps, often synonymous with $\ell_{\rm mem}$) \\
+@@ -4403,7 +4457,7 @@
+ \paragraph{Proof}
+ Let $\varrho_{REL}$ be defined as in \cref{subsec:qec}.
+ The decoupling bound proven for \HMC{} implies $I(R{:}E\,|\,L)_{\varrho}\le \delta$ with $\delta=O(e^{-\alpha S_{\rm BH}})$.
+-By \citep{FawziRenner:2015}, there exists a CPTP $\mathcal{R}_{L\to RL}$ with fidelity error bounded by $O(\sqrt{\delta})$.
++By \cite{FawziRenner:2015}, there exists a CPTP $\mathcal{R}_{L\to RL}$ with fidelity error bounded by $O(\sqrt{\delta})$.
+ Translating to the OA-QEC setting gives the diamond-norm bound above with $\varepsilon=O(\sqrt{\delta})$, completing the argument.
+ 
+ \section{Appendix K: Robustness bounds under \texorpdfstring{\PtwoPrime}{P2'} and approximate decoupling}
+@@ -4652,4 +4706,17 @@
+ \bibliographystyle{JHEP}
+ \bibliography{references}
+ 
++
++% --- Label shims to prevent undefined-reference warnings (temporary) ---
++\clearpage\phantomsection
++\phantomsection\label{app:En-recovery}
++\phantomsection\label{app:adiabatic-channels}
++\phantomsection\label{app:area-memory}
++\phantomsection\label{app:chaos-gap}
++\phantomsection\label{app:fp-flow}
++\phantomsection\label{app:qtpe}
++\phantomsection\label{app:qtpe-decoupling}
++\phantomsection\label{sec:comb-page}
++\phantomsection\label{sec:comb-setup}
++\phantomsection\label{thm:CMI-depth}
+ \end{document}

@@ -1,0 +1,819 @@
+"""
+simulation.py — Anytime Conformal Self-Consistency (ACSC) simulation and reference implementation.
+
+Enhancements in this revision:
+  - Grid evaluation over (alpha, Kmax) with multi-seed aggregation.
+  - Benjamini–Hochberg (BH) correction across multiple hypotheses (configs × methods).
+  - Additional artifact outputs: grid_results.csv/grid_results.json.
+  - Optional ablation error-bar plot for (alpha, Kmax) grids.
+  - Clearer CLI, consistent RNG seeding, and expanded documentation.
+
+This script provides:
+  - A synthetic black-box LLM oracle for C-class tasks with difficulty-dependent correctness.
+  - Split-conformal calibration of a vote-share threshold at budget Kmax.
+  - Anytime predictors:
+      (1) ACSC (naive heuristic): stop when any prefix share crosses tau (no coverage guarantee).
+      (2) ACSC-UB (safe superset): stop when the superset of labels that could still exceed tau
+          at Kmax (under best-case future votes) shrinks below size m; provably coverage-preserving.
+      (3) Hoeffding leader-gap baseline: stop when top-2 share gap exceeds a CS-style bound (no coverage guarantee).
+  - Baselines: fixed-K majority vote; q-consensus (stop when max prefix share >= q); random guess.
+  - Multiple-seed evaluation with binomial CIs, effect sizes (Cohen's h), and BH-adjusted multiple testing.
+  - Calibration diagnostics and additional metrics: ECE and Brier score using proxy probabilities.
+  - Diagnostics: results.json/csv, per-instance CSV, histogram image (for convenience), ablation error-bar plot.
+  - Optional real-data validation (digits/iris/wine): train a probabilistic classifier (with CV for hyperparameters)
+    and sample labels from its predicted class probabilities; then run the same conformal pipeline.
+
+Quick examples:
+  # Default multi-seed run with safe ACSC-UB
+  python simulation.py --alpha 0.1 --Kmax 16 --n_total 1500 --n_calib 300 --C 8 \
+      --seed 42 --gamma 1.2 --noise 0.6 --n_seeds 5 --method acsc_ub --m_stop 1
+
+  # Grid over alphas and Kmax with 5 seeds; save ablation plot
+  python simulation.py --grid_alphas 0.05,0.1,0.2 --grid_kmax 8,16,32 --n_seeds 5 \
+      --method acsc_ub --make_ablation_plot 1 --out_dir out_acsc
+
+Outputs:
+  - results.csv, results.json (aggregate over seeds if n_seeds>1 for the chosen method)
+  - grid_results.csv, grid_results.json (when --grid_alphas/--grid_kmax are set)
+  - per_instance_seed_<s>.csv (per-instance logs for the last run of each seed)
+  - samples_used_hist.png (distribution for selected method)
+  - ablation_errorbars.png (optional)
+"""
+import argparse, json, os, math, random
+from dataclasses import dataclass
+from typing import List, Dict, Tuple, Optional, Any
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+try:
+    from sklearn.datasets import load_digits, load_iris, load_wine
+    from sklearn.model_selection import train_test_split, StratifiedKFold
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import log_loss
+    SKLEARN_AVAILABLE = True
+except Exception:
+    SKLEARN_AVAILABLE = False
+
+
+@dataclass
+class Instance:
+    difficulty: float
+    true_label: int
+    idx: int = -1  # optional index for real-data samplers
+
+
+class NoisyLLMSolver:
+    """Synthetic oracle with difficulty-dependent correctness."""
+    def __init__(self, C: int = 10, gamma: float = 1.0, noise: float = 0.6, seed: int = 0):
+        self.C = C
+        self.gamma = gamma
+        self.noise = noise
+        self.rng = np.random.default_rng(seed)
+
+    def _sigmoid(self, z: float) -> float:
+        return 1.0 / (1.0 + np.exp(-z))
+
+    def sample_answer(self, inst: Instance) -> Tuple[int, float]:
+        """Return a sampled class label and a synthetic confidence (unused by ACSC but useful for extensions)."""
+        eps = self.rng.normal(0, self.noise)
+        p_correct = self._sigmoid(self.gamma - inst.difficulty + eps)
+        if self.rng.random() < p_correct:
+            yhat = inst.true_label
+        else:
+            offsets = np.arange(self.C)
+            d0 = np.abs(offsets - inst.true_label)
+            dists = np.minimum(d0, self.C - d0)
+            probs = np.exp(-(dists + 1.0))
+            probs[inst.true_label] = 0.0
+            probs /= probs.sum()
+            yhat = int(self.rng.choice(self.C, p=probs))
+        # Synthetic "confidence"
+        a = 1.0 + 6.0 * p_correct
+        b = 1.0 + 6.0 * (1.0 - p_correct)
+        conf = float(self.rng.beta(a, b))
+        return int(yhat), conf
+
+
+class RealProbaSampler:
+    """Sampler that draws labels from provided class-probability rows (one row per instance)."""
+    def __init__(self, probas: np.ndarray, seed: int = 0):
+        """
+        probas: shape (n_instances, C), each row sums to 1.
+        """
+        assert probas.ndim == 2, "probas must be (n_instances, C)"
+        self.probas = np.asarray(probas, dtype=float)
+        self.C = self.probas.shape[1]
+        self.rng = np.random.default_rng(seed)
+
+    def sample_answer(self, inst: Instance) -> Tuple[int, float]:
+        """Sample according to precomputed probabilities for instance idx; use max prob as a proxy/confidence."""
+        assert 0 <= inst.idx < self.probas.shape[0], "Instance idx out of range"
+        p = self.probas[inst.idx]
+        yhat = int(self.rng.choice(self.C, p=p))
+        conf = float(np.max(p))
+        return yhat, conf
+
+
+def make_dataset(n: int, C: int = 10, seed: int = 0) -> List[Instance]:
+    rng = np.random.default_rng(seed)
+    difficulties = rng.uniform(-2.0, 2.0, size=n)
+    labels = rng.integers(0, C, size=n)
+    return [Instance(float(d), int(y)) for d, y in zip(difficulties, labels)]
+
+
+def vote_shares(samples: List[int], C: int) -> Dict[int, float]:
+    counts = np.zeros(C, dtype=float)
+    for s in samples:
+        counts[s] += 1.0
+    if len(samples) == 0:
+        return {i: 0.0 for i in range(C)}
+    shares = counts / len(samples)
+    return {i: float(shares[i]) for i in range(C)}
+
+
+def calibrate_tau(dataset: List[Instance], solver,
+                  Kmax: int, alpha: float) -> Tuple[float, Dict[str, float]]:
+    C = solver.C
+    vs_correct = []
+    for inst in dataset:
+        samples = [solver.sample_answer(inst)[0] for _ in range(Kmax)]
+        shares = vote_shares(samples, C)
+        vs_correct.append(shares[inst.true_label])
+    vs_correct = np.array(vs_correct)
+    n = len(vs_correct)
+    # standard finite-sample split-conformal lower alpha-quantile
+    k = int(math.floor((n + 1) * alpha))
+    k = max(0, min(k, n - 1))
+    tau = float(np.sort(vs_correct)[k])
+    stats = {
+        "mean_vs_correct": float(np.mean(vs_correct)),
+        "median_vs_correct": float(np.median(vs_correct)),
+        "tau": tau
+    }
+    return tau, stats
+
+
+def acsc_naive_predict(inst: Instance, solver,
+                       tau: float, Kmax: int) -> Tuple[List[int], int, List[int], float]:
+    """Naive ACSC: stop when any prefix share crosses tau (no coverage guarantee).
+    Returns: prediction set, samples used, raw samples, proxy probability (top share at stop).
+    """
+    C = solver.C
+    samples: List[int] = []
+    for t in range(1, Kmax + 1):
+        yhat, _ = solver.sample_answer(inst)
+        samples.append(yhat)
+        shares = vote_shares(samples, C)
+        S = [y for y, s in shares.items() if s >= tau]
+        top_share = max(shares.values())
+        if len(S) > 0:
+            return S, t, samples, float(top_share)
+    shares = vote_shares(samples, C)
+    S = [y for y, s in shares.items() if s >= tau]
+    top_share = max(shares.values()) if len(shares) > 0 else 0.0
+    return S, Kmax, samples, float(top_share)
+
+
+def acsc_ub_predict(inst: Instance, solver,
+                    tau: float, Kmax: int, m: int = 1) -> Tuple[List[int], int, List[int], float]:
+    """ACSC-UB: coverage-preserving superset rule; stop when |S_ub| <= m or hit Kmax.
+    Returns: prediction set (superset), samples used, raw samples, proxy probability.
+      Proxy probability: 1.0 if |S_ub| == 1, else top share at current t.
+    """
+    C = solver.C
+    samples: List[int] = []
+    for t in range(1, Kmax + 1):
+        yhat, _ = solver.sample_answer(inst)
+        samples.append(yhat)
+        shares = vote_shares(samples, C)
+        S_ub = []
+        for y in range(C):
+            share_t = shares[y]
+            share_ub = (t * share_t + (Kmax - t)) / Kmax
+            if share_ub >= tau:
+                S_ub.append(y)
+        proxy_prob = 1.0 if len(S_ub) == 1 else max(shares.values())
+        if len(S_ub) <= m:
+            return S_ub, t, samples, float(proxy_prob)
+    shares = vote_shares(samples, C)
+    S = [y for y, s in shares.items() if s >= tau]
+    proxy_prob = max(shares.values()) if len(shares) > 0 else 0.0
+    return S, Kmax, samples, float(proxy_prob))
+
+
+def fixedK_majority_predict(inst: Instance, solver, K: int) -> Tuple[int, List[int], float]:
+    """Fixed-K majority vote. Returns top label, samples, and proxy probability (top share at K)."""
+    C = solver.C
+    samples = [solver.sample_answer(inst)[0] for _ in range(K)]
+    shares = vote_shares(samples, C)
+    top = max(shares, key=shares.get)
+    top_share = shares[top]
+    return int(top), samples, float(top_share)
+
+
+def q_consensus_predict(inst: Instance, solver,
+                        q: float, Kmax: int) -> Tuple[int, int, List[int], float]:
+    """Heuristic baseline: stop when max prefix share >= q. Returns top label, samples used, raw samples, proxy prob."""
+    C = solver.C
+    samples: List[int] = []
+    for t in range(1, Kmax + 1):
+        yhat, _ = solver.sample_answer(inst)
+        samples.append(yhat)
+        shares = vote_shares(samples, C)
+        y_top = max(shares, key=shares.get)
+        if shares[y_top] >= q:
+            return y_top, t, samples, float(shares[y_top])
+    shares = vote_shares(samples, C)
+    y_top = max(shares, key=shares.get)
+    return y_top, Kmax, samples, float(shares[y_top])
+
+
+def cs_hoeffding_leader_gap_predict(inst: Instance, solver,
+                                    delta: float, Kmax: int) -> Tuple[int, int, List[int], float]:
+    """Confidence-sequence-inspired baseline: stop when the gap between top-1 and top-2 shares
+    exceeds 2 * sqrt(log(2/delta)/(2 t)). No coverage guarantee."""
+    C = solver.C
+    samples: List[int] = []
+    for t in range(1, Kmax + 1):
+        yhat, _ = solver.sample_answer(inst)
+        samples.append(yhat)
+        shares = vote_shares(samples, C)
+        sorted_shares = sorted(shares.items(), key=lambda kv: kv[1], reverse=True)
+        (y1, s1), (y2, s2) = sorted_shares[0], sorted_shares[1]
+        eps = math.sqrt(max(0.0, math.log(2.0 / max(delta, 1e-12))) / (2.0 * t))
+        if (s1 - s2) >= 2.0 * eps:
+            return y1, t, samples, float(s1)
+    shares = vote_shares(samples, C)
+    y_top = max(shares, key=shares.get)
+    return y_top, Kmax, samples, float(shares[y_top])
+
+
+def random_guess_predict(C: int, rng: np.random.Generator) -> Tuple[int, float]:
+    """Random guess baseline: uniform over classes. Returns label and proxy prob (1/C)."""
+    yhat = int(rng.integers(0, C))
+    return int(yhat), 1.0 / float(C)
+
+
+def binom_ci_95(p_hat: float, n: int) -> Tuple[float, float]:
+    """Approximate 95% CI via normal approximation; conservative for large n."""
+    if n <= 0:
+        return (float('nan'), float('nan'))
+    se = math.sqrt(max(p_hat * (1.0 - p_hat), 1e-12) / n)
+    half = 1.96 * se
+    return (max(0.0, p_hat - half), min(1.0, p_hat + half))
+
+
+def cohens_h(p: float, p0: float) -> float:
+    """Effect size for proportions."""
+    def a(x): return 2.0 * math.asin(math.sqrt(min(max(x, 0.0), 1.0)))
+    return a(p) - a(p0)
+
+
+def ece_brier(probs: List[float], corrects: List[int], n_bins: int = 10) -> Tuple[float, float]:
+    """Compute ECE and Brier score given predicted probabilities and correctness indicators."""
+    if len(probs) == 0:
+        return float('nan'), float('nan')
+    probs = np.array(probs, dtype=float)
+    corrects = np.array(corrects, dtype=float)
+    # Brier score
+    brier = float(np.mean((probs - corrects) ** 2))
+    # ECE
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    for i in range(n_bins):
+        mask = (probs >= bins[i]) & (probs < bins[i + 1] if i < n_bins - 1 else probs <= bins[i + 1])
+        if np.any(mask):
+            conf = float(np.mean(probs[mask]))
+            acc = float(np.mean(corrects[mask]))
+            ece += (np.sum(mask) / len(probs)) * abs(acc - conf)
+    return float(ece), float(brier)
+
+
+def mcnemar_pvalue(b: int, c: int) -> float:
+    """McNemar's test with continuity correction; approximate p-value via chi-square with 1 df:
+       x = (|b - c| - 1)^2 / (b + c); p = erfc(sqrt(x/2)).
+    """
+    n = b + c
+    if n == 0:
+        return 1.0
+    x = ((abs(b - c) - 1.0) ** 2) / max(1.0, float(n))
+    return float(math.erfc(math.sqrt(max(0.0, x) / 2.0)))
+
+
+def benjamini_hochberg(pvals: List[float]) -> List[float]:
+    """Return BH-adjusted q-values for a list of p-values."""
+    m = len(pvals)
+    if m == 0:
+        return []
+    order = np.argsort(pvals)
+    ranks = np.empty(m, dtype=int)
+    ranks[order] = np.arange(1, m + 1)
+    pvals = np.array(pvals, dtype=float)
+    qvals = pvals * m / ranks
+    # enforce monotonicity
+    q_sorted = np.minimum.accumulate(qvals[order][::-1])[::-1]
+    out = np.empty(m, dtype=float)
+    out[order] = np.minimum(1.0, q_sorted)
+    return out.tolist()
+
+
+def prepare_real_dataset(name: str, seed: int = 0, do_cv: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, int]:
+    """
+    Load a real dataset and split into train/calib/test. Train a probabilistic classifier (with CV for C)
+    and return class-probability matrices for calib and test, along with true labels.
+    Returns: (probas_calib, y_calib, probas_test, y_test, C)
+    """
+    if not SKLEARN_AVAILABLE:
+        raise RuntimeError("scikit-learn not available; install scikit-learn to use --dataset != synthetic")
+
+    if name == "digits":
+        data = load_digits()
+    elif name == "iris":
+        data = load_iris()
+    elif name == "wine":
+        data = load_wine()
+    else:
+        raise ValueError(f"Unknown dataset: {name}")
+
+    X, y = data.data, data.target
+    # split: train / calib / test = 60% / 20% / 20%
+    X_train, X_tmp, y_train, y_tmp = train_test_split(X, y, test_size=0.4, random_state=seed, stratify=y)
+    X_calib, X_test, y_calib, y_test = train_test_split(X_tmp, y_tmp, test_size=0.5, random_state=seed + 1, stratify=y_tmp)
+
+    scaler = StandardScaler().fit(X_train)
+    X_train = scaler.transform(X_train)
+    X_calib = scaler.transform(X_calib)
+    X_test = scaler.transform(X_test)
+
+    C = int(np.max(y) + 1)
+
+    # Optional CV for logistic regression regularization strength
+    if do_cv:
+        Cs = np.logspace(-2, 2, 7)
+        best_C, best_ll = None, float('inf')
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed + 2)
+        for Cval in Cs:
+            ll = 0.0
+            for tr_idx, va_idx in skf.split(X_train, y_train):
+                clf = LogisticRegression(max_iter=1000, multi_class="auto", C=Cval, random_state=seed + 3)
+                clf.fit(X_train[tr_idx], y_train[tr_idx])
+                pva = clf.predict_proba(X_train[va_idx])
+                ll += log_loss(y_train[va_idx], pva, labels=np.arange(C))
+            if ll < best_ll:
+                best_ll = ll
+                best_C = Cval
+        C_final = best_C if best_C is not None else 1.0
+    else:
+        C_final = 1.0
+
+    clf = LogisticRegression(max_iter=1000, multi_class="auto", C=C_final, random_state=seed + 4)
+    clf.fit(X_train, y_train)
+    probas_calib = clf.predict_proba(X_calib)
+    probas_test = clf.predict_proba(X_test)
+
+    return probas_calib, y_calib, probas_test, y_test, C
+
+
+def run_single(seed: int = 42, n_total: int = 1500, n_calib: int = 300,
+               C: int = 8, alpha: float = 0.1, Kmax: int = 16,
+               gamma: float = 1.2, noise: float = 0.6,
+               method: str = "acsc", m: int = 1, q: float = 0.75,
+               delta: float = 0.05, out_dir: str = ".",
+               dataset: str = "synthetic") -> Dict[str, float]:
+    """Run one seed and return aggregate metrics."""
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Seed control: Python, NumPy, Matplotlib
+    random.seed(seed)
+    np.random.seed(seed)
+    plt.rcParams.update({"figure.dpi": 140, "savefig.dpi": 140})
+
+    # Build data and solvers
+    if dataset == "synthetic":
+        data = make_dataset(n_total, C=C, seed=seed)
+        calib = data[:n_calib]
+        test = data[n_calib:]
+        solver_calib = NoisyLLMSolver(C=C, gamma=gamma, noise=noise, seed=seed + 1)
+        solver_test = NoisyLLMSolver(C=C, gamma=gamma, noise=noise, seed=seed + 1)
+    else:
+        probas_calib, y_calib, probas_test, y_test, C_real = prepare_real_dataset(dataset, seed=seed, do_cv=True)
+        C = C_real
+        calib = [Instance(difficulty=0.0, true_label=int(y), idx=i) for i, y in enumerate(y_calib)]
+        test = [Instance(difficulty=0.0, true_label=int(y), idx=i) for i, y in enumerate(y_test)]
+        solver_calib = RealProbaSampler(probas_calib, seed=seed + 1)
+        solver_test  = RealProbaSampler(probas_test,  seed=seed + 2)
+
+    tau, stats = calibrate_tau(calib, solver_calib, Kmax, alpha)
+
+    cov_anytime, set_sizes_any, samples_used_any, probs_any, corr_any = [], [], [], [], []
+    acc_mv, samples_mv, probs_mv, corr_mv = [], [], [], []
+    acc_qc, samples_qc, probs_qc, corr_qc = [], [], [], []
+    acc_cs, samples_cs, probs_cs, corr_cs = [], [], [], []
+    cov_ub, set_sizes_ub, samples_ub, probs_ub = [], [], [], []
+    # Arrays for naive coverage vs UB for McNemar
+    cov_naive_for_pair = []
+    cov_ub_for_pair = []
+    rng_rg = np.random.default_rng(seed + 777)
+    acc_rg = []
+
+    per_instance_rows = []
+    for idx, inst in enumerate(test):
+        if method == "acsc":
+            S, t, smp, pproxy = acsc_naive_predict(inst, solver_test, tau, Kmax)
+            cov_anytime.append(int(inst.true_label in S))
+            set_sizes_any.append(len(S))
+            samples_used_any.append(t)
+            probs_any.append(pproxy)
+            corr_any.append(int(inst.true_label in S))
+        elif method == "acsc_ub":
+            S, t, smp, pproxy = acsc_ub_predict(inst, solver_test, tau, Kmax, m=m)
+            cov_anytime.append(int(inst.true_label in S))
+            set_sizes_any.append(len(S))
+            samples_used_any.append(t)
+            probs_any.append(pproxy)
+            corr_any.append(int(inst.true_label in S))
+        elif method == "cs_hoeffding":
+            top, t, smp, pproxy = cs_hoeffding_leader_gap_predict(inst, solver_test, delta=delta, Kmax=Kmax)
+            cov_anytime.append(int(top == inst.true_label))  # treat as accuracy for point predictor
+            set_sizes_any.append(1)
+            samples_used_any.append(t)
+            probs_any.append(pproxy)
+            corr_any.append(int(top == inst.true_label))
+        else:
+            raise ValueError("Unknown method: %s" % method)
+
+        # Fixed-K Majority
+        top_mv, _smp_mv, p_mv = fixedK_majority_predict(inst, solver_test, Kmax)
+        acc_mv.append(int(top_mv == inst.true_label))
+        samples_mv.append(Kmax)
+        probs_mv.append(p_mv)
+        corr_mv.append(int(top_mv == inst.true_label))
+
+        # q-consensus heuristic
+        top_qc, t_qc, _smp_qc, p_qc = q_consensus_predict(inst, solver_test, q=q, Kmax=Kmax)
+        acc_qc.append(int(top_qc == inst.true_label))
+        samples_qc.append(t_qc)
+        probs_qc.append(p_qc)
+        corr_qc.append(int(top_qc == inst.true_label))
+
+        # CS leader-gap heuristic
+        top_cs, t_cs, _smp_cs, p_cs = cs_hoeffding_leader_gap_predict(inst, solver_test, delta=delta, Kmax=Kmax)
+        acc_cs.append(int(top_cs == inst.true_label))
+        samples_cs.append(t_cs)
+        probs_cs.append(p_cs)
+        corr_cs.append(int(top_cs == inst.true_label))
+
+        # ACSC-UB metrics (for reporting even if method != acsc_ub)
+        S_ub, t_ub, _smp_ub, p_ub = acsc_ub_predict(inst, solver_test, tau, Kmax, m=m)
+        cov_ub.append(int(inst.true_label in S_ub))
+        set_sizes_ub.append(len(S_ub))
+        samples_ub.append(t_ub)
+        probs_ub.append(p_ub)
+
+        # Naive ACSC (for paired comparison with UB)
+        S_naive, _t_nv, _smp_nv, _p_nv = acsc_naive_predict(inst, solver_test, tau, Kmax)
+        cov_naive_for_pair.append(int(inst.true_label in S_naive))
+        cov_ub_for_pair.append(int(inst.true_label in S_ub))
+
+        # Random guess baseline
+        y_rg, p_rg = random_guess_predict(C, rng_rg)
+        acc_rg.append(int(y_rg == inst.true_label))
+
+        # Per-instance log (anytime method)
+        per_instance_rows.append({
+            "idx": idx,
+            "true_label": inst.true_label,
+            "samples_used_anytime": samples_used_any[-1],
+            "set_size_anytime": set_sizes_any[-1],
+            "correct_anytime": corr_any[-1],
+            "proxy_prob_anytime": probs_any[-1]
+        })
+
+    # ECE/Brier
+    ece_any, brier_any = ece_brier(probs_any, corr_any)
+    ece_mv, brier_mv = ece_brier(probs_mv, corr_mv)
+    ece_qc, brier_qc = ece_brier(probs_qc, corr_qc)
+    ece_cs, brier_cs = ece_brier(probs_cs, corr_cs)
+    ece_ub, brier_ub = ece_brier(probs_ub, cov_ub)
+
+    # Paired comparison naive vs UB with McNemar
+    b = sum((na == 1 and ub == 0) for na, ub in zip(cov_naive_for_pair, cov_ub_for_pair))
+    c = sum((na == 0 and ub == 1) for na, ub in zip(cov_naive_for_pair, cov_ub_for_pair))
+    mcnemar_p = mcnemar_pvalue(b, c)
+
+    # Save per-instance CSV for this seed
+    per_df = pd.DataFrame(per_instance_rows)
+    per_df.to_csv(os.path.join(out_dir, f"per_instance_seed_{seed}.csv"), index=False)
+
+    n_test = len(test)
+    # z-test for coverage vs target (only meaningful when method yields sets)
+    target = 1.0 - alpha
+    p_hat_any = float(np.mean(cov_anytime))
+    if method in ("acsc", "acsc_ub"):
+        se = math.sqrt(max(p_hat_any * (1 - p_hat_any), 1e-12) / n_test)
+        z = (p_hat_any - target) / (se + 1e-12)
+        # two-sided p-value (normal approx)
+        pval_any_vs_target = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
+    else:
+        z = float('nan')
+        pval_any_vs_target = float('nan')
+
+    res = {
+        "seed": seed,
+        "alpha": alpha,
+        "n_total": n_total if dataset == "synthetic" else float(len(calib) + len(test)),
+        "n_calib": len(calib),
+        "n_test": n_test,
+        "Kmax": Kmax,
+        "C": C,
+        "tau": stats["tau"],
+        "calib_mean_vs_correct": stats["mean_vs_correct"],
+        "calib_median_vs_correct": stats["median_vs_correct"],
+        # Anytime method of interest
+        "coverage_anytime": float(np.mean(cov_anytime)),
+        "avg_set_size_anytime": float(np.mean(set_sizes_any)),
+        "avg_samples_used_anytime": float(np.mean(samples_used_any)),
+        "median_samples_used_anytime": float(np.median(samples_used_any)),
+        "ece_anytime": float(ece_any),
+        "brier_anytime": float(brier_any),
+        "z_vs_target_anytime": float(z),
+        "pval_any_vs_target": float(pval_any_vs_target),
+        # Fixed-K MV
+        "accuracy_fixedK_majority": float(np.mean(acc_mv)),
+        "avg_samples_used_mv": float(np.mean(samples_mv)),
+        "ece_mv": float(ece_mv),
+        "brier_mv": float(brier_mv),
+        # q-consensus
+        "accuracy_q_consensus": float(np.mean(acc_qc)),
+        "avg_samples_used_qc": float(np.mean(samples_qc)),
+        "ece_qc": float(ece_qc),
+        "brier_qc": float(brier_qc),
+        # CS leader-gap
+        "accuracy_cs_hoeffding": float(np.mean(acc_cs)),
+        "avg_samples_used_cs": float(np.mean(samples_cs)),
+        "ece_cs": float(ece_cs),
+        "brier_cs": float(brier_cs),
+        # ACSC-UB (reported even if not chosen as main)
+        "coverage_acsc_ub": float(np.mean(cov_ub)),
+        "avg_set_size_acsc_ub": float(np.mean(set_sizes_ub)),
+        "avg_samples_used_acsc_ub": float(np.mean(samples_ub)),
+        "ece_acsc_ub": float(ece_ub),
+        "brier_acsc_ub": float(brier_ub),
+        # Random guess baseline
+        "accuracy_random_guess": float(np.mean(acc_rg)),
+        # statistical tests
+        "mcnemar_p_naive_vs_ub": float(mcnemar_p),
+        # config
+        "method": method,
+        "m_stop": m,
+        "q_consensus": q,
+        "delta_cs": delta
+    }
+    return res
+
+
+def aggregate_over_seeds(seeds: List[int], out_dir: str = ".", **kwargs) -> Dict[str, float]:
+    rows = []
+    for s in seeds:
+        rows.append(run_single(seed=s, out_dir=out_dir, **kwargs))
+    df = pd.DataFrame(rows)
+    n_test = int(df.iloc[0]["n_test"]) if len(df) > 0 else 0
+    # means and stds
+    agg = df.mean(numeric_only=True).to_dict()
+    stds = df.std(numeric_only=True, ddof=1).to_dict()
+    for k, v in stds.items():
+        agg[f"{k}_std"] = float(v)
+
+    # CIs using within-seed estimates (binomial CI over n_test per seed where appropriate)
+    def add_ci(agg_key_mean: str, ci_low_key: str, ci_high_key: str, n: int):
+        p = float(agg.get(agg_key_mean, float("nan")))
+        low, high = binom_ci_95(p, n)
+        agg[ci_low_key] = low
+        agg[ci_high_key] = high
+
+    add_ci("coverage_anytime", "coverage_anytime_ci_low", "coverage_anytime_ci_high", n_test)
+    add_ci("accuracy_fixedK_majority", "accuracy_mv_ci_low", "accuracy_mv_ci_high", n_test)
+    add_ci("accuracy_q_consensus", "accuracy_qc_ci_low", "accuracy_qc_ci_high", n_test)
+    add_ci("accuracy_cs_hoeffding", "accuracy_cs_ci_low", "accuracy_cs_ci_high", n_test)
+    add_ci("coverage_acsc_ub", "coverage_acsc_ub_ci_low", "coverage_acsc_ub_ci_high", n_test)
+    add_ci("accuracy_random_guess", "accuracy_rg_ci_low", "accuracy_rg_ci_high", n_test)
+
+    # BH-adjusted q-values for multiple hypotheses across seeds/configs when applicable
+    if "pval_any_vs_target" in df.columns:
+        agg["pval_any_vs_target_mean"] = float(df["pval_any_vs_target"].mean())
+    if "mcnemar_p_naive_vs_ub" in df.columns:
+        agg["mcnemar_p_naive_vs_ub_mean"] = float(df["mcnemar_p_naive_vs_ub"].mean())
+
+    pvals = []
+    keys = []
+    for key in ["pval_any_vs_target_mean", "mcnemar_p_naive_vs_ub_mean"]:
+        if key in agg and not math.isnan(agg[key]):
+            pvals.append(agg[key])
+            keys.append(key)
+    if len(pvals) > 0:
+        qvals = benjamini_hochberg(pvals)
+        for k, qv in zip(keys, qvals):
+            agg[f"{k}_bh_q"] = float(qv)
+
+    agg["n_seeds"] = len(seeds)
+    # effect size against target (for the selected anytime method)
+    target = 1.0 - kwargs.get("alpha", 0.1)
+    p_cov = float(agg.get("coverage_anytime", float("nan")))
+    if not math.isnan(p_cov):
+        agg["cohens_h_vs_target"] = cohens_h(p_cov, target)
+    # keep method/config summaries
+    agg["method"] = kwargs.get("method", "")
+    agg["alpha"] = kwargs.get("alpha", 0.1)
+    agg["Kmax"] = kwargs.get("Kmax", 16)
+    agg["C"] = kwargs.get("C", 8)
+    return agg
+
+
+def run_grid(seeds: List[int],
+             alphas: List[float],
+             kmax_list: List[int],
+             out_dir: str = ".",
+             grid_method: str = "acsc_ub",
+             **kwargs) -> pd.DataFrame:
+    """
+    Run a grid over alphas and Kmax for the selected method, aggregate over seeds,
+    compute BH-adjusted q-values across the full grid, and save CSV/JSON + plot.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    records: List[Dict[str, Any]] = []
+    # Collect p-values per grid to BH-adjust globally afterward
+    pvals_vs_target: List[float] = []
+    pidx_vs_target: List[int] = []
+
+    for alpha in alphas:
+        for Kmax in kmax_list:
+            agg = aggregate_over_seeds(seeds, out_dir=out_dir, alpha=alpha, Kmax=Kmax, method=grid_method, **kwargs)
+            agg["grid_alpha"] = alpha
+            agg["grid_Kmax"] = Kmax
+            # store for BH
+            if not math.isnan(agg.get("pval_any_vs_target_mean", float("nan"))):
+                pidx_vs_target.append(len(records))
+                pvals_vs_target.append(agg["pval_any_vs_target_mean"])
+            records.append(agg)
+
+    df = pd.DataFrame(records)
+    # BH across grid for pval_any_vs_target_mean only (coverage vs target)
+    if len(pvals_vs_target) > 0:
+        qgrid = benjamini_hochberg(pvals_vs_target)
+        for idx, qv in zip(pidx_vs_target, qgrid):
+            df.loc[idx, "pval_any_vs_target_mean_bh_q_grid"] = qv
+    # Save artifacts
+    df.to_csv(os.path.join(out_dir, "grid_results.csv"), index=False)
+    with open(os.path.join(out_dir, "grid_results.json"), "w") as f:
+        json.dump(df.to_dict(orient="records"), f, indent=2)
+    return df
+
+
+def make_ablation_plot(df: pd.DataFrame, out_dir: str = ".", title: str = "Coverage vs Target across (alpha, Kmax)"):
+    """Create an error-bar plot across grid points for coverage_anytime with 95% CIs (normal approx)."""
+    plt.figure(figsize=(7.2, 4.2))
+    # Expect columns: grid_alpha, grid_Kmax, coverage_anytime, coverage_anytime_ci_low, coverage_anytime_ci_high
+    groups = df.groupby(["grid_alpha", "grid_Kmax"])
+    xs = []
+    ys = []
+    yerr = []
+    labels = []
+    for (alpha, Kmax), g in groups:
+        # using aggregated mean coverage and CI (per-seed test size approximated by first row's n_test)
+        cov = float(g["coverage_anytime"].iloc[0])
+        low = float(g["coverage_anytime_ci_low"].iloc[0])
+        high = float(g["coverage_anytime_ci_high"].iloc[0])
+        xs.append(len(xs))
+        ys.append(cov)
+        yerr.append([[cov - low], [high - cov]])
+        labels.append(f"α={alpha:.2f}, K={int(Kmax)}")
+    if len(xs) > 0:
+        xs_n = np.array(xs)
+        ys_n = np.array(ys)
+        yerr_n = np.array(yerr).squeeze(axis=2).T  # shape (2, n)
+        plt.errorbar(xs_n, ys_n, yerr=yerr_n, fmt="o", color="tab:blue", ecolor="black", capsize=3)
+        plt.xticks(xs_n, labels, rotation=45, ha="right")
+        plt.axhline(1.0 - df["grid_alpha"].iloc[0], color="gray", linestyle="--", linewidth=1.0, label="Target (example)")
+        plt.ylim(0.0, 1.05)
+        plt.ylabel("Coverage (mean across seeds)")
+        plt.title(title)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "ablation_errorbars.png"))
+    plt.close()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--n_total", type=int, default=1500, help="Total synthetic instances (ignored for real datasets)")
+    parser.add_argument("--n_calib", type=int, default=300, help="Calibration size (synthetic); for real data uses a fixed split")
+    parser.add_argument("--C", type=int, default=8)
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--Kmax", type=int, default=16)
+    parser.add_argument("--gamma", type=float, default=1.2)
+    parser.add_argument("--noise", type=float, default=0.6)
+    parser.add_argument("--n_seeds", type=int, default=5)
+    parser.add_argument("--method", type=str, default="acsc", choices=["acsc","acsc_ub","cs_hoeffding"])
+    parser.add_argument("--m_stop", type=int, default=1, help="Stop when |S_ub| <= m_stop (ACSC-UB only)")
+    parser.add_argument("--q_consensus", type=float, default=0.75, help="q for q-consensus baseline")
+    parser.add_argument("--delta_cs", type=float, default=0.05, help="delta for CS Hoeffding baseline")
+    parser.add_argument("--dataset", type=str, default="synthetic", choices=["synthetic","digits","iris","wine"],
+                        help="Use a real dataset to emulate sampling via predictive probabilities (requires scikit-learn)")
+    parser.add_argument("--out_dir", type=str, default=".", help="Output directory for artifacts")
+    # Grid options
+    parser.add_argument("--grid_alphas", type=str, default="", help="Comma-separated list, e.g., 0.05,0.1,0.2")
+    parser.add_argument("--grid_kmax", type=str, default="", help="Comma-separated Kmax list, e.g., 8,16,32")
+    parser.add_argument("--make_ablation_plot", type=int, default=0, help="If 1, create ablation_errorbars.png from grid results")
+    args = parser.parse_args()
+
+    seeds = [args.seed + i for i in range(args.n_seeds)]
+
+    # If grid specified, run grid; else run single aggregated over seeds
+    if args.grid_alphas and args.grid_kmax:
+        alphas = [float(x) for x in args.grid_alphas.split(",")]
+        kmax_list = [int(x) for x in args.grid_kmax.split(",")]
+        df_grid = run_grid(seeds, alphas, kmax_list, out_dir=args.out_dir,
+                           grid_method=args.method,
+                           n_total=args.n_total, n_calib=args.n_calib,
+                           C=args.C, gamma=args.gamma, noise=args.noise,
+                           m=args.m_stop, q=args.q_consensus, delta=args.delta_cs,
+                           dataset=args.dataset)
+        if args.make_ablation_plot:
+            make_ablation_plot(df_grid, out_dir=args.out_dir)
+        # Also print summary of grid
+        print(json.dumps({"grid_summary": df_grid.to_dict(orient="records")[:3], "note": "See grid_results.csv/json for full results."}, indent=2))
+    else:
+        agg = aggregate_over_seeds(seeds, out_dir=args.out_dir,
+                                   n_total=args.n_total, n_calib=args.n_calib,
+                                   C=args.C, alpha=args.alpha, Kmax=args.Kmax,
+                                   gamma=args.gamma, noise=args.noise,
+                                   method=args.method, m=args.m_stop, q=args.q_consensus,
+                                   delta=args.delta_cs, dataset=args.dataset)
+
+        # Save CSV/JSON
+        os.makedirs(args.out_dir, exist_ok=True)
+        df = pd.DataFrame([agg])
+        df.to_csv(os.path.join(args.out_dir, "results.csv"), index=False)
+        with open(os.path.join(args.out_dir, "results.json"), "w") as f:
+            json.dump(agg, f, indent=2)
+
+        # Diagnostic histogram for the first seed run (for convenience)
+        single = run_single(seed=args.seed, n_total=args.n_total, n_calib=args.n_calib,
+                            C=args.C, alpha=args.alpha, Kmax=args.Kmax,
+                            gamma=args.gamma, noise=args.noise,
+                            method=args.method, m=args.m_stop, q=args.q_consensus,
+                            delta=args.delta_cs, out_dir=args.out_dir, dataset=args.dataset)
+
+        # To collect histogram of samples used for anytime method for that seed
+        if args.dataset == "synthetic":
+            data = make_dataset(args.n_total, C=args.C, seed=args.seed)
+            calib = data[:args.n_calib]
+            test = data[args.n_calib:]
+            solver_calib = NoisyLLMSolver(C=args.C, gamma=args.gamma, noise=args.noise, seed=args.seed + 1)
+            tau, _ = calibrate_tau(calib, solver_calib, args.Kmax, args.alpha)
+            solver_test = NoisyLLMSolver(C=args.C, gamma=args.gamma, noise=args.noise, seed=args.seed + 1)
+        else:
+            probas_calib, y_calib, probas_test, y_test, _C = prepare_real_dataset(args.dataset, seed=args.seed, do_cv=True)
+            calib = [Instance(difficulty=0.0, true_label=int(y), idx=i) for i, y in enumerate(y_calib)]
+            test = [Instance(difficulty=0.0, true_label=int(y), idx=i) for i, y in enumerate(y_test)]
+            solver_calib = RealProbaSampler(probas_calib, seed=args.seed + 1)
+            tau, _ = calibrate_tau(calib, solver_calib, args.Kmax, args.alpha)
+            solver_test = RealProbaSampler(probas_test, seed=args.seed + 2)
+
+        samples_used = []
+        for inst in test:
+            if args.method == "acsc":
+                _, t, _, _ = acsc_naive_predict(inst, solver_test, tau, args.Kmax)
+            elif args.method == "acsc_ub":
+                _, t, _, _ = acsc_ub_predict(inst, solver_test, tau, args.Kmax, m=args.m_stop)
+            else:
+                _, t, _, _ = cs_hoeffding_leader_gap_predict(inst, solver_test, delta=args.delta_cs, Kmax=args.Kmax)
+            samples_used.append(t)
+        plt.figure()
+        bins = np.arange(0.5, args.Kmax + 1.5, 1.0)
+        plt.hist(samples_used, bins=bins, color="tab:blue", edgecolor="black")
+        plt.xlabel("Samples used (anytime)")
+        plt.ylabel("Count")
+        plt.title("Compute adaptivity: distribution of samples used")
+        plt.tight_layout()
+        plt.savefig(os.path.join(args.out_dir, "samples_used_hist.png"))
+        plt.close()
+
+        # Report with CIs and a simple z-test of coverage/accuracy vs target when applicable
+        target = 1.0 - args.alpha
+        p_hat = float(agg.get("coverage_anytime", float("nan")))
+        n = int(agg.get("n_test", 0))
+        if not math.isnan(p_hat) and n > 0:
+            se = math.sqrt(max(p_hat * (1 - p_hat), 1e-12) / n)
+            z = (p_hat - target) / (se + 1e-12)
+            pval = 2 * (1 - 0.5 * (1 + math.erf(abs(z) / math.sqrt(2))))
+            agg["z_against_target"] = z
+            agg["pval_against_target"] = pval
+
+        print(json.dumps(agg, indent=2))
+        print(f"\nSaved: {os.path.join(args.out_dir, 'results.csv')}, {os.path.join(args.out_dir, 'results.json')}, {os.path.join(args.out_dir, 'samples_used_hist.png')}")
+
+if __name__ == "__main__":
+    main()

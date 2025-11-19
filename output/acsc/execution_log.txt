@@ -1,0 +1,21 @@
+================================================================================
+COMMAND EXECUTION LOG - 2025-10-28T15:00:17.650309
+================================================================================
+
+[1/1] Execute: python simulation.py --alpha 0.1 --Kmax 16 --n_tot...
+Command: python simulation.py --alpha 0.1 --Kmax 16 --n_total 1500 --n_calib 300 --C 8 --seed 42 --gamma 1.2 --noise 0.6 --n_seeds 5 --method acsc_ub --m_stop 1
+Shell: auto
+--------------------------------------------------------------------------------
+Exit Code: 1
+
+STDERR:
+  File "C:\Users\Lenovo\software\AI-Scientist\output\acsc\simulation.py", line 204
+    return S, Kmax, samples, float(proxy_prob))
+                                              ^
+SyntaxError: unmatched ')'
+
+
+✗ FAILED (exit code: 1)
+
+================================================================================
+

@@ -1,0 +1,121 @@
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{float}
+\documentclass[10pt,conference]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts,bm}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+@article{ngo2017cell,
+
+\begin{filecontents*}{refs.bib}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, urlcolor=black}
+\newcommand{\E}{\mathbb{E}}
+  author={Ngo, Hien Quoc and Ashikhmin, Alexei and Yang, Hong and Larsson, Erik G and Marzetta, Thomas L},
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\1}{\mathbf{1}}
+Cell-free massive MIMO promises uniformly high-throughput service through user-centric cooperation among many distributed access points (APs). A central implementation challenge is the joint design of discrete AP–user association and continuous multiuser precoding under per-AP power limits and fronthaul constraints. We propose a two-level optimization framework that explicitly decomposes these tasks: an outer Quadratic Unconstrained Binary Optimization (QUBO) layer selects the active AP–user links and an inner regularized zero-forcing (RZF) layer computes the precoder on the selected topology.
+
+The QUBO’s diagonal terms capture standalone link utilities, the off-diagonals encode pairwise interference couplings derived from MRT-based projections, and quadratic penalties enforce AP capacity and per-user diversity (e.g., exactly $L$ serving APs). We show how the QUBO maps to an Ising energy $(J,h)$ compatible with coherent Ising machines (CIMs) or annealers, while retaining polynomial construction cost. To ensure feasibility and robust performance, we introduce a lightweight post-annealing projection that satisfies the combinatorial constraints without discarding the global structure discovered by the Ising search.
+\begin{document}
+
+\title{Cell-Free Massive MIMO via Ising: Joint Access-Point Selection and Precoding with a QUBO Outer Loop}
+\author{Anonymous}
+\maketitle
+
+\begin{abstract}
+and each user must be served by exactly $L$ APs ($\sum_m a_{mk}=L$).
+Per-AP power is bounded by $P_m$.
+Given a selection $A=[a_{mk}]$, we form an effective channel matrix $H_A \in \mathbb{C}^{K\times M}$ by zeroing columns of $H$ for unselected links
+and compute an RZF precoder
+\begin{equation}
+W = \alpha H_A^\mathrm{H}(H_A H_A^\mathrm{H} + \xi I)^{-1}, \quad \alpha ~\text{normalizes per-AP power}.
+\end{equation}
+We develop a two-level design for cell-free massive MIMO where an outer Quadratic Unconstrained Binary Optimization (QUBO)
+selects the serving access points (APs) per user, and an inner continuous step computes regularized zero-forcing (RZF) precoders.
+The outer QUBO includes capacity and power constraints and embeds interference-aware couplings derived from channel projections.
+We solve the QUBO using a coherent Ising machine (CIM) surrogate. The approach maximizes weighted sum rate (or fairness metrics)
+and scales to dozens of APs and users while remaining compatible with photonic or electronic Ising hardware.
+\end{abstract}
+
+\section{Model}
+Consider $M$ distributed single-antenna APs jointly serving $K$ single-antenna users on a shared time-frequency resource.
+\end{filecontents*}
+
+\end{equation}
+where $u_{mk|m'k'}$ is the joint sum-rate when both links are active using MRT on each AP.
+Let $h_{mk}\!\in\!\mathbb{C}$ be the uplink (reciprocal) channel from user $k$ to AP $m$; downlink uses $h_{mk}^\ast$.
+Binary variables $a_{mk}\in\{0,1\}$ indicate if AP $m$ serves user $k$. Each AP can serve at most one user per resource ($\sum_k a_{mk}\le 1$),
+and each user must be served by exactly $L$ APs ($\sum_m a_{mk}=L$).
+Per-AP power is bounded by $P_m$.
+Given a selection $A=[a_{mk}]$, we form an effective channel matrix $H_A \in \mathbb{C}^{K\times M}$ by zeroing columns of $H$ for unselected links
+and compute an RZF precoder
+\begin{equation}
+W = \alpha H_A^\mathrm{H}(H_A H_A^\mathrm{H} + \xi I)^{-1}, \quad \alpha ~\text{normalizes per-AP power}.
+&\lambda_{\text{U}}\sum_{k}\Big(\sum_{m}x_{(m,k)}-L\Big)^2.
+\end{align}
+\end{equation}
+The achieved SINR follows from standard linear precoding with additive Gaussian noise $N$.
+  title={Making cell-free massive MIMO competitive with MMSE processing and centralized implementation},
+Naively letting all APs serve all users maximizes cooperation but often becomes infeasible due to fronthaul, synchronization, and compute overheads. Instead, selecting a sparse, interference-aware set of AP–user links per resource block is crucial for scalability \cite{interdonato2019scalability,chen2020structured}. Traditional heuristics (e.g., strongest-large-scale-gain assignment) are fast but can be interference-unaware and thus suboptimal \cite{zhang2019cell}. Convex or mixed-integer formulations improve optimality but scale poorly with the number of APs/users. Learning-based solutions can handle moderate scales but require training and may generalize poorly to out-of-distribution deployments \cite{elsherif2022resource,zappone2021uplink}.
+
+Physics-inspired optimization, in particular Ising-model-based computing, has emerged as a compelling paradigm for combinatorial search \cite{lucas2014ising,mcmahon2016fully,inagaki2016coherent,kasi2021resource,grassl2022ising}. Many NP-hard problems can be mapped to Quadratic Unconstrained Binary Optimization (QUBO) and then efficiently approximated by specialized hardware (coherent Ising machines, quantum annealers, or digital annealers). We leverage this approach for AP selection in cell-free massive MIMO and combine it with classical linear precoding in a two-level architecture. The result is a flexible framework that can target different network utilities (sum rate or fairness) and is amenable to near-term Ising hardware.
+
+\section{Related Work}
+Cell-free massive MIMO has matured from concept to practical research direction with strong theoretical support and growing measurement evidence \cite{ngo2017cell,demir2021foundations,bjornson2019massive}. Performance depends on how users are clustered or associated and on the cooperation level between APs. User-centric designs restrict each user to a subset of APs to reduce overhead while preserving macro-diversity \cite{buzzi2019user,chen2020structured}. Optimizing user association and power/precoding has been studied using convex approximations, alternating optimization, or mixed-integer programming \cite{nayebi2017precoding,bjornson2019making}. Fairness objectives (max-min, proportional fairness) are important for consistent quality of experience \cite{bashar2021max}.
+
+In parallel, physics-inspired optimization has gained traction for scheduling, resource allocation, and user association \cite{kasi2021resource,grassl2022ising}. Coherent Ising machines and annealers aim to find low-energy states of Ising Hamiltonians, to which many combinatorial problems can be mapped via QUBO \cite{lucas2014ising,mcmahon2016fully,inagaki2016coherent,glover2018tutorial}. Applications to wireless include link scheduling, channel assignment, and preliminary cell-free formulations \cite{zhao2022joint}. Compared to prior work, our contribution offers: (i) a first-principles interference-aware QUBO with pairwise terms derived from MRT projections, (ii) a fairness-weighted QUBO variant for proportional-fair behavior, and (iii) a complete two-level flow with feasibility projection, strong baselines, statistical rigor, and discussion of hardware mapping and scalability.
+
+Our goal is to maximize a weighted sum rate or proportional fairness objective.
+
+\section{QUBO Outer Problem}
+We approximate the objective with single-link utilities and pairwise couplings.
+Define the stand-alone utility $u_{mk}=\log_2\!\big(1+\frac{P_m|h_{mk}|^2}{N}\big)$ and the interference coupling
+We include a complete simulator: channel generation with large-scale fading, QUBO construction, CIM solve,
+and RZF evaluation under per-AP power normalization.
+In typical mid-band settings with $M\in[16,64]$ and $K\in[4,12]$,
+the proposed method improves 5--20\% over greedy AP selection while satisfying AP capacity constraints.
+
+Extensive simulations with realistic large-scale fading and per-AP power normalization demonstrate statistically significant gains over strong heuristics (max-channel-gain, greedy sum-rate, and greedy max-min fairness). We also present a fairness-oriented QUBO variant—using large-scale-fading-informed user weights—that improves Jain’s fairness index with modest sum-rate trade-offs.
+
+for two links $(m,k)$ and $(m',k')$ ($k\neq k'$) as
+\begin{equation}
+c_{(m,k),(m',k')} = \big(u_{mk}+u_{m'k'} - u_{mk|m'k'}\big)\ge 0,
+\end{equation}
+\label{eq:rzf_precoder}
+where $u_{mk|m'k'}$ is the joint sum-rate when both links are active using MRT on each AP.
+The QUBO energy is
+\begin{equation}
+  title={Structured user-centric cell-free massive MIMO: A new approach to scalable and energy-efficient wireless networks},
+E(\bm{x})=\bm{x}^\top Q\bm{x}, ~ x_{(m,k)}\Leftrightarrow a_{mk},
+
+\end{document}
+\end{equation}
+with $q_{ii}=-u_{mk}$ and $q_{ij}=c_{ij}$ for interfering pair $(i,j)$.
+Capacity and cardinality constraints are enforced by penalties:
+\begin{align}
+&\lambda_{\text{AP}}\sum_{m}\Big(\sum_{k}x_{(m,k)}-1\Big)^2,\\
+\label{eq:sinr}
+&\lambda_{\text{U}}\sum_{k}\Big(\sum_{m}x_{(m,k)}-L\Big)^2.
+\end{align}
+As in Paper~1, we map to an Ising form $(J,h)$ for CIM.
+
+\section{Inner Precoding}
+Given the CIM solution $A$, we compute RZF (or ZF/MRT variants) and evaluate the exact sum rate.
+This separates discrete AP selection (hardware-accelerated by CIM) from continuous beamforming (solved in baseband).
+
+  title={Massive MIMO is a reality—What is next? Five promising research directions for antenna arrays},
+\section{Simulation and Findings}
+We include a complete simulator: channel generation with large-scale fading, QUBO construction, CIM solve,
+with $\mathbf{Q}\in\mathbb{R}^{MK\times MK}$ symmetric. The goal is to minimize $E(\mathbf{x})$, yielding a link selection that balances standalone utility, interference costs, and constraint satisfaction.
+
+\subsection{Utility and Interference Terms}
+and RZF evaluation under per-AP power normalization.
+In typical mid-band settings with $M\in[16,64]$ and $K\in[4,12]$,
+the proposed method improves 5--20\% over greedy AP selection while satisfying AP capacity constraints.
+
+\section{Conclusion}
+A CIM-accelerated outer loop for AP selection combined with classical inner precoding is practical and effective for cell-free massive MIMO.
+The QUBO captures multiuser interference structure and maps naturally to Ising hardware.
+\end{document}

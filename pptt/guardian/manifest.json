@@ -1,0 +1,183 @@
+{
+  "versions": [
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_231219_iteration_1_pre.tex",
+      "timestamp": "20251108_231219",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:12:19.196152",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_231506_iteration_2_pre.tex",
+      "timestamp": "20251108_231506",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:15:06.370858",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_231706_iteration_3_pre.tex",
+      "timestamp": "20251108_231706",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:17:06.560369",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_232353_iteration_4_pre.tex",
+      "timestamp": "20251108_232353",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:23:53.595910",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_233142_iteration_5_pre.tex",
+      "timestamp": "20251108_233142",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:31:42.076479",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    }
+  ],
+  "safe_versions": [
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_231219_iteration_1_pre.tex",
+      "timestamp": "20251108_231219",
+      "label": "iteration_1_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:12:19.196152",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_231506_iteration_2_pre.tex",
+      "timestamp": "20251108_231506",
+      "label": "iteration_2_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:15:06.370858",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_231706_iteration_3_pre.tex",
+      "timestamp": "20251108_231706",
+      "label": "iteration_3_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:17:06.560369",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_232353_iteration_4_pre.tex",
+      "timestamp": "20251108_232353",
+      "label": "iteration_4_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:23:53.595910",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    },
+    {
+      "checkpoint": "pptt\\guardian\\checkpoint_20251108_233142_iteration_5_pre.tex",
+      "timestamp": "20251108_233142",
+      "label": "iteration_5_pre",
+      "stats": {
+        "path": "pptt\\paper.tex",
+        "size": 13450,
+        "lines": 454,
+        "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+        "timestamp": "2025-11-08T23:31:42.076479",
+        "has_end_document": true,
+        "has_bibliography": false,
+        "section_count": 7,
+        "subsection_count": 0
+      }
+    }
+  ],
+  "blocked_edits": [],
+  "last_known_good": {
+    "checkpoint": "pptt\\guardian\\checkpoint_20251108_233142_iteration_5_pre.tex",
+    "timestamp": "20251108_233142",
+    "label": "iteration_5_pre",
+    "stats": {
+      "path": "pptt\\paper.tex",
+      "size": 13450,
+      "lines": 454,
+      "hash": "3fe9f5ddac0a606f1839ad4b85584f87241f24bb10a32e90a44ab23d5f40ed5e",
+      "timestamp": "2025-11-08T23:31:42.076479",
+      "has_end_document": true,
+      "has_bibliography": false,
+      "section_count": 7,
+      "subsection_count": 0
+    }
+  }
+}

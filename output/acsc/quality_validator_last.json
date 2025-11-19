@@ -1,0 +1,37 @@
+{
+  "issues": [
+    "Missing multiple testing correction when comparing multiple methods/conditions",
+    "Simulation code lacks proper random seed control",
+    "Missing detailed model architecture specification",
+    "Missing preprocessing and data preparation details",
+    "Missing dedicated related work or literature review section",
+    "WARNING: Add a labelled prior art differentiation subsection contrasting against closest existing work.",
+    "WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections.",
+    "INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence.",
+    "WARNING: Related work Discretized conformal prediction for efficient distribution\u2010free inference (2018) shares key themes (similarity 0.39). Highlight differentiation.",
+    "WARNING: Related work Anytime-valid and asymptotically efficient inference driven by predictive recursion (2024) shares key themes (similarity 0.33). Highlight differentiation.",
+    "WARNING: Related work SPEED: Speculative Pipelined Execution for Efficient Decoding (2025) shares key themes (similarity 0.32). Highlight differentiation.",
+    "INFO: Novelty diagnostics summary \u2014 max similarity 0.39, avg similarity 0.20, recent overlap penalty 0.00",
+    "WARNING: May contain abstract descriptions without concrete implementation details",
+    "FAIR: MINOR: Only 5 visual elements - consider adding more to strengthen evidence",
+    "FAIR: WARNING: Related work Discretized conformal prediction for efficient distribution\u2010free inference (2018) shares key themes (similarity 0.39). Highlight differentiation.",
+    "FAIR: WARNING: Related work Anytime-valid and asymptotically efficient inference driven by predictive recursion (2024) shares key themes (similarity 0.33). Highlight differentiation.",
+    "FAIR: WARNING: Related work SPEED: Speculative Pipelined Execution for Efficient Decoding (2025) shares key themes (similarity 0.32). Highlight differentiation.",
+    "FAIR: INFO: Novelty diagnostics summary \u2014 max similarity 0.39, avg similarity 0.20, recent overlap penalty 0.00",
+    "FAIR: INFO: Novelty diagnostics \u2014 max similarity 0.39, avg similarity 0.20, recent overlap penalty 0.00"
+  ],
+  "scores": {
+    "statistical_rigor": 0.8,
+    "experimental_design": 1.0,
+    "methodology_clarity": 0.75,
+    "literature_review": 0.9,
+    "innovation_focus": 0.65,
+    "results_presentation": 1.0,
+    "formatting": 1.0,
+    "novelty": 0.763,
+    "review_readiness": 0.9,
+    "fair_final": 0.83589,
+    "fair_penalty_adjusted": 0.89315,
+    "overall": 0.8629127272727272
+  }
+}

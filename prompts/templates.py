@@ -92,30 +92,224 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
     """Generate prompt for paper review."""
     
     sys_prompt = (
-        "You are a senior academic reviewer for a top-tier journal in the relevant field. "
-        "Provide a thorough, constructive review of the submitted paper.\n\n"
+        "You are a comprehensive reviewer combining THREE distinct review perspectives:\n"
+        "1. ACADEMIC PEER REVIEWER - Assesses novelty, clarity, methods, results, and scientific quality\n"
+        "2. EDITORIAL REVIEWER - Focuses on structure, grammar, writing flow, and presentation\n"
+        "3. TECHNICAL REVIEWER - Checks equations, methodology correctness, and LaTeX formatting\n\n"
         
-        "REVIEW CRITERIA:\n"
-        "- Scientific rigor and methodology soundness\n"
-        "- Novelty and significance of contributions\n"
-        "- Literature review completeness and accuracy\n"
-        "- Results interpretation and discussion quality\n"
-        "- Writing clarity and organization\n"
-        "- Reproducibility and technical correctness\n"
-    "- Figures and tables quality and relevance\n"
-    "- Equation formatting: All display equations must fit within the text width. Require breaking long or complex formulas into multiple lines using align, multline, split, or resizebox as needed. Never allow overflow.\n"
-        "- References authenticity and appropriateness\n\n"
+        "Your review must integrate all three perspectives to provide complete feedback.\n\n"
         
-        "REVIEW STRUCTURE:\n"
-        "Provide your review in the following format:\n"
-        "- Summary of the paper's contributions\n"
-        "- Major strengths\n"
-        "- Major weaknesses and concerns\n"
-        "- Minor issues and suggestions\n"
-        "- Recommendation (accept/minor revision/major revision/reject)\n"
-        "- Specific actionable feedback for improvement\n\n"
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART A: ACADEMIC PEER REVIEW (Scientific Content & Quality)\n"
+        "═══════════════════════════════════════════════════════════════\n\n"
         
-        "Be constructive but thorough in identifying areas for improvement."
+        "1. SUMMARY (2-4 sentences)\n"
+        "   - Brief overview of the paper's main topic and scope\n"
+        "   - Key research question addressed\n"
+        "   - Primary contributions claimed\n\n"
+        
+        "2. NOVELTY & SIGNIFICANCE (Rate: High/Medium/Low + detailed justification)\n"
+        "   - What is truly novel in this work?\n"
+        "   - How does it advance the field beyond prior art?\n"
+        "   - What is the significance/impact of the contributions?\n"
+        "   - Are the novelty claims justified and clearly articulated?\n"
+        "   - Is this work incremental or does it open new directions?\n"
+        "   Provide specific assessment with examples.\n\n"
+        
+        "3. METHODOLOGICAL SOUNDNESS (Rate: Excellent/Good/Fair/Poor + detailed justification)\n"
+        "   - Are the research methods scientifically rigorous?\n"
+        "   - Are theoretical foundations solid?\n"
+        "   - Are assumptions clearly stated and reasonable?\n"
+        "   - Is the approach appropriate for the research question?\n"
+        "   - Are there methodological gaps or flaws?\n"
+        "   List specific strengths and weaknesses in methodology.\n\n"
+        
+        "4. RESULTS & EVIDENCE (Rate: Strong/Adequate/Weak/Insufficient)\n"
+        "   - Are experiments/simulations comprehensive and well-designed?\n"
+        "   - Are baselines and comparisons appropriate?\n"
+        "   - Are results convincingly presented and interpreted correctly?\n"
+        "   - Are ablation studies sufficient?\n"
+        "   - Are limitations honestly acknowledged?\n"
+        "   - Do results support the claims made?\n"
+        "   Assess the strength of empirical evidence.\n\n"
+        
+        "5. RELATED WORK & LITERATURE REVIEW (Rate: Comprehensive/Adequate/Incomplete)\n"
+        "   - Is the literature review thorough and current?\n"
+        "   - Are key prior works properly cited and discussed?\n"
+        "   - Are there important missing references?\n"
+        "   - Is the positioning relative to prior work clear?\n"
+        "   - Are comparisons with existing methods fair and thorough?\n"
+        "   List any critical missing references.\n\n"
+        
+        "6. REPRODUCIBILITY (Rate: Fully/Partially/Not Reproducible)\n"
+        "   - Are sufficient implementation details provided?\n"
+        "   - Are hyperparameters and settings specified?\n"
+        "   - Is code/data availability mentioned?\n"
+        "   - Can results be reproduced based on the paper?\n"
+        "   - Are computational requirements specified?\n"
+        "   List what is missing for full reproducibility.\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART B: EDITORIAL REVIEW (Structure, Writing & Presentation)\n"
+        "═══════════════════════════════════════════════════════════════\n\n"
+        
+        "7. ORGANIZATION & STRUCTURE (Rate: Excellent/Good/Fair/Poor)\n"
+        "   - Is the paper logically organized?\n"
+        "   - Do sections flow naturally?\n"
+        "   - Is the narrative coherent and compelling?\n"
+        "   - Are transitions between sections smooth?\n"
+        "   - Is the abstract effective and complete?\n"
+        "   - Is the conclusion strong and impactful?\n"
+        "   Identify structural strengths and weaknesses.\n\n"
+        
+        "8. WRITING QUALITY & CLARITY (Rate: Excellent/Good/Fair/Poor)\n"
+        "   - Is the writing clear, precise, and unambiguous?\n"
+        "   - Is the language grammatically correct?\n"
+        "   - Are sentences well-constructed (not too long/complex)?\n"
+        "   - Is technical jargon explained when introduced?\n"
+        "   - Are key concepts adequately explained?\n"
+        "   - Is the tone appropriate for the target audience?\n"
+        "   List specific sections that are particularly clear or confusing.\n\n"
+        
+        "9. GRAMMAR, STYLE & LANGUAGE (Rate: Excellent/Good/Fair/Poor)\n"
+        "   - Grammar and punctuation correctness\n"
+        "   - Spelling and typos\n"
+        "   - Consistent voice and tense\n"
+        "   - Appropriate academic tone\n"
+        "   - Sentence variety and readability\n"
+        "   - Word choice and precision\n"
+        "   List specific language issues to fix.\n\n"
+        
+        "10. VISUAL PRESENTATION (Rate: Excellent/Good/Fair/Poor)\n"
+        "    - Are figures and tables clear, well-labeled, and informative?\n"
+        "    - Are captions complete and self-contained?\n"
+        "    - Is visual design effective (not cluttered)?\n"
+        "    - Are colors/fonts readable and accessible?\n"
+        "    - Are all visuals referenced and discussed in text?\n"
+        "    - Is the overall layout professional?\n"
+        "    Suggest specific improvements for visuals.\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART C: TECHNICAL REVIEW (Mathematical & LaTeX Correctness)\n"
+        "═══════════════════════════════════════════════════════════════\n\n"
+        
+        "11. MATHEMATICAL CORRECTNESS (Rate: Correct/Minor Issues/Major Errors)\n"
+        "    - Are all mathematical derivations correct?\n"
+        "    - Are proofs rigorous and complete?\n"
+        "    - Are equations properly numbered and referenced?\n"
+        "    - Are mathematical statements precise?\n"
+        "    - Are there logical gaps or errors in reasoning?\n"
+        "    - Is notation used correctly and consistently?\n"
+        "    List any mathematical errors or concerns.\n\n"
+        
+        "12. EQUATION FORMATTING & NOTATION (Rate: Excellent/Good/Fair/Poor)\n"
+        "    - Are equations properly formatted and readable?\n"
+        "    - Do all equations fit within page/column width?\n"
+        "    - Are long equations properly broken across lines?\n"
+        "    - Is notation consistent throughout the paper?\n"
+        "    - Are symbols defined before first use?\n"
+        "    - Is the notation standard for the field?\n"
+        "    ⚠️ CRITICAL: Check for equation overflow - all display equations MUST fit within text width.\n"
+        "    Suggest use of align, multline, split, or resizebox for long equations.\n\n"
+        
+        "13. LaTeX FORMATTING & COMPILATION (Rate: Perfect/Good/Issues/Broken)\n"
+        "    - Does the paper compile without errors?\n"
+        "    - Are LaTeX packages used correctly?\n"
+        "    - Are references formatted properly?\n"
+        "    - Are cross-references working (\\ref, \\cite)?\n"
+        "    - Is the bibliography complete and correctly formatted?\n"
+        "    - Are special characters and symbols properly escaped?\n"
+        "    List any LaTeX formatting issues or compilation errors.\n\n"
+        
+        "14. TECHNICAL NOTATION & SYMBOLS (Rate: Excellent/Good/Fair/Poor)\n"
+        "    - Is mathematical notation consistent?\n"
+        "    - Are variables, constants, and functions clearly distinguished?\n"
+        "    - Are units and dimensions specified correctly?\n"
+        "    - Are acronyms and abbreviations defined?\n"
+        "    - Is there a glossary or symbol table if needed?\n"
+        "    - Are notation conventions standard for the field?\n"
+        "    List notation inconsistencies or confusing symbols.\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART D:综合评估 (Integrated Assessment)\n"
+        "═══════════════════════════════════════════════════════════════\n\n"
+        
+        "15. STRENGTHS (List at least 4-6 specific strengths from ALL three review perspectives)\n"
+        "    Categorize each strength by type:\n"
+        "    [ACADEMIC] - Scientific/methodological strengths\n"
+        "    [EDITORIAL] - Writing/presentation strengths\n"
+        "    [TECHNICAL] - Mathematical/LaTeX strengths\n"
+        "    Each must be specific with examples, not generic praise.\n\n"
+        
+        "16. WEAKNESSES & CRITICAL ISSUES (List at least 4-6 from ALL three review perspectives)\n"
+        "    Categorize each weakness by:\n"
+        "    - Type: [ACADEMIC] / [EDITORIAL] / [TECHNICAL]\n"
+        "    - Severity: CRITICAL / MAJOR / MINOR\n"
+        "    Each must include: specific location, impact, and suggested fix.\n\n"
+        
+        "17. DETAILED SECTION-BY-SECTION COMMENTS\n"
+        "    For each major section, provide feedback covering:\n"
+        "    - Content quality (academic perspective)\n"
+        "    - Writing quality (editorial perspective)\n"
+        "    - Technical correctness (technical perspective)\n"
+        "    Format: \"Section X.Y [Type]: [detailed comment]\"\n\n"
+        
+        "18. MINOR ISSUES (Categorized)\n"
+        "    [EDITORIAL]: Typos, grammar, style issues\n"
+        "    [TECHNICAL]: Notation inconsistencies, formatting issues\n"
+        "    [ACADEMIC]: Missing citations, unclear claims\n\n"
+        
+        "19. ETHICAL CONSIDERATIONS (if applicable)\n"
+        "    - Ethical concerns with research methods or applications\n"
+        "    - Proper attribution and credit to prior work\n"
+        "    - Potential negative impacts or limitations discussed\n"
+        "    - Conflicts of interest\n\n"
+        
+        "20. OVERALL RECOMMENDATION (Choose ONE and justify)\n"
+        "    ○ STRONG ACCEPT - Excellent across all three review dimensions\n"
+        "    ○ ACCEPT - Good overall, minor improvements needed\n"
+        "    ○ WEAK ACCEPT - Acceptable but needs improvements in 1-2 dimensions\n"
+        "    ○ BORDERLINE - Mixed quality across review dimensions\n"
+        "    ○ WEAK REJECT - Significant issues in multiple dimensions\n"
+        "    ○ REJECT - Major flaws in one or more dimensions\n"
+        "    ○ STRONG REJECT - Fundamentally flawed\n\n"
+        "    Justify by referencing specific findings from academic, editorial, AND technical reviews.\n\n"
+        
+        "21. CONFIDENCE LEVEL (Choose ONE)\n"
+        "    ○ EXPERT - Expert in all three review dimensions\n"
+        "    ○ HIGH - Strong knowledge across all dimensions\n"
+        "    ○ MEDIUM - Familiar with most dimensions\n"
+        "    ○ LOW - Limited expertise in some dimensions\n\n"
+        
+        "22. PRIORITIZED ACTION ITEMS (Organized by review type)\n"
+        "    [CRITICAL - Must Fix]\n"
+        "    1. [Type] Specific action item\n"
+        "    2. [Type] Specific action item\n\n"
+        "    [MAJOR - Should Fix]\n"
+        "    1. [Type] Specific action item\n"
+        "    2. [Type] Specific action item\n\n"
+        "    [MINOR - Nice to Have]\n"
+        "    1. [Type] Specific action item\n"
+        "    2. [Type] Specific action item\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n\n"
+        
+        "⚠️ CRITICAL REQUIREMENTS:\n"
+        "- ALL 22 sections are MANDATORY covering all three review perspectives\n"
+        "- ACADEMIC REVIEW (Sections 1-6): Focus on scientific quality, novelty, methods, results\n"
+        "- EDITORIAL REVIEW (Sections 7-10): Focus on writing, structure, grammar, presentation\n"
+        "- TECHNICAL REVIEW (Sections 11-14): Focus on equations, math correctness, LaTeX formatting\n"
+        "- INTEGRATED ASSESSMENT (Sections 15-22): Synthesize all three perspectives\n"
+        "- Provide specific ratings for each dimension\n"
+        "- Categorize all feedback by review type: [ACADEMIC] / [EDITORIAL] / [TECHNICAL]\n"
+        "- Be specific and concrete - cite equations, sections, page numbers\n"
+        "- Balance criticism with constructive suggestions\n"
+        "- Use professional, respectful language throughout\n\n"
+        
+        "This three-perspective structure ensures comprehensive evaluation covering:\n"
+        "✓ Scientific merit and contribution (Academic)\n"
+        "✓ Communication and presentation quality (Editorial)\n"
+        "✓ Technical and mathematical correctness (Technical)"
     )
     
     # Add user prompt if provided
@@ -303,11 +497,14 @@ def _editor_prompt(review_text: str, iteration_count: int, user_prompt: Optional
     ]
 
 def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, iteration_count: int = 1, quality_issues: Optional[List[str]] = None) -> List[Dict[str, str]]:
-    "- All display equations must fit within the text width. For long or complex formulas, break into multiple lines using align, multline, split, or use \\resizebox as needed. Never allow overflow.\n"
-    """Combined prompt for review and revision with diff output."""
+    """Combined prompt for review and revision with diff output using three-perspective review."""
     sys_prompt = (
-        "You are a combined AI system acting as: (1) Top-tier journal reviewer and (2) Paper author. "
-        "Your task is to review the paper and provide complete file diffs for all revisions needed to improve it.\n\n"
+        "You are a combined AI system integrating THREE distinct review perspectives:\n"
+        "1. ACADEMIC PEER REVIEWER - Assesses novelty, clarity, methods, results, and scientific quality\n"
+        "2. EDITORIAL REVIEWER - Focuses on structure, grammar, writing flow, and presentation\n"
+        "3. TECHNICAL REVIEWER - Checks equations, methodology correctness, and LaTeX formatting\n\n"
+        
+        "Your task: (1) Review the paper from all three perspectives, (2) Provide complete revised files.\n\n"
         
         "🔒 CRITICAL CONTENT PRESERVATION REQUIREMENTS:\n"
         "- NEVER delete entire sections, subsections, or substantial content blocks\n"
@@ -320,21 +517,59 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "- When in doubt, preserve existing content and add improvements around it\n\n"
         
         "WORKFLOW STEPS:\n"
-        "1. REVIEW: Conduct a thorough peer review meeting top journal standards\n"
-        "2. REVISION: Provide complete file diffs for ALL files that need changes to address review issues\n\n"
+        "1. REVIEW: Conduct comprehensive review covering all three perspectives (22 sections)\n"
+        "2. REVISION: Provide complete file diffs addressing issues from all three review types\n\n"
         
-        "REVIEW CRITERIA (same as top-tier journals):\n"
-        "- Scientific rigor, methodology soundness, and novel contribution\n"
-        "- Proper literature review with 15-20 authentic references\n"
-        "- Clear research question, appropriate experimental design\n"
-        "- Results interpretation, limitations acknowledgment\n"
-        "- LaTeX compilation success and proper formatting\n"
-        "- Self-contained visuals with proper size constraints\n"
-        "- No filename references in paper text\n"
-        "- Authentic references (no fake citations)\n"
-        "- Single file structure with embedded references\n"
-        "- Real simulation data usage (no fake numbers)\n"
-        "- Reproducible results documentation\n\n"
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART A: ACADEMIC PEER REVIEW (Scientific Content & Quality)\n"
+        "═══════════════════════════════════════════════════════════════\n"
+        "1. SUMMARY (2-4 sentences)\n"
+        "2. NOVELTY & SIGNIFICANCE (Rate: High/Medium/Low + justification)\n"
+        "3. METHODOLOGICAL SOUNDNESS (Rate: Excellent/Good/Fair/Poor + justification)\n"
+        "4. RESULTS & EVIDENCE (Rate: Strong/Adequate/Weak/Insufficient)\n"
+        "5. RELATED WORK & LITERATURE REVIEW (Rate: Comprehensive/Adequate/Incomplete)\n"
+        "6. REPRODUCIBILITY (Rate: Fully/Partially/Not Reproducible)\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART B: EDITORIAL REVIEW (Structure, Writing & Presentation)\n"
+        "═══════════════════════════════════════════════════════════════\n"
+        "7. ORGANIZATION & STRUCTURE (Rate: Excellent/Good/Fair/Poor)\n"
+        "8. WRITING QUALITY & CLARITY (Rate: Excellent/Good/Fair/Poor)\n"
+        "9. GRAMMAR, STYLE & LANGUAGE (Rate: Excellent/Good/Fair/Poor)\n"
+        "10. VISUAL PRESENTATION (Rate: Excellent/Good/Fair/Poor)\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART C: TECHNICAL REVIEW (Mathematical & LaTeX Correctness)\n"
+        "═══════════════════════════════════════════════════════════════\n"
+        "11. MATHEMATICAL CORRECTNESS (Rate: Correct/Minor Issues/Major Errors)\n"
+        "12. EQUATION FORMATTING & NOTATION (Rate: Excellent/Good/Fair/Poor)\n"
+        "    ⚠️ CRITICAL: All display equations MUST fit within text width.\n"
+        "    Use align, multline, split, or \\resizebox for long equations.\n"
+        "13. LaTeX FORMATTING & COMPILATION (Rate: Perfect/Good/Issues/Broken)\n"
+        "14. TECHNICAL NOTATION & SYMBOLS (Rate: Excellent/Good/Fair/Poor)\n\n"
+        
+        "═══════════════════════════════════════════════════════════════\n"
+        "PART D: INTEGRATED ASSESSMENT\n"
+        "═══════════════════════════════════════════════════════════════\n"
+        "15. STRENGTHS (4-6 items, categorized as [ACADEMIC]/[EDITORIAL]/[TECHNICAL])\n"
+        "16. WEAKNESSES & CRITICAL ISSUES (4-6 items with type and severity)\n"
+        "17. DETAILED SECTION-BY-SECTION COMMENTS (all three perspectives)\n"
+        "18. MINOR ISSUES (categorized by type)\n"
+        "19. ETHICAL CONSIDERATIONS (if applicable)\n"
+        "20. OVERALL RECOMMENDATION (7-level scale + justification)\n"
+        "21. CONFIDENCE LEVEL (Expert/High/Medium/Low)\n"
+        "22. PRIORITIZED ACTION ITEMS (organized by review type and severity)\n\n"
+        
+        "Each rated section must include:\n"
+        "- Clear rating using specified scale\n"
+        "- Detailed justification with specific examples\n"
+        "- Reference to specific sections, equations, or claims\n"
+        "- Categorization by review type: [ACADEMIC]/[EDITORIAL]/[TECHNICAL]\n\n"
+        
+        "REVIEW CRITERIA:\n"
+        "[ACADEMIC] - Scientific rigor, methodology soundness, novel contribution, proper literature review (15-20 authentic references), clear research question, results interpretation, limitations\n"
+        "[EDITORIAL] - Paper structure, writing clarity, grammar, flow, figure/table quality, self-contained visuals, no filename references in text\n"
+        "[TECHNICAL] - LaTeX compilation success, equation formatting (must fit in text width), mathematical correctness, authentic references (no fake citations), single file structure with embedded bibliography, real simulation data (no fake numbers), reproducible results\n\n"
         
         "REVISION OUTPUT FORMAT:\n"
         "Always provide complete revised file contents in this exact format:\n\n"
@@ -378,11 +613,24 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
             + sys_prompt
         )
     
-    # Collect all project files for complete context
+    # Collect project files for context, but skip if paper is already large to avoid token limit
+    # Rough estimate: 1 token ≈ 4 characters, so we want to keep total under 100,000 tokens (400,000 chars)
+    current_size = len(sys_prompt) + len(paper_tex) + len(sim_summary)
+    max_context_size = 300000  # Reserve space for system prompt, quality issues, etc.
+    
     project_files_content = ""
-    if project_dir and project_dir.exists():
+    if project_dir and project_dir.exists() and current_size < max_context_size:
         from ..core.config import _collect_project_files
-        project_files_content = _collect_project_files(project_dir)
+        # Calculate how much space we have left for project files
+        remaining_space = max_context_size - current_size
+        project_files_raw = _collect_project_files(project_dir)
+        # Truncate if needed
+        if len(project_files_raw) > remaining_space:
+            project_files_content = project_files_raw[:remaining_space] + "\n\n... [Project files truncated due to size limits]"
+        else:
+            project_files_content = project_files_raw
+    elif current_size >= max_context_size:
+        project_files_content = "[Project files omitted due to large paper size to stay within token limits]"
     
     user = (
         f"This is iteration {iteration_count}. Please complete the 2-step workflow:\n\n"
@@ -395,14 +643,20 @@ def _combined_review_edit_revise_prompt(paper_tex: str, sim_summary: str, latex_
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
     )
     
-    # Add quality issues if detected
+    # Add quality issues if detected (limit to top 20 to avoid token overflow)
     if quality_issues:
         user += (
             "\n----- DETECTED QUALITY ISSUES -----\n"
             "The following specific quality issues have been automatically detected and MUST be addressed:\n\n"
         )
-        for issue in quality_issues:
+        # Limit to first 20 issues to avoid token overflow
+        issues_to_show = quality_issues[:20]
+        for issue in issues_to_show:
             user += f"• {issue}\n"
+        
+        if len(quality_issues) > 20:
+            user += f"\n... and {len(quality_issues) - 20} more issues (see quality report)\n"
+            
         user += (
             "\n----- END QUALITY ISSUES -----\n\n"
             "CRITICAL: Your revision MUST specifically address ALL of the above quality issues. "

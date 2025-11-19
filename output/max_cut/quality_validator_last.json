@@ -1,0 +1,39 @@
+{
+  "issues": [
+    "Simulation code lacks proper random seed control",
+    "Simulation lacks statistical testing implementation",
+    "Missing proper validation methodology (cross-validation or train/test splits)",
+    "Missing computational complexity analysis",
+    "CRITICAL: Missing a dedicated Contributions section that summarises the paper's novel innovations.",
+    "WARNING: Add a labelled prior art differentiation subsection contrasting against closest existing work.",
+    "WARNING: Manuscript minimally references novelty; strengthen innovation framing across sections.",
+    "INFO: Document does not reference an innovation hooks checklist tying novel elements to evaluation evidence.",
+    "Potential equation overflow - long equations should use align or split environments",
+    "WARNING: Related work Practical Issues in Designing and Maintaining Multiple Test Forms for Large-Scale Programs (2011) shares key themes (similarity 0.37). Highlight differentiation.",
+    "WARNING: Related work Goals as Commitment Device: Evidence from a Field Experiment on Energy Conservation (2018) shares key themes (similarity 0.26). Highlight differentiation.",
+    "WARNING: Related work Productive-Technological Capabilities, Development, and National Sovereignty (2023) shares key themes (similarity 0.26). Highlight differentiation.",
+    "INFO: Novelty diagnostics summary \u2014 max similarity 0.37, avg similarity 0.22, recent overlap penalty 0.00",
+    "WARNING: Only 2 figures found - General Research documents typically include 3+ visuals",
+    "WARNING: May contain abstract descriptions without concrete implementation details",
+    "FAIR: MAJOR: Only 3 visual elements - expected at least 4 for General Research documents",
+    "FAIR: WARNING: Related work Practical Issues in Designing and Maintaining Multiple Test Forms for Large-Scale Programs (2011) shares key themes (similarity 0.37). Highlight differentiation.",
+    "FAIR: WARNING: Related work Goals as Commitment Device: Evidence from a Field Experiment on Energy Conservation (2018) shares key themes (similarity 0.26). Highlight differentiation.",
+    "FAIR: WARNING: Related work Productive-Technological Capabilities, Development, and National Sovereignty (2023) shares key themes (similarity 0.26). Highlight differentiation.",
+    "FAIR: INFO: Novelty diagnostics summary \u2014 max similarity 0.37, avg similarity 0.22, recent overlap penalty 0.00",
+    "FAIR: INFO: Novelty diagnostics \u2014 max similarity 0.37, avg similarity 0.22, recent overlap penalty 0.00"
+  ],
+  "scores": {
+    "statistical_rigor": 0.8,
+    "experimental_design": 0.7000000000000001,
+    "methodology_clarity": 1.0,
+    "literature_review": 1.0,
+    "innovation_focus": 0.1,
+    "results_presentation": 1.0,
+    "formatting": 0.95,
+    "novelty": 0.778,
+    "review_readiness": 0.8,
+    "fair_final": 0.7763399999999999,
+    "fair_penalty_adjusted": 0.7938999999999999,
+    "overall": 0.790749090909091
+  }
+}

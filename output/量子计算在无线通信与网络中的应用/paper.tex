@@ -1,0 +1,1532 @@
+\documentclass[11pt,a4paper]{article}
+% Require XeLaTeX engine (fontspec/xeCJK need XeTeX)
+\usepackage{iftex}
+\ifPDFTeX
+    \PackageError{paper}{This document must be compiled with XeLaTeX (xelatex), not pdfLaTeX}{Switch your engine to XeLaTeX and run xelatex twice.}
+\fi
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xurl} % better URL line breaks
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{enumitem}
+
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+% Hyperref setup (Unicode bookmarks for CJK, colored links)
+\hypersetup{
+    unicode=true,
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+% Symbols for star ratings (avoid missing glyphs in Latin Modern)
+\newcommand{\blackstar}{\ensuremath{\bigstar}}
+\newcommand{\whitestar}{\ensuremath{\star}}
+
+% Code listing settings
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    backgroundcolor=\color{gray!10},
+    showstringspaces=false,
+    language=Python,
+    escapeinside={(*@}{@*)}
+}
+
+\title{\textbf{量子计算在无线通信与网络中的应用：实践教程}}
+\author{算法组}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+本教程面向无线通信与网络工程领域，系统梳理量子计算 (QC) 在 NP-hard 组合优化中的可落地路径（如资源分配、波束成形与任务调度），并以实践为核心给出从建模到代码、从算法到硬件的端到端指南。
+
+实践中的核心挑战是“如何做”：如何编写量子算法？如何将无线问题“翻译”为量子计算可求解的 QUBO 模型？如何在真实 NISQ（含噪声中尺度量子）硬件上应对“贫瘠高原”和“噪声”？
+
+本文将理论综述转化为可操作的完整指南，并围绕以下模块展开：
+
+\begin{itemize}[leftmargin=0cm]
+\item \textbf{核心算法实践教程：} 提供 Shor、Grover、QAOA 和 QNN 的分步原理与代码实现（Qiskit / PennyLane）。
+\item \textbf{QUBO 建模实践教程：} 详细展示如何将典型无线问题（D2D 信道分配）数学建模为 QUBO，并介绍节省量子比特的高级约束处理技术。
+\item \textbf{硬件平台综述（截至 2025）：} 汇总 IBM、IonQ、Google 等最新量子硬件规格，揭示不同技术路线（超导 vs 离子阱）的关键性能权衡。
+\item \textbf{NISQ 挑战实践教程：} 提供缓解“贫瘠高原”（BP）与“噪声”（零噪声外推 ZNE）的具体方法与分步指南。
+\item \textbf{性能基准与决策框架：} 对比“量子启发式”（Q-Inspired）与“真实量子”（QAOA）算法的性能基准，为工程师在经典与量子路径间提供实用决策框架。
+\end{itemize}
+\end{abstract}
+
+ 
+\newpage
+
+\section{核心算法实践教程}
+
+本节提供算法的工作原理与实用代码，补齐从概念到实现的关键细节。
+
+\subsection{教程：Shor 算法原理分步详解}
+
+Shor 算法的威胁在于它能（理论上）在多项式时间内破解 RSA 加密。其核心是"量子周期查找" (Quantum Period-Finding)。
+
+\textbf{目标：} 因子分解大数 $N$。
+
+\textbf{示例：} $N=15$。
+
+\subsubsection{经典步骤 (Classical)}
+
+\begin{enumerate}
+\item 选择一个与 $N$ 互质的随机数 $a$。例：选择 $a=7$。
+\item 目标是找到函数 $f(x) = a^x \bmod N$ 的周期 $r$，即 $7^x \bmod 15$ 的周期。（我们预知 $7^0=1, 7^1=7, 7^2=4, 7^3=13, 7^4=1,\ldots$ 周期 $r=4$）。
+\item 如果 $r$ 是偶数，则 $N$ 的因子是 $\gcd(a^{r/2}-1, N)$ 和 $\gcd(a^{r/2}+1, N)$。
+\begin{align*}
+\gcd(7^{4/2}-1, 15) &= \gcd(7^2-1, 15) = \gcd(48, 15) = 3 \\
+\gcd(7^{4/2}+1, 15) &= \gcd(7^2+1, 15) = \gcd(50, 15) = 5
+\end{align*}
+\item 成功分解 $15 = 3 \times 5$。
+\end{enumerate}
+
+经典计算机的瓶颈在于：当 $N$ 极大时，无法有效找到 $r$。
+
+\subsubsection{量子步骤 (Quantum Period-Finding)}
+
+\begin{enumerate}
+\item \textbf{制备。} 使用两个量子寄存器。第一个（输入）寄存器通过 Hadamard 门置于 $\frac{1}{\sqrt{2^n}}\sum_{x=0}^{2^n-1}|x\rangle$ 的均匀叠加态。
+\item \textbf{并行计算 (核心)。} 构建一个酉算符 $U_f$，一次性计算所有 $x$ 对应的 $f(x)$，即 $U_f |x\rangle |0\rangle \rightarrow |x\rangle |a^x \bmod N\rangle$。系统变为 $\frac{1}{\sqrt{2^n}}\sum_{x} |x\rangle |7^x \bmod 15\rangle$。
+\item \textbf{相位估计 (QFT)。} 对第一个寄存器应用量子傅里叶逆变换 (Inverse QFT)。QFT 是一种量子操作，能将函数中的周期性信息从"状态"转换到"相位"或"概率幅"上。
+\item \textbf{测量。} 测量第一个寄存器。测量结果将以高概率是 $k \cdot (2^n / r)$ 的近似值，其中 $k$ 是某个整数。
+\item \textbf{经典后处理。} 使用经典"连分数算法" (Continued Fractions Algorithm)，从测量结果中反推出周期 $r$。
+\end{enumerate}
+
+\subsection{Grover 算法原理分步详解}
+
+Grover 算法为 $N$ 个条目的无序数据库搜索提供了 $\mathcal{O}(\sqrt{N})$ 的二次加速。
+
+\textbf{目标：} 在 $N$ 个条目中找到标记的"赢家" (winner) 条目 $w$。
+
+\subsubsection{步骤 1：初始化 (Initialization)}
+
+\begin{itemize}
+\item 使用 $n$ 个 Qubit (其中 $N=2^n$)。
+\item 对所有 Qubit 应用 Hadamard 门 ($H^{\otimes n}$)，创建所有 $N$ 个状态的均匀叠加态：
+\[|s\rangle = \frac{1}{\sqrt{N}}\sum_{x=0}^{N-1}|x\rangle\]
+\item 此时，测量到任何一个条目（包括 $w$）的概率都是 $1/N$。
+\end{itemize}
+
+\subsubsection{步骤 2：Grover 迭代 (重复 \texorpdfstring{$\mathcal{O}(\sqrt{N})$}{O(sqrt N)} 次)}
+
+\begin{itemize}
+\item \textbf{神谕 (Oracle, $\mathcal{S}_f$)：}
+Oracle 是一个"黑盒"，它能识别赢家 $w$，但不会告诉我们 $w$ 是谁。它的作用是"反转赢家"的相位：$|x\rangle \mapsto (-1)^{f(x)}|x\rangle$。
+\begin{itemize}
+\item 如果 $|x\rangle = |w\rangle$，则 $f(w)=1$，状态变为 $-|w\rangle$ (相位反转)。
+\item 如果 $|x\rangle \neq |w\rangle$，则 $f(x)=0$，状态 $|x\rangle$ 不变。
+\end{itemize}
+
+\item \textbf{放大 (Amplification / Diffuser)：}
+这是算法的精髓。它执行一个"关于平均值的翻转"(Inversion about the mean) 操作。它将所有状态的概率幅，都翻转到平均概率幅的对称位置。由于 Oracle 刚刚将 $w$ 的概率幅变成了负值，这导致平均值被拉低。当执行"关于平均值的翻转"时，$w$ 的负概率幅会被大幅放大到正值，而其他所有条目的概率幅则被轻微压缩。
+\end{itemize}
+
+\subsubsection{步骤 3：测量 (Measurement)}
+
+经过 $\mathcal{O}(\sqrt{N})$ 次迭代后，$|w\rangle$ 状态的概率幅被放大到接近 1。此时测量 Qubit，将以极高概率得到赢家 $w$。
+
+\subsubsection{Grover算法的几何解释}
+
+Grover算法可以在二维空间中几何地理解：
+
+\textbf{状态空间分解：}
+\begin{itemize}
+\item 定义 $|\alpha\rangle = \frac{1}{\sqrt{N-1}}\sum_{x \neq w}|x\rangle$ （所有"非赢家"状态的均匀叠加）
+\item 定义 $|\beta\rangle = |w\rangle$ （赢家状态）
+\item 初始状态 $|s\rangle = \sin\theta|\beta\rangle + \cos\theta|\alpha\rangle$，其中 $\sin\theta = 1/\sqrt{N}$
+\end{itemize}
+
+\textbf{迭代效果：}
+每次Grover迭代相当于在$\{|\alpha\rangle, |\beta\rangle\}$张成的二维平面内，将状态向量旋转角度$2\theta$，靠近$|\beta\rangle$。
+
+\textbf{最优迭代次数：}
+\begin{itemize}
+\item 初始角度：$\theta \approx \sin^{-1}(1/\sqrt{N}) \approx 1/\sqrt{N}$（当$N$很大时）
+\item 目标：旋转到$|\beta\rangle$（角度$\pi/2$）
+\item 需要迭代次数：$k \approx \frac{\pi/2}{2\theta} \approx \frac{\pi}{4}\sqrt{N}$
+\end{itemize}
+
+\textbf{关键洞察：}
+\begin{itemize}
+\item \textbf{过度迭代：} 如果迭代次数超过最优值，状态会"越过"$|\beta\rangle$，准确性下降
+\item \textbf{精确控制：} 实践中需要精确控制迭代次数，这在无线应用中意味着需要预先估计解的数量
+\end{itemize}
+
+\subsubsection{Grover算法在无线通信中的应用示例}
+
+\textbf{场景：频谱感知（Spectrum Sensing）}
+
+假设有$N=2^{10}=1024$个可能的频谱配置，我们需要找到干扰最小的一个。
+
+\textbf{经典方法：}
+\begin{itemize}
+\item 顺序扫描：测试所有1024个配置 $\rightarrow$ 1024次测量
+\item 时间复杂度：$O(N) = O(1024)$
+\end{itemize}
+
+\textbf{Grover方法：}
+\begin{itemize}
+\item 构建Oracle：定义"好配置"为干扰低于阈值
+\item 迭代次数：$\approx \frac{\pi}{4}\sqrt{1024} \approx 25$次
+\item 加速：$\sqrt{N} \approx 32$倍
+\end{itemize}
+
+\textbf{实践挑战：}
+\begin{itemize}
+\item \textbf{Oracle构建：} 如何将"干扰测量"编码为量子Oracle？需要量子RAM或量子信道估计电路
+\item \textbf{多解问题：} 如果有$M$个好配置，迭代次数需调整为$\approx \frac{\pi}{4}\sqrt{N/M}$
+\item \textbf{NISQ限制：} 10 Qubit看似简单，但每次Grover迭代需要深度$\sim O(N)$的电路，对NISQ硬件而言可能太深
+\end{itemize}
+
+\subsection{教程：使用 Qiskit 实现 QAOA (解决 Max-Cut)}
+
+本节提供 QAOA (量子近似优化算法) 的 Qiskit 代码示例。
+
+\textbf{问题：} Max-Cut。将一个图的节点分为两组，使得跨越两组的边的权重之和最大。
+
+\begin{lstlisting}[caption={QAOA Max-Cut 示例代码}]
+import numpy as np
+import networkx as nx
+from qiskit.quantum_info import Pauli, SparsePauliOp
+from qiskit_algorithms import QAOA, NumPyMinimumEigensolver
+from qiskit_algorithms.optimizers import COBYLA
+from qiskit.primitives import StatevectorSampler
+from qiskit_algorithms.utils import algorithm_globals
+
+# 1. (*@\textbf{定义问题：创建一个 4 节点的图}@*)
+num_nodes = 4
+w = np.array(
+    [[0.0, 1.0, 1.0, 0.0],
+     [1.0, 0.0, 1.0, 1.0],
+     [1.0, 1.0, 0.0, 1.0],
+     [0.0, 1.0, 1.0, 0.0]])
+G = nx.from_numpy_array(w)
+
+# 2. (*@\textbf{将问题映射到 QUBO / Ising 哈密顿量}@*)
+pauli_list = []
+coeffs = []
+shift = 0
+for i in range(num_nodes):
+    for j in range(i):
+        if w[i, j] != 0:
+            x_p = np.zeros(num_nodes, dtype=bool)
+            z_p = np.zeros(num_nodes, dtype=bool)
+            z_p[i] = True
+            z_p[j] = True
+            pauli_list.append(Pauli((z_p, x_p)))
+            coeffs.append(-0.5)  # Max-Cut (*@的 Ising 映射@*)
+            shift += 0.5
+qubit_op = SparsePauliOp(pauli_list, coeffs=coeffs)
+
+# 3. (*@\textbf{设置 QAOA 混合算法}@*)
+algorithm_globals.random_seed = 10598
+optimizer = COBYLA()  # (*@经典优化器@*)
+sampler = StatevectorSampler(seed=42)  # (*@量子后端 (模拟器)@*)
+qaoa = QAOA(sampler, optimizer, reps=2)  # reps=p (PQC (*@深度)@*)
+
+# 4. (*@\textbf{运行并获取结果}@*)
+result = qaoa.compute_minimum_eigenvalue(qubit_op)
+
+# 5. (*@\textbf{解码结果}@*)
+def sample_most_likely(state_vector):
+    # (*@辅助函数：从最终的量子态中获取最可能的比特串@*)
+    return np.array([int(bit) for bit in max(
+        state_vector.items(), key=lambda x: x[1])[0][::-1]])
+
+x = sample_most_likely(result.eigenstate.items())
+print(f"(*@找到的最优解 (节点分组)@*): {x}")  # (*@输出：[1 1 0 0]@*)
+\end{lstlisting}
+
+\subsection{教程：使用 PennyLane 实现 QNN (量子神经网络)}
+
+本节提供 QNN (量子神经网络) 的 PennyLane 代码示例。
+
+\textbf{问题：} 构建一个简单的变分量子电路 (VQC / PQC)，用于机器学习任务。
+
+\begin{lstlisting}[caption={PennyLane QNN 示例代码}]
+import pennylane as qml
+from pennylane import numpy as np
+
+# (*@设置量子设备 (模拟器)，使用 8 个 Qubit@*)
+dev = qml.device("default.qubit", wires=8)
+
+# 1. (*@\textbf{数据编码 (Feature Map / Embedding)}@*)
+#    (*@将经典数据 x 编码为量子态@*)
+def feature_map(features):
+    for i in range(len(features)):
+        qml.Hadamard(i)  # (*@激活叠加@*)
+    # (*@使用角度编码将特征嵌入@*)
+    for i in range(len(features)):
+        if i % 2:
+            qml.AngleEmbedding(features=features[i], 
+                             wires=range(8), rotation="Z")
+        else:
+            qml.AngleEmbedding(features=features[i], 
+                             wires=range(8), rotation="X")
+
+# 2. (*@\textbf{PQC / Ansatz (可训练的量子电路)}@*)
+#    (*@这是 QNN 的"可训练权重"，由旋转门和 CNOT 门组成@*)
+def ansatz(params):
+    # (*@第一层旋转门@*)
+    for i in range(8):
+        qml.RY(params[i], wires=i)
+    # (*@纠缠门@*)
+    for i in range(8):
+        qml.CNOT(wires=[(i-1) % 8, i % 8])
+    # (*@第二层旋转门@*)
+    for i in range(8):
+        qml.RY(params[i+8], wires=i)
+
+# 3. (*@\textbf{构建完整的 QNode (量子-经典混合节点)}@*)
+@qml.qnode(dev)
+def circuit(params, features):
+    feature_map(features)  # (*@编码数据@*)
+    ansatz(params)         # (*@运行 PQC@*)
+    return qml.expval(qml.PauliZ(0))  # (*@测量@*)
+
+# 4. (*@\textbf{训练 (混合循环)}@*)
+# params = np.random.rand(16)  # (*@初始化参数@*)
+# cost_fn = lambda p: circuit(p, features)  # (*@定义成本@*)
+# opt = qml.AdamOptimizer()  # (*@经典优化器@*)
+# params = opt.step(cost_fn, params)  # (*@迭代更新参数@*)
+\end{lstlisting}
+
+\subsubsection{QNN完整训练示例（二分类任务）}
+
+下面展示一个完整的QNN训练流程，用于解决无线信号调制识别问题。
+
+\begin{lstlisting}[caption={QNN完整训练示例}]
+import pennylane as qml
+from pennylane import numpy as np
+
+# (*@准备数据集（示例：2类调制信号的IQ样本）@*)
+# (*@类别0: BPSK, 类别1: QPSK@*)
+X_train = np.random.randn(100, 4)  # 100 (*@样本, 每个@*) 4 (*@个特征@*)
+y_train = np.random.randint(0, 2, 100)  # (*@二分类标签@*)
+
+X_test = np.random.randn(20, 4)
+y_test = np.random.randint(0, 2, 20)
+
+dev = qml.device("default.qubit", wires=4)
+
+# (*@简化的特征映射@*)
+def feature_map_simple(x):
+    for i in range(4):
+        qml.RY(x[i], wires=i)
+
+# (*@简化的Ansatz@*)
+def ansatz_simple(params):
+    for i in range(4):
+        qml.RY(params[i], wires=i)
+    for i in range(3):
+        qml.CNOT(wires=[i, i+1])
+    for i in range(4):
+        qml.RY(params[i+4], wires=i)
+
+@qml.qnode(dev)
+def qnn_circuit(params, x):
+    feature_map_simple(x)
+    ansatz_simple(params)
+    return qml.expval(qml.PauliZ(0))
+
+# (*@定义损失函数（二分类交叉熵）@*)
+def cost(params, X, y):
+    predictions = np.array([qnn_circuit(params, x) for x in X])
+    # (*@将期望值映射到@*) [0, 1]
+    predictions = (predictions + 1) / 2  
+    # (*@二分类交叉熵@*)
+    loss = -np.mean(y * np.log(predictions + 1e-10) + 
+                    (1-y) * np.log(1 - predictions + 1e-10))
+    return loss
+
+# (*@初始化参数@*)
+np.random.seed(42)
+params = np.random.uniform(0, 2*np.pi, 8)
+
+# (*@训练循环@*)
+opt = qml.AdamOptimizer(stepsize=0.1)
+epochs = 50
+
+for epoch in range(epochs):
+    params = opt.step(lambda p: cost(p, X_train, y_train), params)
+    if (epoch + 1) % 10 == 0:
+        train_loss = cost(params, X_train, y_train)
+        print(f"Epoch {epoch+1}: Loss = {train_loss:.4f}")
+
+# (*@评估@*)
+test_predictions = np.array([qnn_circuit(params, x) for x in X_test])
+test_predictions = ((test_predictions + 1) / 2 > 0.5).astype(int)
+accuracy = np.mean(test_predictions == y_test)
+print(f"(*@测试准确率@*): {accuracy*100:.2f}%")
+\end{lstlisting}
+
+\subsubsection{QNN关键概念解析}
+
+\textbf{1. 特征映射 (Feature Map) 的选择}
+
+不同的特征映射适合不同类型的数据：
+
+\begin{itemize}
+\item \textbf{角度编码 (Angle Encoding)：} $R_Y(\theta_i)$ 或 $R_Z(\theta_i)$
+\begin{itemize}
+\item 适用：标量特征，如RSSI、SNR
+\item 优点：简单，Qubit高效（1特征=1 Qubit）
+\item 缺点：表达能力有限
+\end{itemize}
+
+\item \textbf{振幅编码 (Amplitude Encoding)：} 将$2^n$维向量编码到$n$个Qubit的振幅中
+\begin{itemize}
+\item 适用：高维向量，如IQ信号采样
+\item 优点：极高的Qubit效率（$2^n$特征 = $n$ Qubit）
+\item 缺点：需要复杂的状态准备电路
+\end{itemize}
+
+\item \textbf{IQP编码：} 使用对角门和纠缠实现非线性映射
+\begin{itemize}
+\item 适用：需要高表达能力的复杂分类
+\item 优点：可表达任意核函数
+\item 缺点：电路深度大
+\end{itemize}
+\end{itemize}
+
+\textbf{2. Ansatz设计原则}
+
+\textbf{可训练性 vs. 表达能力的权衡：}
+
+\begin{itemize}
+\item \textbf{浅层Ansatz} (深度 $\sim$ 2-5层)：
+\begin{itemize}
+\item 优点：易于训练，避免贫瘠高原
+\item 缺点：表达能力受限，可能欠拟合
+\item 适用：简单分类，NISQ硬件
+\end{itemize}
+
+\item \textbf{深层Ansatz} (深度 $>$ 10层)：
+\begin{itemize}
+\item 优点：高表达能力，可拟合复杂函数
+\item 缺点：严重的贫瘠高原，NISQ噪声累积
+\item 适用：仅在高质量硬件（如IonQ）或模拟器上
+\end{itemize}
+\end{itemize}
+
+\textbf{硬件高效型Ansatz：}
+
+对于特定硬件拓扑优化的Ansatz可显著减少SWAP门：
+\begin{itemize}
+\item \textbf{IBM Heavy-Hex：} 使用相邻Qubit纠缠的砖墙型Ansatz
+\item \textbf{IonQ全连接：} 可使用任意纠缠模式，如全对全纠缠
+\end{itemize}
+
+\section{核心技术实践教程：从问题到 QUBO}
+
+\subsection{什么是 QUBO？}
+
+QUBO 模型的目标是最小化或最大化一个二次多项式：
+\[f(x) = \sum_{i} Q_{ii} x_i + \sum_{i<j} Q_{ij} x_i x_j\]
+其中 $x_i \in \{0, 1\}$ 是二元决策变量。要解决一个无线优化问题，我们必须将该问题的目标函数 (Objective) 和约束 (Constraints) 全部塞进上述 $f(x)$ 中。
+
+\subsection{教程：D2D 信道分配的 QUBO 建模}
+
+\textbf{问题描述：} 假设有 $N$ 个 D2D (设备到设备) 通信对，和 $M$ 个可用的正交蜂窝信道。
+
+\textbf{目标：} 最大化 D2D 对的总吞吐量 (Sum Rate)。
+
+\textbf{约束：}
+\begin{enumerate}
+\item 每个 D2D 对 $i$ 必须且只能被分配一个信道 $j$。
+\item 为避免严重干扰，每个信道 $j$ 最多只能分配给一个 D2D 对 $i$。
+\end{enumerate}
+
+\subsubsection{QUBO 建模步骤}
+
+\textbf{步骤 1：定义二元变量。}
+
+我们定义 $N \times M$ 个二元变量 $x_{i,j}$：
+\begin{itemize}
+\item $x_{i,j} = 1$ 如果 D2D 对 $i$ 被分配给信道 $j$
+\item $x_{i,j} = 0$ 否则
+\end{itemize}
+
+\textbf{步骤 2：定义目标函数 $H_{\text{obj}}$。}
+
+我们的目标是最大化总吞吐量。假设 $R_{i,j}$ 是 D2D 对 $i$ 在信道 $j$ 上可实现的数据速率（可预先计算）。
+\[H_{\text{obj}} = \sum_{i=1}^{N} \sum_{j=1}^{M} R_{i,j} x_{i,j}\]
+
+由于 QUBO 通常是最小化问题，我们将其转换为：
+\[H_{\text{obj}} = -\sum_{i=1}^{N} \sum_{j=1}^{M} R_{i,j} x_{i,j}\]
+
+\textbf{步骤 3：处理约束 $H_{\text{constr}}$ (使用惩罚函数)。}
+
+我们将约束转换为"惩罚项"。如果违反约束，惩罚项 $H_{\text{constr}}$ 为正；如果遵守约束，$H_{\text{constr}}$ 为零。
+
+\textbf{约束 1：} 每个 D2D 对 $i$ 必须且只能被分配一个信道 $j$。
+
+数学表达：$\sum_{j=1}^{M} x_{i,j} = 1$ (对于每个 $i$)。
+
+惩罚项：$\left( \sum_{j=1}^{M} x_{i,j} - 1 \right)^2$ 必须为 0。
+
+QUBO 惩罚 $H_{C1}$：
+\[H_{C1} = \lambda_1 \sum_{i=1}^{N} \left( \sum_{j=1}^{M} x_{i,j} - 1 \right)^2\]
+
+展开：由于 $x_j \in \{0, 1\}$，所以 $x_j^2 = x_j$（关键技巧），这完全是 QUBO 形式（线性和二次项）。
+
+\textbf{约束 2：} 每个信道 $j$ 最多只能分配给一个 D2D 对 $i$。
+
+数学表达：$\sum_{i=1}^{N} x_{i,j} \le 1$ (对于每个 $j$)。
+
+QUBO 惩罚 $H_{C2}$：
+\[H_{C2} = \lambda_2 \sum_{j=1}^{M} \sum_{i_1 \neq i_2} x_{i_1, j} x_{i_2, j}\]
+
+这已经是完美的 QUBO 二次项形式。
+
+\textbf{步骤 4：组合完整的 QUBO。}
+
+完整的 QUBO 问题是：
+\[H = H_{\text{obj}} + H_{C1} + H_{C2}\]
+
+将 $H$ 完全展开并合并 $x_{i,j}$ 和 $x_{i,j}x_{k,l}$ 的系数，我们就得到了最终 QUBO 矩阵。这个 $H$ 就是 QAOA 算法中的"问题哈密顿量"。
+
+\subsubsection{完整数值示例}
+
+\textbf{具体场景：} 3个D2D对 ($N=3$)，2个信道 ($M=2$)。
+
+\textbf{速率矩阵 $R$ (单位: Mbps)：}
+\[R = \begin{bmatrix}
+5 & 3 \\
+4 & 6 \\
+2 & 7
+\end{bmatrix}\]
+
+其中 $R_{1,1}=5$ 表示D2D对1在信道1上可达到5 Mbps。
+
+\textbf{变量定义：} 6个二元变量：
+\begin{itemize}
+\item $x_{1,1}, x_{1,2}$：D2D对1的信道选择
+\item $x_{2,1}, x_{2,2}$：D2D对2的信道选择  
+\item $x_{3,1}, x_{3,2}$：D2D对3的信道选择
+\end{itemize}
+
+\textbf{目标函数：}
+\begin{align*}
+H_{\text{obj}} &= -\left(5x_{1,1} + 3x_{1,2} + 4x_{2,1} + 6x_{2,2} + 2x_{3,1} + 7x_{3,2}\right)
+\end{align*}
+
+\textbf{约束1 (每个D2D对选择一个信道)：}
+\begin{align*}
+H_{C1} &= \lambda_1 \left[\left(x_{1,1} + x_{1,2} - 1\right)^2 + \left(x_{2,1} + x_{2,2} - 1\right)^2 + \left(x_{3,1} + x_{3,2} - 1\right)^2\right]
+\end{align*}
+
+展开第一项：
+\begin{align*}
+\left(x_{1,1} + x_{1,2} - 1\right)^2 &= x_{1,1}^2 + x_{1,2}^2 + 1 + 2x_{1,1}x_{1,2} - 2x_{1,1} - 2x_{1,2} \\
+&= x_{1,1} + x_{1,2} + 1 + 2x_{1,1}x_{1,2} - 2x_{1,1} - 2x_{1,2} \quad \text{(因为 } x^2=x\text{)} \\
+&= 1 - x_{1,1} - x_{1,2} + 2x_{1,1}x_{1,2}
+\end{align*}
+
+\textbf{约束2 (每个信道最多一个D2D对)：}
+\begin{align*}
+H_{C2} &= \lambda_2 \left[\left(x_{1,1}x_{2,1} + x_{1,1}x_{3,1} + x_{2,1}x_{3,1}\right) + \left(x_{1,2}x_{2,2} + x_{1,2}x_{3,2} + x_{2,2}x_{3,2}\right)\right]
+\end{align*}
+
+\textbf{完整QUBO：}
+选择 $\lambda_1 = 10, \lambda_2 = 10$ (略大于最大速率7)：
+\[H = H_{\text{obj}} + H_{C1} + H_{C2}\]
+
+\textbf{最优解分析：}
+手工检查可行解：
+\begin{itemize}
+\item 方案A：$(x_{1,1}=1, x_{2,2}=1, x_{3,1}=1)$ $\rightarrow$ 信道1冲突！不可行。
+\item 方案B：$(x_{1,1}=1, x_{2,2}=1, x_{3,2}=1)$ $\rightarrow$ 信道2冲突！不可行。
+\item 方案C：$(x_{1,2}=1, x_{2,1}=1, x_{3,1}=1)$ $\rightarrow$ 信道1冲突！不可行。
+\item 方案D：$(x_{1,1}=1, x_{2,2}=1, x_{3,2}=0, x_{3,1}=0)$ $\rightarrow$ D2D3未分配！不可行。
+\item \textbf{方案E：}$(x_{1,2}=1, x_{2,1}=1, x_{3,2}=1)$ 但信道2冲突。
+\item \textbf{最优方案：}$(x_{1,1}=1, x_{2,2}=1, x_{3,2}=1)$ 信道2冲突...
+\end{itemize}
+
+实际上，由于约束严格（每个信道只能一个D2D对），这个$3\times 2$问题无完美解。需要放松约束2或增加信道数。这说明了实际建模中的权衡取舍。
+
+一个可行的松弛方案是允许信道共享但增加干扰惩罚，这将导致更复杂的QUBO模型。
+
+\section{2025年硬件平台与软件栈}
+
+\subsection{量子软件栈 (Software Stacks)}
+
+连接算法和硬件的关键 SDK 包括：
+
+\begin{itemize}
+\item \textbf{Qiskit：} IBM 开发，功能全面，社区庞大。
+\item \textbf{Cirq \& TensorFlow Quantum (TFQ)：} Google 开发，深度集成 TensorFlow，专为 QML 设计。
+\item \textbf{PennyLane：} Xanadu 开发，专注于 QML 和自动微分，可与 PyTorch/TF 无缝对接。
+\end{itemize}
+
+\subsection{量子硬件平台 (2025年更新)}
+
+不同技术路线在 Qubit 数量、连接性、保真度和相干时间之间存在巨大权衡。
+
+\subsubsection{IBM 量子硬件规格}
+
+\begin{table}[H]
+\centering
+\caption{IBM 量子硬件规格 (2025年更新)}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{特性} & \textbf{规格/备注} \\ \midrule
+技术路线 & 超导 (Superconducting) \\
+& 优点：门操作速度快 \\
+& 缺点：相干时间短，连接性稀疏 \\
+处理器 (2023) & Condor: 1,121 Qubits \\
+处理器 (当前) & Heron: 156 Qubits \\
+拓扑 (Topology) & 重六边形 (Heavy-Hex) \\
+& 稀疏连接，Qubit 仅与 2-3 个邻居相连 \\
+路线图 & Kookaburra (2025): 1,386 Qubits \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{IonQ 量子硬件规格}
+
+\begin{table}[H]
+\centering
+\caption{IonQ 量子硬件规格 (2025年更新)}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{特性} & \textbf{规格/备注} \\ \midrule
+技术路线 & 离子阱 (Trapped Ion) \\
+& 优点：Qubit 完美，相干时间长，全连接 \\
+& 缺点：门操作慢 \\
+性能指标 & \#AQ 36 (算法量子比特) \\
+拓扑 & 全连接 (All-to-All) \\
+& 任何 Qubit 可直接与任何其他 Qubit 纠缠 \\
+& 无需 SWAP 门 \\
+相干时间 & T1: 10-100 秒, T2: $\sim$1 秒 \\
+1Q 门错误率 & 0.02\% (行业领先) \\
+2Q 门错误率 & 0.4\% (行业领先) \\
+SPAM 错误率 & 0.5\% (状态准备与测量错误) \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Google 量子硬件规格}
+
+\begin{table}[H]
+\centering
+\caption{Google 量子硬件规格 (2025年更新)}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{特性} & \textbf{规格/备注} \\ \midrule
+技术路线 & 超导 (Superconducting) \\
+& 专注于量子纠错 (QEC) 路线 \\
+处理器 & Sycamore (54 Qubits) \\
+& 2019年实现"量子霸权" \\
+路线图 Milestone 3 & 1,000 物理 Qubits \\
+& 目标：构建一个逻辑 Qubit \\
+路线图 (2029) & 1,000,000 物理 Qubits \\
+& 目标：构建 1,000 个逻辑 Qubits \\
+关键洞察 & 需要约 1000:1 的物理:逻辑 Qubit \\
+& 比例来实现容错 \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{硬件技术路线对比分析}
+
+\begin{table}[H]
+\centering
+\caption{主要量子计算技术路线对比 (2025)}
+\begin{tabular}{@{}p{3cm}p{4cm}p{4cm}p{3.5cm}@{}}
+\toprule
+\textbf{技术} & \textbf{优势} & \textbf{劣势} & \textbf{适用场景} \\ \midrule
+
+\textbf{超导} (IBM, Google) & 
+• 门操作快 ($\sim$20-100 ns) \newline
+• 成熟的制造工艺 \newline  
+• 可扩展性强 & 
+• 相干时间短 ($\sim$100 $\mu$s) \newline
+• 需要极低温 (<20 mK) \newline
+• 连接性稀疏 & 
+短深度电路 \newline
+需要快速门操作的算法 \\
+\midrule
+
+\textbf{离子阱} (IonQ, Honeywell) & 
+• 相干时间长 (秒级) \newline
+• 全连接拓扑 \newline
+• 高保真度 (>99.5\%) & 
+• 门操作慢 ($\sim$100 $\mu$s) \newline
+• 扩展到大规模困难 \newline
+• 激光控制复杂 & 
+深度电路 \newline
+需要高精度的算法 \newline
+QAOA, VQE \\
+\midrule
+
+\textbf{光子} (Xanadu, PsiQuantum) & 
+• 室温运行 \newline
+• 天然的网络集成 \newline
+• 低噪声 & 
+• 难以实现双量子门 \newline
+• 光子损耗 \newline
+• 确定性单光子源难 & 
+量子通信 \newline
+量子采样问题 \newline
+Boson Sampling \\
+\midrule
+
+\textbf{中性原子} (QuEra, Pasqal) & 
+• 可扩展性好 \newline
+• 灵活的拓扑重构 \newline
+• 长相干时间 & 
+• 门保真度待提高 \newline
+• 技术相对不成熟 & 
+大规模优化 \newline
+量子模拟 \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{无线通信应用的硬件选择指南}
+
+\textbf{基于问题类型的硬件推荐：}
+
+\begin{itemize}
+\item \textbf{D2D信道分配、资源调度 (QUBO/QAOA)：}
+\begin{itemize}
+\item \textbf{首选：} IonQ (全连接拓扑，无需SWAP门)
+\item \textbf{备选：} 中性原子 (可重构拓扑)
+\item \textbf{挑战：} 问题规模需 $<$ 36 AQ (IonQ) 或 $<$ 256 Qubits (中性原子)
+\end{itemize}
+
+\item \textbf{深度学习任务 (QNN/QDRL)：}
+\begin{itemize}
+\item \textbf{首选：} 离子阱 (高相干时间支持深电路)
+\item \textbf{备选：} 超导 + QEM (用误差缓解补偿噪声)
+\item \textbf{关键：} 电路深度通常需要 10-100 层，超导可能需要大量QEM
+\end{itemize}
+
+\item \textbf{快速优化迭代 (Q-inspired on GPU)：}
+\begin{itemize}
+\item \textbf{首选：} 经典GPU + 量子启发式算法
+\item \textbf{原因：} 如果需要毫秒级响应（如URLLC），当前QPU的排队和读取时间不可接受
+\end{itemize}
+\end{itemize}
+
+\subsection{硬件性能关键指标解读}
+
+\textbf{算法量子比特 (\#AQ) vs. 物理Qubit数：}
+
+\#AQ 是一个综合指标，考虑了：
+\begin{equation}
+\text{\#AQ} \propto \log_2\left(\frac{1}{\epsilon_{\text{gate}}}\right) \times N_{\text{qubit}} \times \frac{T_2}{T_{\text{gate}}}
+\end{equation}
+
+其中：
+\begin{itemize}
+\item $\epsilon_{\text{gate}}$：门错误率
+\item $N_{\text{qubit}}$：物理Qubit数量
+\item $T_2$：退相干时间
+\item $T_{\text{gate}}$：门操作时间
+\end{itemize}
+
+\textbf{实例分析：}
+\begin{itemize}
+\item \textbf{IonQ Forte：} 36 AQ 但只有 32 物理Qubits $\rightarrow$ 高质量
+\item \textbf{IBM Condor：} 1,121 物理Qubits 但 AQ 可能只有 $\sim$50 $\rightarrow$ 量多质低
+\end{itemize}
+
+\textbf{结论：} 对于NISQ算法，\textbf{质量 > 数量}。高保真度的36个Qubit比低质量的100个Qubit更有用。
+
+\section{NISQ 挑战实践教程}
+
+\subsection{缓解"贫瘠高原" (Mitigating Barren Plateaus)}
+
+\textbf{什么是贫瘠高原 (BP)？}
+
+在训练 VQA (如 QNN, QAOA) 时，损失函数的梯度（导数）会随着 Qubit 数量 $n$ 和电路深度的增加而指数级消失 ($\mathcal{O}(e^{-n})$)。梯度为零意味着经典优化器（如梯度下降）失效，PQC 无法训练。
+
+\subsubsection{缓解策略 1：智能参数初始化}
+
+\textbf{病因：} BP 通常是由随机初始化参数引起的。
+
+\textbf{解决方案：} 借鉴经典机器学习的初始化策略。
+
+\begin{itemize}
+\item \textbf{Xavier 初始化：} 使权重方差 $\sigma^2$ 满足 $\sigma^2 \sim \frac{2}{n_{\text{in}} + n_{\text{out}}}$
+\item \textbf{He 初始化：} $\sigma^2 \sim \frac{2}{n_{\text{in}}}$，专为 ReLU 激活函数设计
+\item \textbf{LeCun 初始化：} $\sigma^2 \sim \frac{1}{n_{\text{in}}}$
+\end{itemize}
+
+\textbf{效果：} 实证研究表明，Xavier 初始化的表现优于随机初始化，可将梯度方差的衰减改善 62\%。
+
+\subsubsection{缓解策略 2：电路与成本函数设计}
+
+\begin{itemize}
+\item \textbf{浅层 Ansatz：} BP 随电路深度增加而恶化，因此应优先使用浅层电路。
+\item \textbf{局部成本函数：} 测量所有 Qubit 的全局成本函数易导致 BP。应尽可能使用局部成本函数（例如，只测量 $\hat{Z}_1$ 而不是 $\hat{Z}_1 \otimes \hat{Z}_2 \otimes \cdots \otimes \hat{Z}_n$）。
+\item \textbf{迁移学习：} 先在小规模问题（如 4 Qubits）上训练 PQC，找到最优参数 $\vec{\theta}^*$，然后将 $\vec{\theta}^*$ 作为大规模问题（如 8 Qubits）的初始参数。
+\end{itemize}
+
+\subsection{缓解"噪声"与量子纠错 (QEM)}
+
+\textbf{QEC vs. QEM：长期与近期的策略}
+
+\begin{itemize}
+\item \textbf{QEC (量子纠错)：} 容错计算的长期方案。它使用大规模冗余（如 Google 的 1000:1 物理:逻辑 Qubit 比例）来主动检测和纠正错误，创造出完美的"逻辑 Qubit"。这在 NISQ 时代尚不可行。
+\item \textbf{QEM (量子误差缓解)：} NISQ 时代的务实方案。它不主动纠正错误（因为 Qubit 不足）。相反，它在运行电路后，通过巧妙的经典后处理技术，来估计"假如没有噪声，结果本应该是多少"。
+\end{itemize}
+
+\subsubsection{零噪声外推 (Zero-Noise Extrapolation, ZNE)}
+
+ZNE 是目前最流行和最有效的 QEM 技术之一。
+
+\textbf{核心思想：}
+
+ZNE 假设我们可以控制电路的噪声水平 $\lambda$。$\lambda=1$ 是指机器的"固有噪声水平"。我们无法将 $\lambda$ 降到 0，但我们可以增加它，例如增加到 $\lambda=3, 5$。
+
+\textbf{ZNE 的流程：}
+
+\begin{enumerate}
+\item 在不同的、已知的更高噪声水平 $\lambda_i$ (如 1, 3, 5) 下运行电路，并测量期望值 $\langle A(\lambda_i) \rangle$。
+\item 在经典计算机上，将这些数据点 $(\lambda_i, \langle A(\lambda_i) \rangle)$ 绘制出来。
+\item 拟合一条曲线（如线性或指数曲线），并将其外推 (Extrapolate) 回 $\lambda=0$ 时的 y 轴截距。
+\item 这个截距 $\langle A(0) \rangle$ 就是我们估计的"无噪声"结果。
+\end{enumerate}
+
+\textbf{关键步骤：如何"增加噪声"？$\rightarrow$ 噪声折叠 (Noise Folding)}
+
+在量子电路中，$U U^\dagger = I$ (恒等操作)。一个门 $U$ 及其逆 $U^\dagger$ 连在一起，在逻辑上什么也不做。但是，在物理上，$U$ 和 $U^\dagger$ 各自都会引入噪声。因此，执行 $U U^\dagger$ 等于在电路中注入了"两倍"的门噪声，同时保持了逻辑不变。
+
+\textbf{实现 ZNE：}
+\begin{itemize}
+\item $\lambda=1$ (原始电路)：$\cdots U_1 \cdots U_2 \cdots$
+\item $\lambda=3$ (折叠电路)：$\cdots (U_1 U_1^\dagger U_1) \cdots (U_2 U_2^\dagger U_2) \cdots$
+\item $\lambda=5$ (折叠电路)：$\cdots (U_1 U_1^\dagger U_1 U_1^\dagger U_1) \cdots (U_2 U_2^\dagger U_2 U_2^\dagger U_2) \cdots$
+\end{itemize}
+
+通过这种方式，我们可以控制 $\lambda$ 并收集外推所需的数据点。
+
+\section{性能基准与实践决策框架}
+
+\subsection{性能基准：量子启发式 vs. 真实量子}
+
+\textbf{定义：}
+
+\begin{itemize}
+\item \textbf{Q-Inspired (QPSO, QGA)：} 本质上是经典算法。它们运行在经典 CPU/GPU 上，只是借鉴了量子力学（如概率幅、叠加）的数学概念来改进经典元启发式算法（如 PSO, GA）。
+\item \textbf{真实量子 (QAOA, QDRL)：} 运行在量子硬件 (QPU) 上，利用真实的物理叠加和纠缠。
+\end{itemize}
+
+\textbf{性能基准：}
+
+Q-Inspired 算法可以在经典硬件上胜过其他经典算法，但它们有严格的"优势区间"。
+
+\textbf{Q-Inspired 局限性：}
+\begin{itemize}
+\item \textbf{优势区间：} 仅在输入矩阵（问题）为低秩、低条件数且维度极大时表现良好。
+\item \textbf{劣势区间：} 在稀疏和高秩矩阵（这在许多实际问题中很常见）上性能显著下降。
+\end{itemize}
+
+\textbf{真实量子优势：}
+
+真实量子算法（如 QML）恰恰可以处理 Q-Inspired 算法失败的稀疏和高秩数据集。
+
+\textbf{结论：} Q-Inspired 是一个有用的"桥梁"技术，但它绝不是真实量子计算的替代品。
+
+\subsection{性能基准：QAOA vs. 经典求解器}
+
+\textbf{挑战：} 无法进行"苹果对苹果"的比较。比较 QPU (20 Qubits) 和 CPU (Gurobi) 的绝对时钟时间是没有意义的，因为硬件截然不同。
+
+\subsubsection{当前性能现状}
+
+\textbf{绝对时间：} 在今天，对于大多数优化问题，经典求解器（如 Gurobi, CPLEX）在绝对时钟时间上更快、更准。这是因为：
+
+\begin{itemize}
+\item \textbf{成熟的算法：} 经典求解器经过几十年的优化，拥有高度优化的分支定界、割平面等算法。
+\item \textbf{硬件优势：} 现代CPU拥有数十亿个晶体管，而当前量子计算机只有几百个Qubit。
+\item \textbf{无噪声：} 经典计算机不受量子噪声影响。
+\end{itemize}
+
+\subsubsection{真正的比较：缩放性 (Scaling)}
+
+QAOA 优势不在当前的绝对性能，而在于\textbf{缩放复杂性}：
+
+\begin{itemize}
+\item \textbf{经典算法：} 对于NP-hard问题，最坏情况下需要 $O(2^n)$ 时间。
+\item \textbf{QAOA：} 理论上可以在某些问题上实现次指数加速。
+\end{itemize}
+
+\subsubsection{QAOA 的真正优势：解决"难题"}
+
+QAOA (以及量子退火 QA) 的真正优势可能在于解决经典算法（如模拟退火）\textbf{失败}的特定"难题"。
+
+\textbf{关键洞察：} 研究表明，当优化问题存在极小的"谱隙" (spectral gaps) 时，经典绝热算法会失败；而 QAOA 可以通过学习参数 $(\vec{\beta}, \vec{\gamma})$ 来利用\textbf{非绝热捷径} (nonadiabatic mechanisms) 找到解。
+
+\textbf{具体场景：}
+\begin{itemize}
+\item \textbf{难题实例：} 具有复杂能量景观（多个局部最小值）的优化问题。
+\item \textbf{QAOA优势：} 可以通过量子叠加同时探索多个解空间区域。
+\item \textbf{参数学习：} 通过训练 $(\vec{\beta}, \vec{\gamma})$，QAOA可以"学习"如何绕过障碍。
+\end{itemize}
+
+\subsubsection{性能基准案例研究}
+
+\textbf{Max-Cut问题（图分割）：}
+\begin{itemize}
+\item \textbf{小规模 (n<10)：} Gurobi 优于 QAOA（ms vs 秒）
+\item \textbf{中等规模 (10<n<50)：} 性能相当，取决于图的结构
+\item \textbf{大规模 (n>100)：} 当前NISQ硬件无法处理（Qubit不足）
+\item \textbf{特殊结构：} 对于特定的"难"图实例，QAOA可能找到更好的近似解
+\end{itemize}
+
+\textbf{D2D信道分配：}
+\begin{itemize}
+\item \textbf{经典启发式 (SA)：} 快速但可能陷入局部最优
+\item \textbf{QAOA：} 运行时间较长，但在高干扰场景下可能找到更好的全局解
+\item \textbf{关键因素：} 问题规模（D2D对数量）和约束复杂度
+\end{itemize}
+
+\subsection{实践决策框架：无线工程师的选择}
+
+基于以上所有分析，我们为无线工程师提供以下决策流程：
+
+\begin{enumerate}
+\item \textbf{您的问题是静态的还是动态的？}
+\begin{itemize}
+\item \textbf{动态} (涉及时间序列、移动性、时变信道，如 UAV 轨迹、MEC 动态卸载) $\rightarrow$ 使用 QDRL / QMARL。
+\item \textbf{静态} (单次优化，如 WSN 聚类、IRS 静态调度) $\rightarrow$ 进入步骤 2。
+\end{itemize}
+
+\item \textbf{问题是否为 NP-hard 组合优化？}
+\begin{itemize}
+\item \textbf{否} (如凸优化) $\rightarrow$ 使用经典数学优化 (如 CVX)。QC 在此无优势。
+\item \textbf{是} (如资源分配、路由、调度) $\rightarrow$ 进入步骤 3。
+\end{itemize}
+
+\item \textbf{您的目标是否是在经典硬件 (CPU/GPU) 上寻求近期性能提升？}
+\begin{itemize}
+\item \textbf{是} $\rightarrow$ 尝试 Q-Inspired (QPSO, QGA)。
+\item \textbf{警告：} 请检查您的问题特性。如果问题矩阵是稀疏或高秩的，Q-Inspired 算法的性能可能会很差。
+\end{itemize}
+
+\item \textbf{您的目标是否是探索量子优势，或者 Q-Inspired 算法已失败？}
+\begin{itemize}
+\item \textbf{是} $\rightarrow$ 进入步骤 5。
+\end{itemize}
+
+\item \textbf{将问题建模为 QUBO。}
+\begin{itemize}
+\item 使用高级约束技术（如指数惩罚或增广拉格朗日）来最小化所需的 Qubit 数量。
+\end{itemize}
+
+\item \textbf{在 NISQ 硬件 (QPU) 上运行 VQA (如 QAOA)。}
+\begin{itemize}
+\item \textbf{必须} 应用缓解策略：
+\begin{itemize}
+\item 缓解 BP：使用智能参数初始化 (如 Xavier)。
+\item 缓解 Noise：使用 QEM 技术 (如 ZNE)。
+\end{itemize}
+\end{itemize}
+\end{enumerate}
+
+\section{量子计算在无线通信中的应用案例}
+
+本节保留基础教程中关于 QC 在无线通信中具体应用的优秀综述，在前面新增的"如何做"的背景下，这些应用案例变得更加清晰。
+
+\subsection{应用一：功率分配 (Power Allocation)}
+
+\textbf{问题：} 在 NOMA、MIMO 等系统中，合理分配功率以最大化系统速率或能效。
+
+\textbf{算法匹配：}
+\begin{itemize}
+\item \textbf{Q-inspired (QPSO)：} 用于解决静态、非凸优化问题。
+\item \textbf{QNN/QDRL：} 用于更复杂的动态场景，如 UAV 辅助的联合轨迹与功率分配。
+\end{itemize}
+
+\subsection{应用二：信道分配 (Channel Assignment)}
+
+\textbf{问题：} D2D 通信的子信道分配，或 LTE/NR 的 RSI 分配。
+
+\textbf{算法匹配：}
+\begin{itemize}
+\item \textbf{QA/QAOA (QUBO 范式)：} 这是解决此类组合优化问题的首选。如第2节所示，D2D 分配问题被建模为 QUBO。
+\item \textbf{AI-driven (QRL/QMARL)：} 用于 V2X (车联网) 等高度动态的信道选择。
+\end{itemize}
+
+\subsection{应用三：智能反射面 (IRS / Intelligent Reflecting Surface)}
+
+\textbf{问题：} 调度 IRS 的时隙分配和配置相移，以最大化吞吐量。这是一个大规模离散组合优化问题。
+
+\textbf{算法匹配：}
+\begin{itemize}
+\item \textbf{QA/QAOA (QUBO 范式)：} 相关研究高度一致地采用了 QUBO $\rightarrow$ QA 范式来寻找最优调度策略。
+\end{itemize}
+
+\subsection{应用四：用户关联 (User Association)}
+
+\textbf{算法匹配：} 动态性是关键分水岭。
+
+\begin{itemize}
+\item \textbf{静态} (如 WSN 簇头选择)：使用 Q-inspired (QEA, QPSO, QGA)。
+\item \textbf{动态} (如 UAV 轨迹规划)：立即转向 AI-driven QC (QDRL)。
+\end{itemize}
+
+\subsection{应用五：网络路由 (Routing)}
+
+\textbf{问题：} 在多跳网络 (MANET, WSN) 中寻找最优路径 (TSP 变体)。
+
+\textbf{算法匹配：}
+\begin{itemize}
+\item \textbf{QA/QAOA (QUBO 范式)：} 解决车辆路由问题 (VRP)。
+\item \textbf{Q-inspired (QPSO/QGA)：} 优化 WSN 的 Sink 部署或 MANET 的 OLSR 协议。
+\item \textbf{AI-driven (QRL/QMARL)：} 在多机器人或多 UAV 网络中进行去中心化的协同路由决策。
+\end{itemize}
+
+\subsection{应用六：任务卸载 (Task Offloading)}
+
+\textbf{问题：} MEC (移动边缘计算) 的核心问题：任务应在本地执行还是卸载到边缘？
+
+\textbf{算法匹配：} QDRL 的主导地位。
+
+分析清晰表明，QDRL 是解决动态任务卸载 (尤其是 IoV, VR, Metaverse 场景) 的主导范式。
+
+\textbf{核心原因：} 经典 DRL 在 MEC 的高维状态-动作空间中遭遇"维度灾难"。QDRL 利用量子态表示和并行性来压缩状态空间并加速动作搜索。
+
+\subsection{应用七：内容缓存 (Content Caching)}
+
+\textbf{问题：} 在边缘服务器上缓存哪些内容以最大化命中率？
+
+\textbf{算法匹配：}
+\begin{itemize}
+\item \textbf{Q-inspired (QEA/QGA)：} 用于协作式边缘缓存。
+\item \textbf{AI-driven (QRL/QDL)：} 用于处理随时间动态变化的内容流行度。
+\end{itemize}
+
+\subsection{QC 在其他领域的应用}
+
+\begin{itemize}
+\item \textbf{安全与隐私：} 量子联邦学习 (QFL)。
+\item \textbf{定位与跟踪：} 使用 Swap Test 进行量子余弦相似度计算，以加速 RSS 指纹匹配。
+\item \textbf{视频流：}
+\begin{itemize}
+\item DASH (ABR 控制) $\rightarrow$ QUBO 范式。
+\item VR/Metaverse 视口渲染 $\rightarrow$ QRL/QDRL。
+\end{itemize}
+\end{itemize}
+
+\subsection{算法-问题匹配模式总结}
+
+核心结论是识别了清晰的"算法-问题匹配"模式：
+
+\begin{itemize}
+\item \textbf{Q-inspired (QPSO, QGA)：} 用于经典硬件上的\textbf{静态}优化。
+\item \textbf{QA/QAOA：} 用于量子硬件上的\textbf{组合/调度}优化。
+\item \textbf{QDRL/QMARL：} 用于解决\textbf{动态/时序}决策问题 (MEC, UAV)，以克服"维度灾难"。
+\end{itemize}
+
+\section{高级约束处理技术}
+
+\subsection{实践法则：如何设置惩罚系数 \texorpdfstring{$\lambda$}{lambda}？}
+
+选择 $\lambda$ 是一门艺术，但有实用的经验法则：
+
+\begin{itemize}
+\item \textbf{$\lambda$ 不能太小：} 如果 $\lambda$ 太小，求解器可能会发现"违反约束" (受到 $\lambda$ 的小惩罚) 比"牺牲目标函数 $H_{\text{obj}}$" (受到 $H_{\text{obj}}$ 的大惩罚) 更划算，从而导致找到一个不可行的解。
+
+\item \textbf{$\lambda$ 不能太大：} 如果 $\lambda=99999$，它将完全"淹没" $H_{\text{obj}}$。求解器只会专注于满足约束，而忽略了我们最初的目标 (最大化吞吐量)。此时，我们解决的是"约束满足问题"，而不是"优化问题"。
+
+\item \textbf{经验法则：} $\lambda$ 的值应略大于 $H_{\text{obj}}$ 的可能范围。一个好的下限是：
+\[\lambda > \frac{\text{Range}(H_{\text{obj}})}{\text{Min Penalty}}\]
+即，确保最小的约束违反所受到的惩罚，也大于 $H_{\text{obj}}$ 可能带来的最大收益。
+\end{itemize}
+
+\subsection{高级技术：处理不等式约束 (节省 Qubit)}
+
+\textbf{问题：} 约束如 $P_{ij} \le P_{\text{max}}$ (或 MEC 任务卸载中的 $\text{Delay} \le \text{Delay}_{\text{max}}$) 是不等式约束。
+
+\subsubsection{传统方法 (效率低下)：引入"松弛变量"}
+
+我们将 $\sum P_{ij} x_{ij} \le P_{\text{max}}$ 转换为 $\sum P_{ij} x_{ij} + s = P_{\text{max}}$，其中 $s$ 是一个需要用 $k$ 个二元比特 ($s_1, s_2, \ldots s_k$) 来编码的整数。
+
+\textbf{缺点：} 这极大地增加了 QUBO 问题的变量总数，即增加了所需的 Qubit 数量。在 Qubit 稀缺的 NISQ 时代，这是不可接受的。
+
+\subsubsection{高级方法 1：指数惩罚 (Exponential Penalization)}
+
+\textbf{原理：} 不添加新的 Qubit，而是修改惩罚函数，使其具有指数增长。
+\[H_{C3} = \lambda_3 \cdot \exp\left( k \cdot \left(\sum P_{ij} x_{ij} - P_{\text{max}}\right) \right) \quad \text{(仅当 } \sum\ldots > P_{\text{max}} \text{ 时激活)}\]
+
+\textbf{优势：}
+\begin{itemize}
+\item \textbf{节省 Qubit：} 完全不需要松弛变量。研究显示，对于 TSP (旅行商问题)，这可以减少 83\% 的 Qubit 需求。
+\item \textbf{更强约束：} 指数增长比二次方 (如 $H_{C1}$ 中的 $(\cdot)^2$) 更"陡峭"，能更有效地惩罚大规模的违规。
+\end{itemize}
+
+\subsubsection{高级方法 2：增广拉格朗日法 (Augmented Lagrangian Method)}
+
+\textbf{适用：} 适用于无线通信 (如 RIS) 中常见的、更复杂的高阶 (HOBO) 或非线性约束问题。
+
+\textbf{原理：} 这是一种迭代的混合算法。
+\begin{enumerate}
+\item (经典) 初始化拉格朗日乘子 $\lambda_g, \lambda_h$。
+\item (量子) 将增广拉格朗日函数 $L(x, \lambda)$ (它可能是高阶的) 近似为一个 QUBO。
+\item (量子) 使用 QAOA 或退火器求解这个 QUBO，得到解 $x^*$。
+\item (经典) 使用 $x^*$ 更新乘子 $\lambda_g, \lambda_h$。
+\item 重复步骤 2-4 直至收敛。
+\end{enumerate}
+
+\textbf{优势：}
+\begin{itemize}
+\item 使用泰勒展开 (Taylor expansion) 将高阶项近似为二次项，从而避免了引入辅助变量。
+\item 将约束处理（经典侧）与 QUBO 求解（量子侧）分离，使其更灵活。
+\end{itemize}
+
+\subsection{VQA 的成本函数}
+
+\begin{itemize}
+\item \textbf{对于 QAOA：} 成本函数 (Cost Function) 就是我们在 QUBO 建模中推导出的问题哈密顿量 $\hat{C}$ (或 $H$)。经典优化器 (如 COBYLA) 的目标是寻找一组 PQC 参数 $(\vec{\beta}, \vec{\gamma})$，使得最终测量得到的期望值 $\langle \psi(\vec{\beta}, \vec{\gamma}) | \hat{C} | \psi(\vec{\beta}, \vec{\gamma}) \rangle$ 最小。
+
+\item \textbf{对于 QNN / VQE：} 成本函数由任务定义。例如，在 QNN 中，它可能是经典损失函数 (如均方误差 MSE 或交叉熵)。在 VQE 中，它是分子哈密顿量的期望值 $\langle H \rangle$。PQC 的参数 $\vec{\theta}$ 被经典优化器调整，以最小化这个成本函数。
+\end{itemize}
+
+\section{开放性问题与未来挑战}
+
+本教程重点解决了硬件和算法层面的 BP 和噪声挑战。其他开放性问题依然存在，包括：
+
+\begin{itemize}
+\item \textbf{多变量优化的挑战：} 真实无线问题（如时延、能效、吞吐量）是多目标冲突的，这增加了 QUBO 建模的复杂性。
+
+\item \textbf{理解与使用的挑战 (知识鸿沟)：} 无线工程师通常不理解酉演化和希尔伯特空间。
+
+\item \textbf{量子云服务的挑战 (时延)：} 无线网络（如 URLLC）需要在亚毫秒内完成调度。如果访问云端 QPU 的通信时延远大于此，QC 将失去意义。
+
+\item \textbf{DRL 与 QC 的深度融合挑战：} QDRL 的核心矛盾在于：DRL 依赖于对状态的观测，而量子力学中的测量（观测）行为会导致波函数塌缩，丢失叠加态中的信息。
+\end{itemize}
+
+\section{综合对比与最佳实践}
+
+\subsection{量子算法范式综合对比}
+
+\begin{table}[H]
+\centering
+\caption{量子计算三大范式在无线通信中的综合对比}
+\small
+\begin{tabular}{@{}p{2cm}p{3.5cm}p{3.5cm}p{3.5cm}p{2.5cm}@{}}
+\toprule
+\textbf{维度} & \textbf{Q-Inspired (QPSO/QGA)} & \textbf{QAOA/QA (QUBO)} & \textbf{QDRL/QMARL} & \textbf{典型应用} \\ \midrule
+
+\textbf{运行平台} & 
+经典CPU/GPU & 
+量子硬件(QPU) 或模拟器 & 
+量子硬件 + 经典RL框架 & 
+— \\ \midrule
+
+\textbf{问题类型} & 
+静态、连续或离散优化 & 
+静态组合优化 (NP-hard) & 
+动态、时序决策 & 
+— \\ \midrule
+
+\textbf{优势场景} & 
+• 低秩矩阵 \newline
+• 大规模维度 \newline
+• 需要快速迭代 & 
+• 小规模QUBO \newline
+• 经典算法失效的"难题" \newline
+• 允许秒级延迟 & 
+• 高维状态空间 \newline
+• 时变环境 \newline
+• 需要策略学习 & 
+— \\ \midrule
+
+\textbf{劣势/限制} & 
+• 稀疏/高秩矩阵性能差 \newline
+• 不是真正量子 & 
+• Qubit数量限制 \newline
+• 当前优于经典罕见 \newline
+• 噪声敏感 & 
+• 技术最不成熟 \newline
+• 测量破坏叠加 \newline
+• 训练复杂 & 
+— \\ \midrule
+
+\textbf{Qubit需求} & 
+0 (经典) & 
+$\sim$ 问题变量数 \newline
+(10-100 for实际问题) & 
+$\sim$ 状态维度的log \newline
+(通常5-20) & 
+— \\ \midrule
+
+\textbf{无线应用} & 
+WSN聚类 \newline
+静态RIS配置 \newline
+频谱分配 & 
+D2D信道分配 \newline
+TSP路由 \newline
+调度问题 & 
+MEC任务卸载 \newline
+UAV轨迹 \newline
+动态资源分配 & 
+见第6节 \\ \midrule
+
+    extbf{成熟度} & 
+\blackstar\blackstar\blackstar\blackstar\blackstar \newline
+(生产就绪) & 
+\blackstar\blackstar\blackstar\whitestar\whitestar \newline
+(研究阶段) & 
+\blackstar\blackstar\whitestar\whitestar\whitestar \newline
+(早期探索) & 
+— \\ \midrule
+
+\textbf{推荐时机} & 
+2023-2026 \newline
+(当前可用) & 
+2025-2028 \newline
+(短期未来) & 
+2027-2030+ \newline
+(中期未来) & 
+— \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{无线工程师的量子计算实践路线图}
+
+\textbf{阶段一：学习与试验 (2024-2025)}
+
+\begin{enumerate}
+\item \textbf{理论学习：}
+\begin{itemize}
+\item 掌握QUBO建模（本教程第2节）
+\item 理解VQA基本原理（第1节）
+\item 学习Qiskit/PennyLane基础
+\end{itemize}
+
+\item \textbf{模拟器试验：}
+\begin{itemize}
+\item 在Qiskit模拟器上运行QAOA解决小规模D2D分配（$N=3, M=2$）
+\item 使用PennyLane训练QNN进行信号调制识别
+\item 对比经典算法（SA, GA）与Q-Inspired算法
+\end{itemize}
+
+\item \textbf{基准测试：}
+\begin{itemize}
+\item 记录：运行时间、解的质量、成功率
+\item 识别：哪些问题规模Q-Inspired更优，哪些QAOA更优
+\end{itemize}
+\end{enumerate}
+
+\textbf{阶段二：云QPU探索 (2025-2026)}
+
+\begin{enumerate}
+\item \textbf{选择平台：}
+\begin{itemize}
+\item \textbf{IBM Quantum：} 免费访问，但Qubit质量中等，适合QAOA
+\item \textbf{IonQ (via AWS Braket)：} 按需付费，高质量，适合深电路
+\item \textbf{注意：} 避免在延迟敏感应用（URLLC）中使用云QPU
+\end{itemize}
+
+\item \textbf{小规模验证：}
+\begin{itemize}
+\item 运行5-15 Qubit的QAOA问题
+\item 应用QEM（ZNE）并与模拟器对比
+\item 评估：噪声影响、QPU排队时间、成本
+\end{itemize}
+
+\item \textbf{混合策略：}
+\begin{itemize}
+\item 使用Q-Inspired进行实时决策
+\item 使用QAOA进行离线优化/参数调优
+\item 结合两者优势
+\end{itemize}
+\end{enumerate}
+
+\textbf{阶段三：生产部署考虑 (2027+)}
+
+\begin{enumerate}
+\item \textbf{边缘QPU：} 等待专用量子芯片（如IonQ Edge）
+\item \textbf{容错QC：} 当逻辑Qubit可用时，考虑运行大规模Shor/Grover
+\item \textbf{量子互联网：} 集成QKD进行安全通信
+\end{enumerate}
+
+\subsection{关键实践建议总结}
+
+\begin{enumerate}
+\item \textbf{QUBO建模：}
+\begin{itemize}
+\item 惩罚系数$\lambda$：略大于目标函数范围（第7.1节）
+\item 减少Qubit：使用指数惩罚而非松弛变量（第7.2节）
+\item 验证：手工检查小实例的最优解
+\end{itemize}
+
+\item \textbf{硬件选择：}
+\begin{itemize}
+\item 优先质量而非数量：36 AQ (IonQ) $>$ 100 noisy Qubits
+\item QAOA $\rightarrow$ 全连接拓扑（IonQ）
+\item QNN深电路 $\rightarrow$ 长相干时间（离子阱）
+\end{itemize}
+
+\item \textbf{NISQ缓解：}
+\begin{itemize}
+\item 总是使用Xavier初始化（改善62\% BP）
+\item 对于重要结果，应用ZNE
+\item 保持电路浅（深度$<$20层为佳）
+\end{itemize}
+
+\item \textbf{性能评估：}
+\begin{itemize}
+\item 不比较绝对时间，比较缩放性
+\item 识别"难题"实例
+\item 记录：解的质量、成功概率、资源消耗
+\end{itemize}
+
+\item \textbf{现实预期：}
+\begin{itemize}
+\item 2025年：Q-Inspired是生产工具，QAOA是研究工具
+\item 2030年：QAOA可能在特定优化上超越经典
+\item 量子优势是渐进的，不是革命性的
+\end{itemize}
+\end{enumerate}
+
+\section{结论}
+
+本增强版教程在基础教程提供的优秀理论综述之上，通过补充关键的实践环节，将其提升为一份完整的操作指南。基础教程明确了 QC 作为优化加速器在 6G NP-hard 问题中的巨大潜力，并识别了 Q-inspired、QAOA 和 QDRL 这三种核心算法范式。
+
+本教程的关键贡献在于填补了从"理论"到"实践"的鸿沟。我们提供了：
+
+\begin{itemize}
+\item \textbf{可运行的代码：} 展示了如何使用 Qiskit 和 PennyLane 构建 QAOA 和 QNN。
+\item \textbf{缺失的桥梁：} 详细分解了如何将无线问题（D2D信道分配）"翻译"为 QUBO，并介绍了节省量子比特的高级约束技术。
+\item \textbf{现实的约束：} 提供了 2025 年的真实硬件规格 (IonQ, IBM)，揭示了全连接拓扑和长相干时间的极端重要性。
+\item \textbf{必要的工具：} 提供了在 NISQ 时代必须使用的缓解策略教程，包括如何通过智能初始化对抗"贫瘠高原"，以及如何通过"噪声折叠"实现"零噪声外推"。
+\item \textbf{清晰的权衡：} 最后，本教程提供了一个数据驱动的决策框架，帮助工程师清醒地认识到 Q-Inspired 算法的局限性，以及 QAOA 在何种"难题"上才可能超越经典求解器。
+\end{itemize}
+
+未来的研究必须集中于解决硬件噪声（通过 QEM）、开发更可扩展的 QDRL 算法，并缩小量子云服务与无线网络边缘之间的时延鸿沟，以真正释放 QC 在下一代通信系统中的潜力。
+
+\section*{附录：从哈密顿量到 QUBO 矩阵的推导（可行小例）}
+\addcontentsline{toc}{section}{附录：从哈密顿量到 QUBO 矩阵的推导（可行小例）}
+
+为补充“核心技术实践教程：从问题到 QUBO”一节的建模示例，本文在此给出一个 \emph{可行且可手算} 的最小 QUBO 推导过程，展示如何从目标与约束构造出标准的 QUBO 矩阵 $Q$。
+
+\subsection*{问题设定（可行）}
+令 D2D 对数 $N=2$，信道数 $M=2$。速率矩阵取
+\[ R=\begin{bmatrix}5 & 3\\ 4 & 6\end{bmatrix}. \]
+决策变量按顺序记为 $x=\big[x_{1,1},\ x_{1,2},\ x_{2,1},\ x_{2,2}\big]^\top$。
+
+目标（最大化总速率）按 QUBO 最小化记号改写为
+\[ H_{\text{obj}}= -\left(5x_{1,1}+3x_{1,2}+4x_{2,1}+6x_{2,2}\right). \]
+
+约束采用与正文一致的惩罚：
+\begin{itemize}
+    \item \textbf{每个 D2D 对恰选一个信道：}
+    $\sum_{j} x_{i,j}=1\ (i=1,2)$，惩罚 $H_{C1}=\lambda_1\sum_i\big(\sum_j x_{i,j}-1\big)^2$。
+    \item \textbf{每个信道至多一个 D2D 对：}
+    对每个 $j$，对所有 $i_1\ne i_2$ 加入 $x_{i_1,j}x_{i_2,j}$ 的惩罚项，
+    $H_{C2}=\lambda_2\sum_j\sum_{i_1\ne i_2} x_{i_1,j}x_{i_2,j}$。
+\end{itemize}
+
+取 $\lambda_1=\lambda_2=10$（大于单项最大速率 6 的经验量级）。将 $H=H_{\text{obj}}+H_{C1}+H_{C2}$ 展开并按 $x_i$ 与 $x_i x_j$ 合并，得到线性与二次系数：
+
+\subsection*{系数展开（逐项）}
+\begin{itemize}
+    \item 对 $i=1$：$\big(x_{1,1}+x_{1,2}-1\big)^2=1-x_{1,1}-x_{1,2}+2x_{1,1}x_{1,2}$。
+    \item 对 $i=2$：$\big(x_{2,1}+x_{2,2}-1\big)^2=1-x_{2,1}-x_{2,2}+2x_{2,1}x_{2,2}$。
+    \item 通道冲突惩罚：$H_{C2}=10\,(x_{1,1}x_{2,1}+x_{1,2}x_{2,2})$。
+\end{itemize}
+
+据此可得（常数项略去）：
+\begin{align*}
+H= &\ \big(-5-10\big)x_{1,1}+\big(-3-10\big)x_{1,2}+\big(-4-10\big)x_{2,1}+\big(-6-10\big)x_{2,2}\\
+ &\ +\ 20\,x_{1,1}x_{1,2}+20\,x_{2,1}x_{2,2}+10\,x_{1,1}x_{2,1}+10\,x_{1,2}x_{2,2}.
+\end{align*}
+
+按 $x=[x_1,x_2,x_3,x_4]^\top=[x_{1,1},x_{1,2},x_{2,1},x_{2,2}]^\top$ 排列，标准 QUBO 形式 $x^\top Q x$ 的（上三角）系数矩阵 $Q$ 为：
+\[
+Q=\begin{pmatrix}
+\color{gray}{0} & 20 & 10 & 0\\
+ & \color{gray}{0} & 0 & 10\\
+ &  & \color{gray}{0} & 20\\
+ &  &  & \color{gray}{0}
+\end{pmatrix},\quad \text{线性项为 } q=[-15,-13,-14,-16].
+\]
+
+注：不同实现对线性项与对角线的归并方式略有差异（如将线性系数放置对角线：$Q_{ii}+=q_i$）。只要与所用 SDK 的约定一致，数值等价即可。
+
+\subsection*{可行解与直觉}
+本例在约束下的最优可行分配为 $x_{1,1}=1,\ x_{1,2}=0,\ x_{2,1}=0,\ x_{2,2}=1$（两对分别占用不同信道），总速率 $5+6=11$。直观上，由于 $\lambda$ 取值足以惩罚冲突与漏选，求解器会倾向于产生既满足一人一信道、又避免同信道冲突的解。
+
+\subsection*{如何扩展到更大规模}
+将变量维度扩展为 $N\times M$ 并沿用相同的惩罚结构即可。若需节省 Qubit，可参考正文第 7 节的指数惩罚与增广拉格朗日技巧以避免引入松弛变量。
+
+\begin{thebibliography}{99}
+\sloppy % relax line-breaking to avoid overfull boxes in long URLs
+
+\bibitem{qc_wireless_tutorial}
+Quantum Computing in Wireless Communications and Networking: A Tutorial-cum-Survey.
+\textit{arXiv:2406.02240v1}, 2024.
+\url{https://arxiv.org/html/2406.02240v1}
+
+\bibitem{qiskit_qaoa}
+Quantum Approximate Optimization Algorithm - Qiskit Algorithms 0.4.0.
+\url{https://qiskit-community.github.io/qiskit-algorithms/tutorials/05_qaoa.html}
+
+\bibitem{pennylane_qnn}
+Post Variational Quantum Neural Networks.
+PennyLane Demos.
+\url{https://pennylane.ai/qml/demos/tutorial_post-variational_quantum_neural_networks}
+
+\bibitem{qubit_efficient_qubo}
+Qubit-Efficient QUBO Formulation for Constrained Optimization.
+\textit{arXiv:2509.08080}, 2025.
+
+\bibitem{higher_order_binary}
+Constrained Higher-Order Binary Optimization for Wireless Systems.
+\textit{arXiv:2509.20092}, 2025.
+
+\bibitem{ionq_forte}
+IonQ Forte Enterprise.
+\url{https://ionq.com/quantum-systems/forte-enterprise}
+
+\bibitem{ibm_roadmap}
+IBM Roadmap to Quantum-Centric Supercomputers (Updated 2024).
+\url{https://www.ibm.com/quantum/blog/ibm-quantum-roadmap-2025}
+
+\bibitem{google_roadmap}
+Roadmap | Google Quantum AI.
+\url{https://quantumai.google/roadmap}
+
+\bibitem{barren_plateaus}
+Alleviating Barren Plateaus in Parameterized Quantum Circuits.
+\textit{arXiv:2311.13218}, 2023.
+
+\bibitem{error_mitigation}
+Utility-Scale Error Mitigation with Probabilistic Error Amplification.
+IBM Quantum Documentation.
+\url{https://quantum.cloud.ibm.com/docs/tutorials/probabilistic-error-amplification}
+
+\bibitem{quantum_inspired}
+Quantum-Inspired Algorithms in Practice.
+\textit{Quantum}, vol. 4, p. 307, 2020.
+\url{https://quantum-journal.org/papers/q-2020-08-13-307/}
+
+\bibitem{shor_algorithm}
+Shor's Algorithm - Wikipedia.
+\url{https://en.wikipedia.org/wiki/Shor%27s_algorithm}
+
+\bibitem{modular_shor}
+A Modular, Adaptive, and Scalable Quantum Factoring Algorithm.
+\textit{arXiv:2509.05010v1}, 2025.
+
+\bibitem{shor_classical_light}
+Computing Shor's Algorithmic Steps with Interference Patterns of Classical Light.
+\textit{arXiv:2103.16226}, 2021.
+
+\bibitem{grover_ibm}
+Grover's Algorithm | IBM Quantum Learning.
+\url{https://quantum.cloud.ibm.com/learning/modules/computer-science/grovers}
+
+\bibitem{grover_qiskit}
+Grover's Algorithm and Amplitude Amplification - Qiskit Algorithms.
+\url{https://qiskit-community.github.io/qiskit-algorithms/tutorials/06_grover.html}
+
+\bibitem{quantum_bridge}
+Quantum Bridge Analytics I: A Tutorial on Formulating and Using QUBO Models.
+\textit{arXiv:1811.11538}, 2018.
+
+\bibitem{penalty_coefficients}
+How to Determine the Penalty Coefficients in QUBO Objective Functions.
+Quantum Computing Stack Exchange, Question 40936.
+
+\bibitem{qaoa_ibm_docs}
+Quantum Approximate Optimization Algorithm | IBM Quantum Documentation.
+\url{https://quantum.cloud.ibm.com/docs/tutorials/quantum-approximate-optimization-algorithm}
+
+\bibitem{qaoa_pennylane}
+Intro to QAOA | PennyLane Demos.
+\url{https://pennylane.ai/qml/demos/tutorial_qaoa_intro/}
+
+\bibitem{quantum_companies}
+Quantum Computing Companies in 2025 (76 Major Players).
+The Quantum Insider, September 2025.
+
+\bibitem{ionq_harmony}
+IonQ Harmony.
+\url{https://ionq.com/quantum-systems/harmony}
+
+\bibitem{quantum_roadmaps}
+Quantum Computing Roadmaps \& Predictions of Leading Players.
+The Quantum Insider, May 2025.
+
+\bibitem{google_error_correction}
+Google Quantum AI's Quest for Error-Corrected Quantum Computers.
+\textit{arXiv:2410.00917v1}, 2024.
+
+\bibitem{barren_plateaus_statistical}
+Statistical Analysis of Barren Plateaus in Variational Quantum Algorithms.
+\textit{arXiv:2508.08915v1}, 2025.
+
+\bibitem{beinit}
+BEINIT: Avoiding Barren Plateaus in Variational Quantum Algorithms.
+\textit{arXiv:2204.13751}, 2022.
+
+\bibitem{transfer_learning_vqa}
+A Parameter Initialization Method for Variational Quantum Algorithms to Mitigate Barren Plateaus Based on Transfer Learning.
+ResearchGate Publication 357239531, 2021.
+
+\bibitem{barren_plateaus_pennylane}
+Barren Plateaus in Quantum Neural Networks | PennyLane Demos.
+\url{https://pennylane.ai/qml/demos/tutorial_barren_plateaus/}
+
+\bibitem{qcluster}
+Q-Cluster: Quantum Error Mitigation Through Noise-Aware Unsupervised Learning.
+\textit{arXiv:2504.10801v1}, 2025.
+
+\bibitem{zne_openqaoa}
+Zero-Noise Extrapolation: An Example Workflow - OpenQAOA.
+\url{https://el-openqaoa.readthedocs.io/en/latest/notebooks/15_Zero_Noise_Extrapolation.html}
+
+\bibitem{zne_quri}
+Zero-Noise Extrapolation | QURI Parts - QunaSys.
+\url{https://quri-parts.qunasys.com/docs/tutorials/basics/error_mitigation/zne/}
+
+\bibitem{zne_qiskit}
+How to Use Zero Noise Extrapolation (ZNE) with Qiskit Circuit?
+Quantum Computing Stack Exchange, Question 39112.
+
+\bibitem{quantum_vs_inspired}
+Quantum Algorithms vs. Quantum-Inspired Algorithms.
+QuEra Computing Blog.
+\url{https://www.quera.com/blog-posts/quantum-algorithms-versus-quantum-inspired-algorithms}
+
+\bibitem{qaoa_benchmarking}
+Quantum Approximate Optimization Algorithm: Performance, Mechanism, and Implementation on Near-Term Devices.
+\textit{Physical Review X}, vol. 10, no. 2, 2020.
+
+\bibitem{quantum_annealing_evidence}
+Quantum Annealing - Studies Showing Empirical Evidence for Better Performance in Comparison with Classical Computers.
+Quantum Computing Stack Exchange, Question 17765.
+
+\end{thebibliography}
+
+\end{document}

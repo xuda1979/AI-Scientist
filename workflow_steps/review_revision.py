@@ -2,6 +2,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Tuple
 
+# CRITICAL: Import Content Guardian for multi-layer protection
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.content_guardian import ContentGuardian
+
 
 def run_review_revision_step(
     current_tex: str,
@@ -62,7 +67,8 @@ def run_review_revision_step(
     combined_response = _universal_chat(
         _combined_review_edit_revise_prompt(
             current_tex, sim_summary, latex_errors, project_dir, user_prompt, iteration, quality_issues,
-            supplemental_context=supplemental_context
+            supplemental_context=supplemental_context,
+            specify_files=getattr(config, 'specify_files', None)
         ),
         model=model,
         request_timeout=request_timeout,
@@ -89,37 +95,133 @@ def run_review_revision_step(
     
     review, decision, file_changes = _parse_combined_response(combined_response, project_dir)
     
-    # CRITICAL: Validate paper completeness if paper.tex was modified
+    # ═══════════════════════════════════════════════════════════════
+    # SAVE REVIEW TO FILE FOR INSPECTION
+    # ═══════════════════════════════════════════════════════════════
+    review_output_path = project_dir / f"review_iteration_{iteration}.txt"
+    try:
+        with open(review_output_path, 'w', encoding='utf-8') as f:
+            f.write(f"REVIEW - Iteration {iteration}\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(f"Model: {model}\n")
+            f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
+            f.write(f"Quality Issues Count: {len(quality_issues) if quality_issues else 0}\n")
+            f.write(f"LaTeX Status: {'✓ Compiled' if not latex_errors else '✗ Errors present'}\n")
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("REVIEW CONTENT\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(review)
+            f.write("\n\n" + "=" * 80 + "\n")
+            f.write(f"EDITORIAL DECISION: {decision}\n")
+            f.write("=" * 80 + "\n")
+            
+            # Add quality issues summary
+            if quality_issues:
+                f.write("\nQUALITY ISSUES DETECTED:\n")
+                f.write("-" * 80 + "\n")
+                for idx, issue in enumerate(quality_issues, 1):
+                    f.write(f"{idx}. {issue}\n")
+        
+        print(f"✓ Review saved to: {review_output_path.name}")
+    except Exception as save_error:
+        print(f"⚠ Warning: Failed to save review to file: {save_error}")
+    
+    # ═══════════════════════════════════════════════════════════════
+    # SAVE FULL COMBINED RESPONSE FOR DEBUGGING
+    # ═══════════════════════════════════════════════════════════════
+    raw_response_path = project_dir / f"raw_response_iteration_{iteration}.txt"
+    try:
+        with open(raw_response_path, 'w', encoding='utf-8') as f:
+            f.write(f"RAW COMBINED RESPONSE - Iteration {iteration}\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(combined_response)
+        print(f"✓ Raw response saved to: {raw_response_path.name}")
+    except Exception as save_error:
+        print(f"⚠ Warning: Failed to save raw response: {save_error}")
+    
+    # ═══════════════════════════════════════════════════════════════
+    # CRITICAL: Validate paper completeness AND MINIMUM CONTENT REQUIREMENTS
+    # ═══════════════════════════════════════════════════════════════
     if file_changes and 'paper.tex' in file_changes:
         from utils.response_validator import validate_paper_structure, estimate_paper_completeness
+        import re
         
         new_paper_content = file_changes['paper.tex']
         if isinstance(new_paper_content, list):
             new_paper_content = '\n'.join(new_paper_content)
         
+        # Count references and words in the NEW content
+        new_ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', new_paper_content))
+        # Use direct word count without arbitrary halving to avoid underestimation
+        new_word_count = len(re.findall(r'\b\w+\b', new_paper_content.split('\\begin{document}')[-1] if '\\begin{document}' in new_paper_content else new_paper_content))
+        
+        # Count references and words in CURRENT paper
+        current_ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', current_tex))
+        current_word_count = len(re.findall(r'\b\w+\b', current_tex.split('\\begin{document}')[-1] if '\\begin{document}' in current_tex else current_tex))
+        
         completeness_score = estimate_paper_completeness(new_paper_content)
         is_complete, missing_sections = validate_paper_structure(new_paper_content)
         
-        if completeness_score < 0.5:
-            print(f"\n{'!'*80}")
-            print(f"🚨 CRITICAL ERROR: PAPER IS SEVERELY INCOMPLETE!")
-            print(f"{'!'*80}")
+        # Check for disastrous regressions
+        reference_regression = new_ref_count < current_ref_count - 2  # Allow slight variation
+        length_regression = new_word_count < current_word_count * 0.8  # Reject if >20% shorter
+        critically_short = new_word_count < 2000 or new_ref_count < 5  # Absolutely unacceptable
+        
+        print(f"\n{'='*80}")
+        print(f"📊 CONTENT VALIDATION - Iteration {iteration}")
+        print(f"{'='*80}")
+        print(f"Current paper: ~{current_word_count} words, {current_ref_count} references")
+        print(f"Revised paper: ~{new_word_count} words, {new_ref_count} references")
+        print(f"Change: {new_word_count - current_word_count:+d} words, {new_ref_count - current_ref_count:+d} references")
+        print(f"Completeness score: {completeness_score*100:.1f}%")
+        print(f"{'='*80}\n")
+        
+        # REJECT revisions that make things WORSE
+        if completeness_score < 0.5 or critically_short:
+            print(f"\n{'🚨'*40}")
+            print(f"CRITICAL ERROR: PAPER IS SEVERELY INCOMPLETE!")
+            print(f"{'🚨'*40}")
             print(f"Completeness score: {completeness_score*100:.1f}%")
             print(f"Missing sections: {', '.join(missing_sections) if missing_sections else 'Unknown'}")
             print(f"Paper length: {len(new_paper_content):,} characters")
-            print(f"\nTHIS IS A DISASTROUS TRUNCATION - REVISION REJECTED!")
+            print(f"Word count: ~{new_word_count} words (minimum: 2000)")
+            print(f"Reference count: {new_ref_count} (minimum: 5)")
+            print(f"\n🚫 THIS IS A DISASTROUS TRUNCATION - REVISION REJECTED!")
             print(f"The AI response was cut off before completing the paper.")
-            print(f"{'!'*80}\n")
-            # Clear file_changes to prevent applying incomplete content
+            print(f"KEEPING ORIGINAL CONTENT TO PREVENT DATA LOSS.")
+            print(f"{'🚨'*40}\n")
+            file_changes = None
+        elif reference_regression or length_regression:
+            print(f"\n{'⚠️ '*40}")
+            print(f"WARNING: REVISION MAKES PAPER WORSE!")
+            print(f"{'⚠️ '*40}")
+            if reference_regression:
+                print(f"❌ Reference REGRESSION: {current_ref_count} → {new_ref_count} (lost {current_ref_count - new_ref_count} references)")
+            if length_regression:
+                print(f"❌ Length REGRESSION: ~{current_word_count} → ~{new_word_count} words ({(new_word_count/current_word_count - 1)*100:.1f}% change)")
+            print(f"\n🚫 REJECTING this revision to prevent quality degradation.")
+            print(f"KEEPING ORIGINAL CONTENT.")
+            print(f"The LLM needs to ADD content, not DELETE it!")
+            print(f"{'⚠️ '*40}\n")
             file_changes = None
         elif not is_complete:
             print(f"\n{'='*80}")
-            print(f"⚠ WARNING: Paper structure incomplete!")
+            print(f"⚠ WARNING: Paper structure incomplete but acceptable")
             print(f"{'='*80}")
             print(f"Completeness score: {completeness_score*100:.1f}%")
             print(f"Missing sections: {', '.join(missing_sections)}")
-            print(f"Proceeding with caution...")
+            print(f"Proceeding with this revision (quality maintained)...")
             print(f"{'='*80}\n")
+        else:
+            print(f"✓ Validation passed: Paper is complete and improved")
+            
+        # Warn if still below target
+        if new_ref_count < 15:
+            print(f"\n⚠️ NOTE: Paper still has only {new_ref_count} references (target: 15-20)")
+            print(f"   Next iteration should focus on adding more citations.\n")
+        if new_word_count < 5000:
+            print(f"\n⚠️ NOTE: Paper still has only ~{new_word_count} words (target: 5000-8000)")
+            print(f"   Next iteration should focus on expanding content.\n")
     
     # PRINT REVIEW FEEDBACK
     print(f"\n{'='*80}")
@@ -128,16 +230,134 @@ def run_review_revision_step(
     print(review)
     print(f"{'='*80}\n")
 
+    # ═══════════════════════════════════════════════════════════════
+    # LAYER 1: Initialize Content Guardian (Multi-layer Protection)
+    # ═══════════════════════════════════════════════════════════════
+    guardian = ContentGuardian(project_dir)
+    
+    # Create checkpoint BEFORE any changes
+    print(f"\n🛡️  Creating safety checkpoint before applying changes...")
+    checkpoint = guardian.create_checkpoint(paper_path, f"iteration_{iteration}_pre")
+    print(f"✓ Checkpoint created: {Path(checkpoint).name}\n")
+
     original_content = paper_path.read_text(encoding="utf-8", errors="ignore") if output_diffs else None
 
+    # If parser did not extract explicit file contents, but the combined response contains
+    # unified diffs, attempt to apply them directly to current_tex to synthesize new content.
+    if not file_changes:
+        try:
+            from utils.diff_utils import is_diff_format, apply_diffs_to_files
+            if is_diff_format(combined_response):
+                print("    Detected unified diff blocks in combined response – attempting to apply...")
+                file_contents = { 'paper.tex': current_tex }
+                modified_files, success, msg = apply_diffs_to_files(file_contents, combined_response)
+                if success and 'paper.tex' in modified_files:
+                    file_changes = { 'paper.tex': modified_files['paper.tex'] }
+                    print(f"    ✓ Diff from combined response applied to paper.tex: {msg}")
+                else:
+                    print(f"    ⚠ Failed to apply diff from combined response: {msg}")
+        except Exception as e:
+            print(f"    ⚠ Error while attempting to apply diff from combined response: {e}")
+
     if file_changes:
+        # ═══════════════════════════════════════════════════════════════
+        # GUARDIAN DISABLED - Skip validation, apply changes directly
+        # ═══════════════════════════════════════════════════════════════
+        print(f"\n⚠️  Content Guardian is DISABLED - applying changes without validation\n")
+        
         changes_applied = _apply_file_changes(file_changes, project_dir, config)
         if not changes_applied:
             print("⚠ Content protection prevented revision - using fallback revision method")
             # Fall back to the simple revision method if changes were rejected
             file_changes = None
         else:
-            if output_diffs and original_content is not None:
+            # POST-REVISION VALIDATION: Check if critical issues were actually fixed
+            if 'paper.tex' in file_changes:
+                import re
+                new_paper_content = file_changes['paper.tex']
+                
+                # Count references in revised paper
+                ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', new_paper_content))
+                
+                # Estimate word count
+                content_after_begin = new_paper_content.split('\\begin{document}')[-1] if '\\begin{document}' in new_paper_content else new_paper_content
+                # Use direct word count
+                word_count = len(re.findall(r'\b\w+\b', content_after_begin))
+                
+                print(f"\n{'='*80}")
+                print(f"POST-REVISION VALIDATION - Iteration {iteration}")
+                print(f"{'='*80}")
+                print(f"📊 REVISED PAPER STATISTICS:")
+                print(f"   - Estimated word count: ~{word_count} words (target: 5000-8000)")
+                print(f"   - Reference count: {ref_count} references (target: 15-20)")
+            if not changes_applied:
+                print("⚠ Content protection prevented revision - using fallback revision method")
+                # Fall back to the simple revision method if changes were rejected
+                file_changes = None
+            else:
+                # POST-REVISION VALIDATION: Check if critical issues were actually fixed
+                if 'paper.tex' in file_changes:
+                    import re
+                    new_paper_content = file_changes['paper.tex']
+                    
+                    # Count references in revised paper
+                    ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', new_paper_content))
+                    
+                    # Estimate word count
+                    content_after_begin = new_paper_content.split('\\begin{document}')[-1] if '\\begin{document}' in new_paper_content else new_paper_content
+                    # Use direct word count
+                    word_count = len(re.findall(r'\b\w+\b', content_after_begin))
+                    
+                    print(f"\n{'='*80}")
+                    print(f"POST-REVISION VALIDATION - Iteration {iteration}")
+                    print(f"{'='*80}")
+                    print(f"📊 REVISED PAPER STATISTICS:")
+                    print(f"   - Estimated word count: ~{word_count} words (target: 5000-8000)")
+                    print(f"   - Reference count: {ref_count} references (target: 15-20)")
+                    
+                    validation_warnings = []
+                    if ref_count < 15:
+                        validation_warnings.append(f"⚠️ WARNING: Still only {ref_count} references (need 15-20)")
+                        validation_warnings.append(f"   The AI did NOT add enough references!")
+                    else:
+                        print(f"   ✓ Reference count meets requirements")
+                    
+                    if word_count < 3000:
+                        validation_warnings.append(f"⚠️ WARNING: Paper still too short (~{word_count} words)")
+                        validation_warnings.append(f"   The AI did NOT expand content enough!")
+                    else:
+                        print(f"   ✓ Word count is improving")
+                    
+                    if validation_warnings:
+                        print(f"\n{'!'*80}")
+                        print(f"VALIDATION ISSUES DETECTED:")
+                        print(f"{'!'*80}")
+                        for warning in validation_warnings:
+                            print(warning)
+                        print(f"\n⚠️ The revision was applied but critical issues remain.")
+                        print(f"   Next iteration must address these issues more aggressively.")
+                        print(f"{'!'*80}\n")
+                        
+                        # ESCALATING EMPHASIS: Track reference deficit across iterations
+                        if ref_count < 15:
+                            ref_deficit = 15 - ref_count
+                            print(f"\n{'🔴'*40}")
+                            print(f"📚 REFERENCE DEFICIT ALERT - ITERATION {iteration}")
+                            print(f"{'🔴'*40}")
+                            print(f"Current references: {ref_count}")
+                            print(f"Required references: 15-20")
+                            print(f"MISSING: {ref_deficit} more references needed!")
+                            print(f"\n⚠️ CRITICAL: The next review MUST emphasize adding references.")
+                            print(f"   The LLM will be instructed with escalating urgency.")
+                            print(f"   Iteration {iteration+1} will include PRIORITY directive for bibliography.")
+                            print(f"{'🔴'*40}\n")
+                    else:
+                        print(f"\n✓ All validation checks passed!")
+                    print(f"{'='*80}\n")
+    
+    # If file_changes is None or changes_applied failed, use fallback
+    if file_changes is None:
+        if output_diffs and original_content is not None:
                 new_content = paper_path.read_text(encoding="utf-8", errors="ignore")
                 _save_iteration_diff(original_content, new_content, project_dir, iteration, "paper.tex")
                 
@@ -211,11 +431,60 @@ def run_review_revision_step(
             elif use_diff_mode:
                 print(f"    ⚠ Expected diff format but got full content, using as-is")
             
+            # ═══════════════════════════════════════════════════════════════
+            # CRITICAL: Validate fallback revision for minimum content requirements
+            # ═══════════════════════════════════════════════════════════════
+            import re
+            revised_ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', revised))
+            revised_word_count = len(re.findall(r'\b\w+\b', revised.split('\\begin{document}')[-1] if '\\begin{document}' in revised else revised))
+            current_ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', current_tex))
+            current_word_count = len(re.findall(r'\b\w+\b', current_tex.split('\\begin{document}')[-1] if '\\begin{document}' in current_tex else current_tex))
+            
+            print(f"\n{'='*80}")
+            print(f"📊 FALLBACK REVISION VALIDATION - Iteration {iteration}")
+            print(f"{'='*80}")
+            print(f"Current: ~{current_word_count} words, {current_ref_count} refs")
+            print(f"Revised: ~{revised_word_count} words, {revised_ref_count} refs")
+            print(f"Change: {revised_word_count - current_word_count:+d} words, {revised_ref_count - current_ref_count:+d} refs")
+            print(f"{'='*80}\n")
+            
+            # Check for regressions in fallback path too
+            # ONLY check for actual regressions (lost content), not minimum thresholds
+            # Allow papers to grow from minimal state if content protection is disabled
+            enable_protection = getattr(config, 'enable_content_protection', True)
+            
+            fallback_regression = (revised_ref_count < current_ref_count - 2 or 
+                                  revised_word_count < current_word_count * 0.8)
+            
+            # If content protection is disabled, allow any forward progress
+            if not enable_protection:
+                # Only reject if we're actually LOSING content
+                fallback_regression = (revised_ref_count < current_ref_count - 5 or 
+                                      revised_word_count < current_word_count * 0.5)
+            
+            if fallback_regression:
+                print(f"\n{'🚫'*40}")
+                print(f"FALLBACK REVISION REJECTED - QUALITY REGRESSION DETECTED")
+                print(f"{'🚫'*40}")
+                if revised_ref_count < current_ref_count - 2:
+                    print(f"❌ Lost references: {current_ref_count} → {revised_ref_count}")
+                if revised_word_count < current_word_count * 0.8:
+                    print(f"❌ Paper shortened: ~{current_word_count} → ~{revised_word_count} words")
+                print(f"\n🛡️  KEEPING ORIGINAL CONTENT to prevent data loss.")
+                print(f"The LLM response appears truncated or of lower quality than current paper.")
+                print(f"{'🚫'*40}\n")
+                return review, decision
+            
             # Apply content protection to fallback revision
             from utils.content_protection import ContentProtector
             
             enable_protection = getattr(config, 'enable_content_protection', True)
             auto_approve = getattr(config, 'auto_approve_safe_changes', False)
+            
+            # ═══════════════════════════════════════════════════════════════
+            # GUARDIAN DISABLED - Skip validation
+            # ═══════════════════════════════════════════════════════════════
+            print(f"\n⚠️  Guardian DISABLED - applying fallback revision without validation")
             
             if enable_protection:
                 protector = ContentProtector(project_dir)

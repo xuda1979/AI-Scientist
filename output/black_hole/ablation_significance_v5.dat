@@ -1,0 +1,11 @@
+scenario metric t_stat p_value q_value effect_size
+P0-minus rmse_page 46.66 0.0000 0.0000 6.60
+P0-minus max_g2_amp 0.00 1.0000 1.0000 0.00
+P0-plus rmse_page 52.58 0.0000 0.0000 7.44
+P0-plus max_g2_amp 0.00 1.0000 1.0000 0.00
+weak-scramble rmse_page -0.02 0.9827 1.0000 -0.00
+weak-scramble max_g2_amp 0.00 1.0000 1.0000 0.00
+strong-eps rmse_page 0.02 0.9848 1.0000 0.00
+strong-eps max_g2_amp 263.99 0.0000 0.0000 37.33
+gentle-eps rmse_page 0.00 0.9997 1.0000 0.00
+gentle-eps max_g2_amp -88.00 0.0000 0.0000 -12.44

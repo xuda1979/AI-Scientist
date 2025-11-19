@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-10-29T13:09:53.960549",
+  "file": "output\\black_hole\\paper.tex",
+  "backup": "output\\black_hole\\backups\\paper.tex_pre_revision_130953",
+  "metrics": {
+    "word_count": 6933,
+    "char_count": 61497,
+    "section_count": 19,
+    "subsection_count": 23,
+    "figure_count": 5,
+    "table_count": 4,
+    "equation_count": 15,
+    "citation_count": 35,
+    "paragraph_count": 153,
+    "page_estimate": 27.732
+  }
+}

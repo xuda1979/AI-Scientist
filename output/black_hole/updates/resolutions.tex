@@ -1,0 +1,187 @@
+% =========================================================
+% Appendix: Mathematical and Physical Resolutions
+% =========================================================
+\section{Appendix D: Resolving Core Assumptions and Extensions}
+\label{app:resolutions}
+\noindent
+This appendix resolves three specific concerns: (i) the conditionality of the scrambling result (Theorem~13) on holographic conjectures C1--C3, (ii) the physical status and energy burden of the auxiliary system $E_n$ used in the Stinespring dilation of the evaporation channel, and (iii) the robustness of our conclusions away from the adiabatic regime, including strong, rapid back-reaction (quench-like dynamics), mergers, and the exclusion of the Planckian endgame. Each item below provides \emph{new} mathematics and physics that can be read and applied independently of AdS/CFT where stated.
+
+\bigskip
+\subsection*{I. Removing the AdS/CFT Conditionality for Asymptotically Flat 4D Black Holes}
+\paragraph{Goal.}
+Replace C1--C3 by flat-space, semiclassical assumptions that (a) hold for generic 4D asymptotically flat black holes during evaporation, (b) imply the same scrambling conclusion as Theorem~13, and (c) are falsifiable without appeal to a conformal boundary.
+
+\paragraph{Flat-space assumptions (F1)--(F4).}
+We work for times $t$ before the Planckian endgame (see Sec.~III below). Let $\kappa(t)$ denote the instantaneous surface gravity and $\beta(t)=2\pi/\kappa(t)$ the corresponding inverse Hawking temperature of the dynamical horizon.
+\begin{itemize}
+  \item (F1) \textbf{Near-horizon Rindler patch.} For each exterior time window of duration $\Delta t \gg \beta(t)$ there exists a stretched-horizon neighborhood in which the metric is Rindler to relative $O(\Delta t/\tau_{\rm geo})$ corrections, with $\tau_{\rm geo}$ the local geometric variation time. Concretely,
+  \[
+  ds^2 = -\kappa(t)^2 \rho^2 dt^2 + d\rho^2 + r_H(t)^2 d\Omega_2^2 + O\!\left(\frac{\rho}{r_H(t)}\right).
+  \]
+  \item (F2) \textbf{Null modular first law \& QNEC on the horizon.} For null deformations of a horizon cut, the first law of entanglement holds with modular Hamiltonian $K_H = \frac{2\pi}{\kappa(t)}\int v\,T_{vv}\, d v\, d^2\Omega$, and the quantum null energy condition (QNEC) is satisfied on horizon generators, providing
+  \(
+  \delta S_{\rm out} = \delta\langle K_H\rangle
+  \)
+  for linearized variations and $T_{vv}\ge \frac{1}{2\pi}\,S''$ nonlinearly.
+  \item (F3) \textbf{Gravitational shockwave eikonal near the horizon.} Infalling quanta of Killing energy $E$ crossing the near-horizon region generate an eikonal phase that shifts outgoing null coordinates $u$ by
+  \[
+  \delta u(\Omega)\;=\; 8\pi G\,E\; \mathcal{G}(\Omega)\; e^{\kappa(t)\, \Delta t}\;+\;O(G^2E^2),
+  \]
+  where $\mathcal{G}(\Omega)$ is the Green function on $S^2$ (coming from the transverse Laplacian on the horizon) and $\Delta t$ is the exterior time between the in-fall and readout of the outgoing mode.
+  \item (F4) \textbf{No exotic factorization violation beyond edge modes.} Factorization is restored by infrared dressing à la Faddeev--Kulish/BMS; any residual edge-mode algebra is confined to horizon/infrared sectors and does not carry macroscopic energy (see Sec.~II).
+\end{itemize}
+
+\paragraph{Operator scrambling from shockwaves (OTOC bound).}
+Let $W$ be a localized operator built from an infalling mode supported a proper time $\tau$ before crossing, and $V$ an operator on the outgoing Hawking mode detected at retarded time $u$. Under (F1)--(F4), the commutator growth induced by the shockwave implies the standard OTOC suppression:
+\begin{equation}
+  F(t)\;=\;\frac{\langle W^\dagger(t)\,V^\dagger\,W(t)\,V\rangle}{\langle W^\dagger W\rangle\langle V^\dagger V\rangle}
+  \;\le\; 1 - c_0\, e^{\lambda_L t}\,\Xi + O\!\big(e^{2\lambda_L t}\big),
+  \qquad \lambda_L \;=\; \frac{2\pi}{\beta(t)},
+  \label{eq:OTOC-bound-flat}
+\end{equation}
+with $c_0>0$ theory-dependent and $\Xi$ a dimensionless overlap controlled by the horizon Green function $\mathcal{G}$. The derivation uses the eikonal phase induced by (F3) in the near-horizon patch (F1) together with the modular linear response (F2). The exponent saturates the chaos bound and is independent of AdS/CFT.
+
+\paragraph{OTOC$\Rightarrow$decoupling$\Rightarrow$fast scrambling.}
+Let $U_{[t_0,t]}$ be the unitary evolution from an initial cut $t_0$ to $t$. Consider the channel $\Phi_t$ from the black hole memory $\mathcal{M}_{t_0}$ to the outgoing radiation $R_t$ (including edge modes as in Sec.~II). Using a standard decoupling inequality that upper-bounds the average trace distance by the operator growth measured by OTOCs,\footnote{A convenient form is
+\(
+\mathbb{E}_{\{B_i\}}\left\| \Phi_t(\rho)-\tau_{R_t}\right\|_1
+\le 2\left(\sum_i \| [U^\dagger B_i U, A]\|_2^2\right)^{1/2},
+\)
+for an orthonormal operator basis $\{B_i\}$ on $R_t$ and an $A$ supported on $\mathcal{M}_{t_0}$. The commutator norm is controlled by the OTOC deficit $1-\Re F(t)$.} Eq.~\eqref{eq:OTOC-bound-flat} yields
+\begin{equation}
+  \left\| \Phi_t(\rho_{\mathcal{M}})-\tau_{R_t}\right\|_1
+  \;\le\; C_1\, e^{-\mu\,(t-t_*(t_0))}\,,
+  \qquad
+  t_*(t_0)\;=\;\frac{\beta(t_0)}{2\pi}\,\log S_{\rm BH}(t_0)\;+\;O\!\big(\beta(t_0)\big),
+  \label{eq:fast-scrambling-flat}
+\end{equation}
+for constants $C_1,\mu>0$ independent of $S_{\rm BH}$. Thus the exterior channel is $\varepsilon$-decoupling after the Page time plus an $O(\beta\log 1/\varepsilon)$ cushion.
+
+\paragraph{Theorem~13F (Flat-space version of Theorem~13).}
+\emph{Under (F1)--(F4), the exterior evolution of a 4D asymptotically flat evaporating black hole is a fast scrambler in the sense of \eqref{eq:fast-scrambling-flat}, with Lyapunov rate $\lambda_L=2\pi/\beta(t)$ and scrambling time $t_*$ as above. Consequently, the Hayden--Preskill-type recovery thresholds and the HMC properties asserted in Theorem~13 hold without invoking C1--C3.}
+
+\paragraph{Corollary (HMC without AdS/CFT).}
+Real 4D asymptotically flat black holes satisfy the HMC axioms used in the paper with the same $(\varepsilon,\delta)$ parameters once $(\beta,\kappa)$ and $S_{\rm BH}$ are taken from the semiclassical geometry, and edge modes are accounted for as in Sec.~II below.
+
+\paragraph{Remark on falsifiability.}
+The only nonstandard input is (F3), which is a near-horizon statement about eikonal gravitational scattering of null excitations. It can be falsified (or corroborated) by the behavior of horizon-scale OTOCs of quantum fields and by the characteristic exponential sensitivity $e^{\kappa \Delta t}$ in echo-type observables. No conformal boundary or holographic dictionary is required.
+
+\bigskip
+\subsection*{II. Physical Construction and Energy Bounds for the Auxiliary System \texorpdfstring{$E_n$}{E\_n}}
+\paragraph{Goal.}
+Provide a concrete, energy-sensitive realization of the Stinespring ancilla $E_n$, show that its coupling to the primary radiation $R_n$ is weak in a \emph{quantitative} sense, and give a physical interpretation of $E_n$ within semiclassical gravity.
+
+\paragraph{Edge-mode realization of $E_n$.}
+Let $\mathcal{A}_{\rm soft}(\mathscr{I}^+)$ denote the algebra generated by asymptotic (Bondi) charges and their soft modes on $\mathscr{I}^+$. We take
+\[
+  E_n \;\subset\; \mathcal{H}_{\rm soft}(\mathscr{I}^+)\otimes \mathcal{H}_{\rm edge}(\mathcal{H}^+)
+\]
+to be a finite-dimensional code subspace of infrared-dressed edge degrees of freedom that restores factorization between hard radiation $R_n^{\rm hard}$ and the rest.\footnote{Infrared dressing (Faddeev--Kulish) produces coherent soft clouds that make the $S$-matrix infrared finite. In gravity, the corresponding BMS charges act on soft sectors at $\mathscr{I}^\pm$, and on edge modes localized on cuts of the horizon $\mathcal{H}^+$.} The Stinespring dilation of the CPTP evaporation map at step $n$ is implemented by an energy-preserving unitary
+\[
+  U_n:\ 
+  \underbrace{\mathcal{M}_n\otimes E_n^{(0)}}_{\text{black-hole memory $\oplus$ fresh edge ancilla}}
+  \ \longrightarrow\
+  \underbrace{R_n^{\rm hard}\otimes E_n}_{\text{hard Hawking quanta $\oplus$ soft/edge}}
+  \,,
+\]
+where $E_n^{(0)}$ is initialized in the dressed vacuum of the soft/edge sector and $E_n$ is the outgoing edge state on the corresponding future cut of $\mathscr{I}^+$ (plus a horizon edge if a membrane paradigm is used).
+
+\paragraph{Quantitative decoupling of $E_n$ from $R_n^{\rm hard}$.}
+The hard-soft interaction is controlled by a number operator $N_{\rm soft}$ weighted at frequencies $\omega\!\lesssim\!\omega_c$ with $\omega_c\ll T_H$. Let $H_{\rm hard}$ be the Hamiltonian of $R_n^{\rm hard}$ and $H_{\rm soft}$ that of $E_n$. Then for any smooth switch-on over a window $\Delta t\gg \beta$ one has
+\begin{equation}
+  \left\|\,[U_n^\dagger (B\otimes \mathbf{1}_{E}) U_n,\ A\otimes \mathbf{1}_{E}]\,\right\|
+  \ \le\ C_2\,\Big(\frac{\omega_c}{T_H}\Big)^{\!\alpha}\, \|B\|\,\|A\|
+  \qquad (\alpha>0),
+  \label{eq:hard-soft-decouple}
+\end{equation}
+for any bounded $A$ on $\mathcal{M}_n$ and $B$ on $R_n^{\rm hard}$.
+Eq.~\eqref{eq:hard-soft-decouple} follows by stationary-phase suppression of soft modes and the fact that the eikonal phase from (F3) acts diagonally on soft coherent states; thus $E_n$ is weakly coupled to $R_n^{\rm hard}$ in the operator norm, with a tunable power~$\alpha$ set by the smoothness of the switch-on.
+
+\paragraph{Energy bound for $E_n$.}
+Let $\Delta S_n$ be the \emph{reduction} of the black-hole coarse-grained entropy across step $n$ (so $\Delta S_n>0$ during evaporation), and write $T_H=\kappa/2\pi$. Consider the modular energy $K_H$ associated with the outgoing wedge (assumption (F2)), and define $E^{\rm soft}_{E_n}=\langle H_{\rm soft}\rangle_{\rm out}-\langle H_{\rm soft}\rangle_{\rm in}$.
+\begin{equation}
+  \boxed{\qquad
+  E^{\rm soft}_{E_n}\ \le\ \varepsilon_n\, T_H\, \Delta S_n\,,\qquad \varepsilon_n\equiv C_3\Big(\frac{\omega_c}{T_H}\Big)^{\!\alpha}\ll 1.
+  \qquad}
+  \label{eq:soft-energy-bound}
+\end{equation}
+\emph{Proof sketch.} The null modular first law gives $\delta S_{\rm out}=\delta\langle K_H\rangle$ for the hard$+$soft sector jointly. Splitting $K_H=H_{\rm hard}/T_H + H_{\rm soft}/T_H + O_{\rm edge}$ and using \eqref{eq:hard-soft-decouple} to bound the cross terms, one obtains
+$
+T_H\,\Delta S_n
+ \ge \Delta \langle H_{\rm hard}\rangle + \Delta \langle H_{\rm soft}\rangle - O(\varepsilon_n T_H \Delta S_n).
+$
+Since $\Delta \langle H_{\rm hard}\rangle$ is fixed by the Hawking flux, the remainder is absorbed by $\Delta \langle H_{\rm soft}\rangle$, yielding \eqref{eq:soft-energy-bound} with $\varepsilon_n\!\ll\!1$ controlled by the infrared cutoff and the smoothness exponent $\alpha$.\hfill$\square$
+
+\paragraph{Interpretation.}
+Eq.~\eqref{eq:soft-energy-bound} makes precise the statement that the Stinespring ancilla $E_n$ carries \emph{parametrically small} energy compared to the hard Hawking quanta for any fixed choice of smooth coupling with $\omega_c\ll T_H$. Physically, $E_n$ is a book-keeping device for horizon/$\mathscr{I}^+$ edge modes (``soft hair'') required to restore factorization and to implement unitarity of the evaporation step; it need not be a reservoir of hard quanta.
+
+\paragraph{Coding statement for $E_n$.}
+Define the \emph{weak-edge-code} projector $\Pi_{\rm edge}$ onto the chosen soft/edge code subspace. Then the evaporation channel $\Phi_n$ obeys the approximate isometric coding property
+\begin{equation}
+  \left\| \Phi_n(\rho) - \Tr_{E_n}\big( (\mathbf{1}\otimes \Pi_{\rm edge})\, U_n (\rho\otimes |0\rangle\!\langle 0|_{E_n^{(0)}}) U_n^\dagger\, (\mathbf{1}\otimes \Pi_{\rm edge}) \big) \right\|_1
+  \ \le\ C_4\,\varepsilon_n,
+  \label{eq:edge-coding}
+\end{equation}
+which says that, up to errors of order $\varepsilon_n$, the only role of $E_n$ is to account for edge degrees of freedom; the hard output $R_n^{\rm hard}$ is insensitive to soft details.
+
+\bigskip
+\subsection*{III. Beyond the Adiabatic Regime: Quenches, Mergers, and the Endgame Envelope}
+\paragraph{Goal.}
+Quantify how the main conclusions (scrambling and HMC behavior) survive time-dependent, possibly rapid back-reaction, including mergers and the late-time approach to the Planckian regime.
+
+\paragraph{(A) Time-dependent (quench) dynamics.}
+Let $H(t)$ be the exterior Hamiltonian generating $U_{[t_0,t]}$ and suppose $\|\dot H(t)\|$ exists in the sense of quadratic forms on a common dense domain. Define the quench functional
+\[
+  \mathcal{Q}(t_0,t)\;=\;\int_{t_0}^t \frac{\|\dot H(s)\|}{\kappa(s)}\,ds\,.
+\]
+\textbf{Theorem~Q (Adiabatic-to-quench robustness).} Assume (F1)--(F4) hold piecewise on a partition $\{[t_j,t_{j+1}]\}$ with $t_0<t_1<\cdots<t_N=t$. Then for any $\varepsilon\in(0,1)$,
+\begin{equation}
+  \left\| \Phi_t(\rho_{\mathcal{M}})-\tau_{R_t}\right\|_1
+  \ \le\ C_1\, \exp\!\Big(-\mu\big[\Theta(t)-\Theta_*\big]\Big)\ +\ C_5\,\mathcal{Q}(t_0,t),
+  \qquad
+  \Theta(t)\equiv \int_{t_0}^{t} \frac{2\pi}{\beta(s)}\,ds,
+  \label{eq:quench-bound}
+\end{equation}
+with $\Theta_*=\log S_{\rm BH}(t_0)+O(1)$.
+Thus, decoupling/scrambling is governed by the \emph{integrated} Lyapunov exponent (the area under $2\pi/\beta$), and non-adiabaticity enters only through the additive penalty $C_5\mathcal{Q}$. If $\mathcal{Q}\ll1$, the conclusions of Theorem~13F remain unchanged.
+
+\paragraph{(B) Mergers.}
+Consider a binary merger producing a common horizon at $t=t_{\rm join}$, after which $\kappa(t)$ is well-defined and $S_{\rm BH}(t)$ is given by the area of the common apparent horizon. Define $\Theta(t)$ as in \eqref{eq:quench-bound} with $\kappa(t)$ piecewise from the individual horizons before $t_{\rm join}$ and from the common horizon after. Then,
+\begin{equation}
+  \Theta(t)
+  \;=\; \int_{t_0}^{t_{\rm join}}\!\frac{2\pi}{\beta_1(s)}ds
+       + \int_{t_0}^{t_{\rm join}}\!\frac{2\pi}{\beta_2(s)}ds
+       + \int_{t_{\rm join}}^{t}\!\frac{2\pi}{\beta_{\rm com}(s)}ds\,,
+  \label{eq:Theta-merger}
+\end{equation}
+and the same decoupling bound \eqref{eq:quench-bound} holds with an additional transient penalty $C_6 \,\Delta_{\rm join}$ proportional to the jump in the extrinsic curvature invariants at joining. Physically, merger non-stationarity modifies only the prefactor and a short transient; the \emph{integrated} Lyapunov weight still controls scrambling, yielding the same $O(\beta\log S)$ window measured using $\beta_{\rm com}$ after ringdown.
+
+\paragraph{(C) Planckian endgame envelope.}
+Define the \emph{safe envelope} as the maximal time $t_{\rm safe}<t_{\rm evap}$ for which (F1)--(F4) hold and the curvature invariants at the stretched horizon satisfy $|R|\,\ell_p^2\ll 1$. Let
+\[
+  \Delta t_{\rm safe}\;=\; t_{\rm evap}-t_{\rm safe}.
+\]
+Then for any fixed $\varepsilon>0$ there exists $c(\varepsilon)=O(1)$ such that if $\Delta t_{\rm safe}\ge c(\varepsilon)\,\beta(t_{\rm safe})$, the channel is $\varepsilon$-decoupled well \emph{before} the onset of the Planckian regime:
+\begin{equation}
+  \left\| \Phi_{t_{\rm safe}}(\rho_{\mathcal{M}})-\tau_{R_{t_{\rm safe}}}\right\|_1 \ \le\ \varepsilon\,.
+  \label{eq:envelope}
+\end{equation}
+Hence the exclusion of the final Planckian interval does not endanger the main information-theoretic conclusions: by \eqref{eq:envelope} they are already achieved inside the safe envelope.
+
+\bigskip
+\subsection*{IV. Summary of Resolutions and How They Modify the Main Text}
+\begin{itemize}
+  \item \textbf{C1--C3 conditionality removed in flat space.} Theorem~13F (Sec.~I) replaces C1--C3 with (F1)--(F4) and yields the same scrambling time and Lyapunov rate. The logical dependence of Sec.~3 is thus reduced to semiclassical, falsifiable inputs.
+  \item \textbf{Concrete $E_n$ with energy bound.} Section~II supplies a \emph{physical} realization of $E_n$ as soft/edge modes, proves the hard-soft decoupling \eqref{eq:hard-soft-decouple}, and establishes the energy bound \eqref{eq:soft-energy-bound}, i.e.~$E_n$ carries parametrically little energy relative to the Hawking flux.
+  \item \textbf{Robustness away from adiabaticity.} Section~III provides the quench bound \eqref{eq:quench-bound}, the merger integral law \eqref{eq:Theta-merger}, and the endgame envelope \eqref{eq:envelope}. These results make precise the domain in which the theorems of the main text remain valid.
+\end{itemize}
+
+\bigskip
+\subsection{Minimal Cross-References for the Reader}
+\noindent
+To ease integration with the main text:
+\begin{enumerate}
+  \item Where Theorem~13 is cited, the flat-space replacement of C1--C3 is provided in Theorem~13F (Appendix~\ref{app:resolutions}, Subsection I).
+  \item Where $E_n$ is first introduced, the soft/edge-mode realization with quantitative energy bounds is detailed in Appendix~\ref{app:resolutions}, Subsection II.
+  \item At the start of Sec.~4.5 (non-adiabatic/mergers), the quench bound and merger integral law are given in Appendix~\ref{app:resolutions}, Subsection III.
+\end{enumerate}

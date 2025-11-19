@@ -1,0 +1,1 @@
+{"prompt": "生成一个含有三个量子比特的量子电路，为第一和第三量子比特施加Pauli-X门，然后测量所有量子比特。", "code": "from qiskit import QuantumCircuit\nqc = QuantumCircuit(3, 3)\nqc.x(0)\nqc.x(2)\nqc.measure(range(3), range(3))\nprint(qc)"}

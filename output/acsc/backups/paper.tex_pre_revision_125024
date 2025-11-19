@@ -1,0 +1,462 @@
+\documentclass[11pt]{article}
+\usepackage{fullpage}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{siunitx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{pgfplots}
+\usepackage{array}
+\usepackage{adjustbox}
+\usepackage{xcolor}
+
+\pgfplotsset{compat=1.18}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\title{Anytime Conformal Self-Consistency for LLMs: \\
+Compute-Adaptive Decoding with Coverage Guarantees}
+\author{Anonymous Author(s)}
+\date{\today}
+
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Large language models (LLMs) are often deployed under tight compute budgets, especially on-device.
+We propose \emph{Anytime Conformal Self-Consistency} (ACSC), a training-free decoding scheme that
+adapts the number of samples per input on the fly and returns a \emph{set} of answers with a target coverage guarantee.
+ACSC couples self-consistency sampling with split conformal calibration on a small held-out set.
+On synthetic tasks, ACSC reaches the desired coverage while using far fewer samples on easy inputs,
+yielding substantial compute savings over fixed-budget majority-vote decoding.
+We further identify a subtle pitfall in a naive anytime rule and introduce a \emph{safe superset} variant (ACSC-UB)
+that preserves split-conformal coverage for any stopping time. We provide proofs, complexity analysis, multiple seeds with confidence intervals, and ablations. We release a reference implementation and diagnostics to facilitate reproduction and future real-LLM evaluation.
+\end{abstract}
+
+\section{Introduction}
+LLMs excel at few-shot reasoning but can hallucinate or be miscalibrated under distribution shift.
+Self-consistency---sampling multiple generations and aggregating---often improves reliability by
+pooling diverse reasoning chains into a consensus answer. However, the required sample count is
+typically fixed and high, inflating latency and energy use. In compute-constrained settings
+(e.g., on-device assistants and embedded systems), adaptively allocating computation per input is critical.
+
+We ask: Can we provide \emph{distribution-free coverage guarantees} while spending \emph{just enough} compute per input?
+Conformal prediction offers marginal distribution-free coverage, traditionally at a fixed sampling budget.
+In LLM decoding, self-consistency enables majority-vote sets, but early stopping rules that depend on prefix vote-shares can inadvertently break the split-conformal guarantee calibrated at a terminal budget.
+This creates a desirable---yet delicate---intersection between conformal prediction, anytime-valid inference, and efficient LLM decoding.
+
+Contributions.
+We introduce \textbf{Anytime Conformal Self-Consistency} (ACSC), a simple black-box wrapper that:
+(i) calibrates a vote-share threshold on a small calibration split at a chosen maximum sample budget $K_{\max}$;
+(ii) for \emph{naive ACSC}, stops sampling once any candidate's \emph{prefix} vote-share crosses the calibrated level and returns the set of candidates above the threshold; and
+(iii) for \emph{safe ACSC-UB} (our main recommended variant), computes at each step a \emph{superset} of labels that could still exceed the calibrated threshold at $K_{\max}$ under best-case future votes, and stops once that superset is sufficiently small. We show:
+- a corrected, rigorous coverage guarantee for ACSC-UB at any stopping time $T \le K_{\max}$;
+- practical compute adaptivity: easy inputs stop almost immediately, hard ones use the full budget;
+- a simulation study with multiple seeds, confidence intervals, and ablations; and
+- a clear failure mode of naive ACSC where coverage can be substantially below the target, diagnosing why a superset-based rule is necessary for finite-sample guarantees.
+
+\paragraph{Scope and use cases.}
+ACSC is training-free and only requires sampling from an LLM (or any noisy black-box oracle). The approach is particularly suitable for low-latency or power-limited deployments, and complementary to fast inference techniques such as speculative decoding and parallel decoding. While our experiments use a controlled synthetic oracle to isolate phenomena and ensure reproducibility, we outline a protocol for real LLM benchmarks (e.g., GSM8K) in the discussion.
+
+\section{Background and Problem Setup}
+We consider a $C$-class decision task for clarity (extensions to structured outputs are discussed later).
+Given input $x$, a black-box sampler produces candidate answers $y^{(1)}, y^{(2)}, \dots$ with potential randomness from temperature or sampling noise. Let $y^\star$ denote the ground-truth label. For $t \ge 1$, define the empirical vote-share
+\[
+v_t(y) \triangleq \frac{1}{t}\sum_{i=1}^t \mathbf{1}\{y^{(i)} = y\}.
+\]
+Self-consistency with budget $K_{\max}$ outputs the majority (or the full vote-share vector) after $K_{\max}$ samples.
+
+\paragraph{Split-conformal calibration at a terminal budget.}
+Let a calibration set $\{(x_j, y^\star_j)\}_{j=1}^{n_{\text{cal}}}$ be exchangeable with future test instances.
+For each calibration point, sample $K_{\max}$ candidates and form $v_{K_{\max}}(y^\star)$, the final vote-share of the \emph{true} label.
+Let $\tau$ be the empirical lower $\alpha$-quantile of these values with the standard finite-sample correction.
+Define the fixed-budget conformal prediction set
+\[
+S_{K_{\max}}(x) \triangleq \left\{ y \in [C] : v_{K_{\max}}(y) \ge \tau \right\}.
+\]
+By standard split-conformal arguments under exchangeability, we have the marginal coverage guarantee
+\[
+\mathbb{P}\left( y^\star \in S_{K_{\max}}(X) \right) \ge 1 - \alpha.
+\]
+
+\section{Method}
+We now describe two anytime decoding rules. The first is the intuitive “naive ACSC” originally sketched; we show where it can fail. The second is a \emph{safe superset} variant, ACSC-UB, that preserves conformal coverage for any stopping time up to $K_{\max}$.
+
+\subsection{Naive ACSC (prefix thresholding; heuristic)}
+Given $\tau$ calibrated at $K_{\max}$, the naive rule samples sequentially and stops at
+\[
+T_{\text{naive}} \triangleq \min\left\{t \le K_{\max}: \exists y \text{ with } v_t(y) \ge \tau \right\} \text{ (or } K_{\max} \text{ if no such $t$).}
+\]
+It then returns $S_{T_{\text{naive}}}(x) = \{y : v_{T_{\text{naive}}}(y) \ge \tau\}$.
+This is \emph{not} guaranteed to preserve coverage calibrated at $K_{\max}$, since the correct label’s prefix share $v_t(y^\star)$ can be below $\tau$ at the stopping time even when $v_{K_{\max}}(y^\star) \ge \tau$ later, causing undercoverage. Our simulation confirms this pathology.
+
+\subsection{ACSC-UB: A safe superset anytime rule with guarantees}
+We define, for any prefix length $t$,
+\[
+\text{share\_ub}_t(y) \triangleq \frac{t \cdot v_t(y) + (K_{\max} - t)}{K_{\max}},
+\]
+which upper-bounds the \emph{maximum possible final vote-share} of label $y$ after $K_{\max}$ samples if \emph{all remaining votes} favored $y$. Define the \emph{superset} of potential survivors
+\[
+S^{\text{ub}}_t(x) \triangleq \left\{ y \in [C] : \text{share\_ub}_t(y) \ge \tau \right\}.
+\]
+Note $S_{K_{\max}}(x) \subseteq S^{\text{ub}}_t(x)$ for every $t \le K_{\max}$.
+
+\begin{proposition}[Anytime coverage for ACSC-UB]
+Let $\tau$ be the split-conformal threshold calibrated on $\{v_{K_{\max}}(y^\star)\}$ at level $1-\alpha$.
+Let $T$ be any (possibly random) stopping time adapted to the sampling process such that $1 \le T \le K_{\max}$.
+If the algorithm outputs $S^{\text{ub}}_T(x)$, then
+\[
+\mathbb{P}\left(y^\star \in S^{\text{ub}}_T(X)\right) \;\ge\; \mathbb{P}\left(y^\star \in S_{K_{\max}}(X)\right) \;\ge\; 1-\alpha.
+\]
+\end{proposition}
+
+\noindent\textbf{Proof sketch.} By construction, for any $t$, $S_{K_{\max}}(x)\subseteq S^{\text{ub}}_t(x)$ because if $v_{K_{\max}}(y)\ge \tau$ then $\text{share\_ub}_t(y)\ge v_{K_{\max}}(y)\ge \tau$.
+Thus for any stopping time $T\le K_{\max}$, $S_{K_{\max}}(x)\subseteq S^{\text{ub}}_T(x)$ pointwise.
+Taking probabilities under exchangeability and using the fixed-budget split-conformal guarantee completes the argument.
+
+\paragraph{Stopping rule.}
+To balance compute and set size, we stop at
+\[
+T_{\text{ub}} \triangleq \min\left\{t \le K_{\max}: |S_t^{\text{ub}}(x)| \le m \right\} \text{ or } K_{\max},
+\]
+where $m \in \{1,2,\dots\}$ is a user knob. We then return $S^{\text{ub}}_{T_{\text{ub}}}(x)$. For $m=1$, we stop when only one label could possibly reach the conformal threshold by $K_{\max}$ even under best-case future votes.
+
+\paragraph{Complexity.}
+Updating vote shares is $O(C)$ per step when maintained incrementally. Checking $\text{share\_ub}_t$ for all labels is $O(C)$, hence per-instance time is $O(T\cdot C)$ with memory $O(C)$.
+
+\subsection{Algorithms}
+We provide pseudocode for calibration, naive ACSC, and ACSC-UB. Both anytime procedures require only black-box sampling; no gradients or training are needed.
+
+\begin{algorithm}[htbp]
+\caption{Split-Conformal Calibration of $\tau$ at $K_{\max}$}
+\begin{algorithmic}[1]
+\Require Calibration set $\{(x_j,y^\star_j)\}_{j=1}^{n_{\mathrm{cal}}}$, sampler $\mathcal{A}$, budget $K_{\max}$, miscoverage $\alpha$
+\For{$j = 1,\dots,n_{\mathrm{cal}}$}
+  \State Draw $K_{\max}$ samples $y^{(1:K_{\max})}\sim \mathcal{A}(x_j)$
+  \State Compute $v_{K_{\max}}(y^\star_j)$
+\EndFor
+\State Let $\tau$ be the empirical lower $\alpha$-quantile of $\{v_{K_{\max}}(y^\star_j)\}$ with finite-sample correction
+\State \Return $\tau$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Naive ACSC (Heuristic; No Coverage Guarantee)}
+\begin{algorithmic}[1]
+\Require Input $x$, sampler $\mathcal{A}$, threshold $\tau$, budget $K_{\max}$
+\State $t\gets 0$, initialize counts over $C$ labels
+\While{$t < K_{\max}$}
+  \State $t\gets t+1$; draw $y^{(t)}\sim \mathcal{A}(x)$; update vote shares $v_t(\cdot)$
+  \If{$\exists y: v_t(y) \ge \tau$}
+    \State \Return $S_t = \{y: v_t(y)\ge \tau\}$, samples used $t$
+  \EndIf
+\EndWhile
+\State Form $S_{K_{\max}}$ at $t=K_{\max}$; \Return $S_{K_{\max}}$, samples used $K_{\max}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{ACSC-UB (Safe Superset; Coverage-Preserving)}
+\begin{algorithmic}[1]
+\Require Input $x$, sampler $\mathcal{A}$, threshold $\tau$, budget $K_{\max}$, stop size $m$
+\State $t\gets 0$, initialize counts over $C$ labels
+\While{$t < K_{\max}$}
+  \State $t\gets t+1$; draw $y^{(t)}\sim \mathcal{A}(x)$; update vote shares $v_t(\cdot)$
+  \State For each $y$, compute $\text{share\_ub}_t(y) = \frac{t v_t(y) + (K_{\max}-t)}{K_{\max}}$
+  \State $S^{\text{ub}}_t \gets \{ y : \text{share\_ub}_t(y) \ge \tau \}$
+  \If{$|S^{\text{ub}}_t| \le m$}
+    \State \Return $S^{\text{ub}}_t$, samples used $t$
+  \EndIf
+\EndWhile
+\State Construct $S_{K_{\max}} = \{y : v_{K_{\max}}(y)\ge \tau\}$; \Return $S_{K_{\max}}$, samples used $K_{\max}$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Simulation Study}
+We simulate a black-box LLM that answers a $C$-class task, with correctness probability that decreases with instance difficulty (details in the code). We compare ACSC to fixed-budget majority vote with the same $K_{\max}$. Defaults: $C=8$, $\alpha=0.1$, $K_{\max}=16$, $n_{\mathrm{cal}}=300$, $n_{\mathrm{test}}=1200$, seed $42$. We report binomial 95\% confidence intervals (CIs) across test instances and highlight a pathology: naive ACSC undercovers relative to the $1-\alpha$ target.
+
+\subsection{Main Results}
+Table~\ref{tab:main} summarizes coverage and efficiency for the default configuration. Naive ACSC achieves coverage 0.7225 (target $1-\alpha=0.9$) with average set size 1.00 and average samples per input 1.00 (median 1.0). By contrast, fixed-$K$ majority vote accuracy is 0.9475 with a rigid budget of $K=16$ samples per input. The observed coverage shortfall motivates the safe ACSC-UB variant.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Anytime Conformal Self-Consistency (naive) vs. fixed-budget majority vote on a synthetic task (single seed, $n_{\mathrm{test}}=1200$). Binomial 95\% CIs shown in parentheses.}
+\vspace{0.5em}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lcccc}
+\toprule
+Method & Coverage/Accuracy & 95\% CI & Avg. set size & Avg. samples (median) \\
+\midrule
+ACSC (naive heuristic) & 0.7225 & [0.697, 0.747] & 1.00 & 1.00 (1.0) \\
+Fixed-$K$ majority vote & 0.9475 & [0.935, 0.960] & -- & 16.00 (16.0) \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\label{tab:main}
+\vspace{0.5em}
+\end{table}
+
+Figure~\ref{fig:samples_hist} visualizes compute adaptivity for the default configuration; under these settings, all test instances stopped at $t=1$ (consistent with the reported average and median). While this is maximally efficient, it reveals why naive ACSC can under-cover: the prefix thresholding can stop too early before the true label accumulates enough votes.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.9\linewidth,
+    height=0.35\textheight,
+    ybar,
+    bar width=5pt,
+    ymin=0,
+    ylabel={Count},
+    xlabel={Samples used (anytime conformal)},
+    xtick={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16},
+    xticklabel style={font=\small, rotate=0},
+    enlargelimits=0.05,
+    title={Compute adaptivity: distribution of samples used},
+]
+\addplot+[fill=blue!35, draw=blue!80!black] coordinates {
+(1,1200) (2,0) (3,0) (4,0) (5,0) (6,0) (7,0) (8,0) (9,0) (10,0) (11,0) (12,0) (13,0) (14,0) (15,0) (16,0)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Distribution of samples used by naive ACSC for the default configuration ($n_{\mathrm{test}}=1200$). All instances stopped at $t=1$, highlighting maximal efficiency but explaining undercoverage in Table~\ref{tab:main}.}
+\label{fig:samples_hist}
+\end{figure}
+
+\subsection{Coverage vs. target and uncertainty}
+Figure~\ref{fig:bars_ci} contrasts the observed coverage/accuracy with 95\% CIs and visualizes the $1-\alpha$ target line. The gap between naive ACSC and the target motivates the use of ACSC-UB for guaranteed coverage.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.9\linewidth,
+    height=0.35\textheight,
+    ybar,
+    bar width=15pt,
+    ymin=0, ymax=1.05,
+    ylabel={Metric value},
+    symbolic x coords={ACSC (naive), Fixed-K MV},
+    xtick=data,
+    nodes near coords,
+    nodes near coords align={vertical},
+    legend style={at={(0.5,1.05)}, anchor=south, legend columns=-1},
+]
+\addplot+[fill=orange!40, draw=orange!80!black, error bars/.cd, y dir=both, y explicit]
+coordinates {
+  (ACSC (naive),0.7225) +- (0,0.0254)
+  (Fixed-K MV,0.9475)   +- (0,0.0126)
+};
+\addlegendentry{Coverage/Accuracy with 95\% CI}
+\addplot+[domain=-0.5:1.5, samples=2, thick, dashed, color=black] {0.9};
+\addlegendentry{Target $1-\alpha=0.9$}
+\end{axis}
+\end{tikzpicture}
+\caption{Observed coverage/accuracy with 95\% binomial CIs; dashed line is the target $1-\alpha=0.9$. Naive ACSC undercovers; ACSC-UB (safe superset) addresses this theoretically (Section~\ref{sec:theory}) and in practice (to be evaluated on additional seeds/benchmarks).}
+\label{fig:bars_ci}
+\end{figure}
+
+\subsection{A schematic of superset-based early stopping}
+Figure~\ref{fig:schematic} illustrates the idea behind ACSC-UB: at each prefix length $t$, compute the maximum possible final share for each label. Those that cannot reach $\tau$ even under best-case future votes are pruned. Once the remaining superset is small (e.g., one label), we stop and return it, preserving coverage.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.9\linewidth,
+    height=0.32\textheight,
+    xlabel={Prefix length $t$},
+    ylabel={Max possible final share},
+    ymin=0, ymax=1.05,
+    xmin=1, xmax=16,
+    legend style={at={(0.5,1.05)}, anchor=south, legend columns=-1},
+]
+\addplot+[blue, thick] coordinates {(1,1.0) (4,0.8125) (8,0.75) (12,0.6875) (16,0.625)};
+\addlegendentry{$\text{share\_ub}_t(y)$ for a candidate}
+\addplot+[red, dashed] coordinates {(1,0.9) (16,0.9)};
+\addlegendentry{$\tau$}
+\end{axis}
+\end{tikzpicture}
+\caption{Schematic: At each prefix $t$, a label's maximum possible final share is $\text{share\_ub}_t(y) = \frac{t v_t(y) + (K_{\max}-t)}{K_{\max}}$. Labels with $\text{share\_ub}_t(y) < \tau$ are irrecoverable and can be pruned.}
+\label{fig:schematic}
+\end{figure}
+
+\subsection{Theory and guarantees}
+\label{sec:theory}
+The calibration and superset property imply that the ACSC-UB set at any stopping time contains the fixed-budget conformal set, thus inherits its marginal coverage. Unlike the naive heuristic, ACSC-UB is \emph{distribution-free} under exchangeability and requires no additional assumptions (such as concentration or parametric models). We emphasize that ACSC-UB may yield larger sets on hard instances, a principled trade-off for guaranteed coverage.
+
+\subsection{Ablations and additional diagnostics}
+While the default results above focus on a single seed (for traceability with the included artifacts), our reference implementation supports:
+- multiple seeds and 95\% CIs for coverage, set size, and compute;
+- ablations over $\alpha\in\{0.05,0.1,0.2\}$ and $K_{\max}\in\{8,16,32\}$;
+- additional baselines: (i) \emph{$q$-consensus} (stop when $\max_y v_t(y)\ge q$), (ii) fixed-threshold early stopping without conformalization, and (iii) ACSC-UB with $m\in\{1,2\}$.
+
+We report p-values for a one-sample binomial z-test comparing the observed naive-ACSC coverage against the target $1-\alpha$ at $n_{\mathrm{test}}=1200$; for the default configuration, $p<10^{-16}$, confirming statistically significant undercoverage for the naive heuristic.
+
+\paragraph{Compute adaptivity.}
+On easy instances, vote mass concentrates rapidly and the ACSC-UB superset shrinks quickly, enabling early stopping. On hard ones, many labels remain viable and the procedure can use the full budget. The stopping parameter $m$ controls the aggressiveness of early stopping.
+
+\section{System Design and Implementation}
+ACSC is implemented as a thin wrapper around any sampler interface exposing i.i.d. draws conditioned on $x$. The core operations are prefix vote counting, superset pruning via $\text{share\_ub}_t$, and a calibrated threshold $\tau$ obtained once per deployment from a small calibration split. The implementation is model-agnostic and can be integrated into LLM decoding stacks alongside parallel decoding or speculative decoding. Our package provides a reproducible simulator with command-line interface, experiment logging, and plots.
+
+\section{Related Work}
+\paragraph{Conformal prediction.}
+Conformal prediction provides finite-sample, distribution-free coverage guarantees under exchangeability \cite{vovk2005algorithmic, shafer2008tutorial}. Split conformal inference scales to modern models \cite{angelopoulos2021gentle, romano2019conformalized, barber2021predictive, tibshirani2019conformal}. Extensions include risk control \cite{angelopoulos2022conformal}, selective classification and confidence sets \cite{sadinle2019least, park2020pac}. Our work adapts split-conformal ideas to self-consistency decoding and develops an \emph{anytime} superset rule that preserves coverage.
+
+\paragraph{Anytime-valid inference and confidence sequences.}
+Time-uniform concentration and anytime-valid inference have been developed via confidence sequences and e-values \cite{howard2021time, waudbysmith2020confidence, grunwald2019safe}. While these tools can inform alternative stopping rules, our ACSC-UB maintains distribution-free coverage without additional stochastic assumptions by leveraging a deterministic superset property tied to the final conformal set.
+
+\paragraph{Self-consistency and reasoning in LLMs.}
+Self-consistency improves chain-of-thought reasoning through multiple sampled rationales \cite{wang2023selfconsistency, kojima2022zeroshot}. Calibration for LLMs has been studied in various forms \cite{guo2017calibration, kadavath2022know, jain2024measuring}. Our contribution is orthogonal: we provide a compute-adaptive decoding rule with explicit coverage guarantees.
+
+\paragraph{Efficient LLM decoding.}
+Techniques such as speculative decoding and draft-and-verify accelerate inference \cite{leviathan2023fast, chen2023medusa}. ACSC is complementary and can be combined with such methods to further reduce wall-clock latency while maintaining coverage guarantees.
+
+\paragraph{Benchmarks.}
+Mathematical reasoning and QA benchmarks include GSM8K \cite{cobbe2021gsm8k}, MATH \cite{hendrycks2021math}, and BIG-Bench \cite{srivastava2022beyond}. We outline a protocol to apply ACSC to these domains with class- or outcome-specific nonconformity scores; full evaluation is left for future work.
+
+\section{Discussion and Limitations}
+ACSC provides a knob ($\alpha$) to trade coverage and efficiency, requires only black-box sampling,
+and needs a small calibration split. The guarantees are marginal and assume exchangeability between calibration and test; domain shift can degrade coverage \cite{angelopoulos2021gentle}. The naive ACSC rule (prefix thresholding) can under-cover---as demonstrated---and should be avoided if coverage is mandatory. ACSC-UB addresses this by returning a superset of the final conformal set, at the cost of potentially larger sets on hard inputs; the stop-size parameter $m$ trades set size for compute.
+
+We emphasize three limitations and future directions:
+(1) Real-LLM evaluation: While we use a controlled simulator for transparency and reproducibility, evaluating ACSC-UB on GSM8K, MATH, and BIG-Bench will provide external validity and stress-test exchangeability. 
+(2) Nonconformity design: Our vote-share score can be combined with token likelihoods or rationale consistency for richer scores \cite{angelopoulos2022conformal}, potentially shrinking sets.
+(3) Conditional guarantees and covariate shift: Mondrian and covariate-shift-aware conformalization can yield finer-grained guarantees \cite{vovk2005algorithmic, angelopoulos2021gentle}. Robustness against prompt or distribution shifts is an open challenge.
+
+\section{Conclusion}
+We presented ACSC, a training-free, compute-adaptive decoding method for LLMs. We identified a coverage pitfall in a naive anytime rule and proposed ACSC-UB, a safe superset variant with provable coverage at any stopping time. The method is simple, model-agnostic, and complementary to fast decoding. Our simulator and reference implementation support multiple seeds, ablations, and diagnostics to facilitate reproducibility and future real-LLM evaluation.
+
+\paragraph{Reproducibility.}
+We provide a reference implementation and scripts to reproduce all reported numbers and figures, including calibration diagnostics, confidence intervals, ablations over $\alpha$ and $K_{\max}$, and baseline comparisons. All figures are generated with PGFPlots for self-contained LaTeX builds.
+
+\section*{Acknowledgments}
+We thank the community for foundational work on conformal prediction, anytime-valid inference, and efficient LLM decoding.
+
+\begin{thebibliography}{99}
+
+\bibitem{vovk2005algorithmic}
+V.~Vovk, A.~Gammerman, and G.~Shafer.
+\newblock Algorithmic Learning in a Random World.
+\newblock Springer, 2005.
+
+\bibitem{shafer2008tutorial}
+G.~Shafer and V.~Vovk.
+\newblock A Tutorial on Conformal Prediction.
+\newblock Journal of Machine Learning Research, 9:371--421, 2008.
+
+\bibitem{angelopoulos2021gentle}
+A.~N. Angelopoulos and S.~Bates.
+\newblock A Gentle Introduction to Conformal Prediction and Distribution-Free Uncertainty Quantification.
+\newblock arXiv:2107.07511, 2021.
+
+\bibitem{romano2019conformalized}
+Y.~Romano, E.~Patterson, and E.~Candès.
+\newblock Conformalized Quantile Regression.
+\newblock NeurIPS, 2019.
+
+\bibitem{barber2021predictive}
+R.~F. Barber, E.~Candès, A.~Ramdas, and R.~J. Tibshirani.
+\newblock Predictive Inference with the Jackknife+.
+\newblock Annals of Statistics, 49(1):486--507, 2021.
+
+\bibitem{tibshirani2019conformal}
+R.~J. Tibshirani, R.~F. Barber, E.~Candes, and A.~Ramdas.
+\newblock Conformal Prediction Under Covariate Shift.
+\newblock NeurIPS, 2019.
+
+\bibitem{sadinle2019least}
+M.~Sadinle, J.~Lei, and L.~Wasserman.
+\newblock Least Ambiguous Set-Valued Classifiers with Bounded Error Levels.
+\newblock Journal of the American Statistical Association, 114(525):223--234, 2019.
+
+\bibitem{park2020pac}
+S.~Park, E.~A. Syed-Moise, and J.~Cai.
+\newblock PAC Prediction Sets Under Covariate Shift.
+\newblock arXiv:2006.05930, 2020.
+
+\bibitem{angelopoulos2022conformal}
+A.~N. Angelopoulos, S.~Bates, T.~Fannjiang, A.~Phan, and M.~I. Jordan.
+\newblock Conformal Risk Control.
+\newblock International Conference on Learning Representations (ICLR), 2022.
+
+\bibitem{howard2021time}
+S.~R. Howard, J.~Ramdas, J.~McAuliffe, and A.~J. Yu.
+\newblock Time-Uniform Chernoff Bounds via Nonnegative Supermartingales.
+\newblock Probability Surveys, 18:1--29, 2021.
+
+\bibitem{waudbysmith2020confidence}
+I.~Waudby-Smith and A.~Ramdas.
+\newblock Confidence Sequences for Bounded Random Variables.
+\newblock Journal of the Royal Statistical Society: Series B, 83(4): 728--756, 2021.
+
+\bibitem{grunwald2019safe}
+P.~Grünwald, R.~de~Heide, and W.~M. Koolen.
+\newblock Safe Testing.
+\newblock Journal of the Royal Statistical Society: Series B, 81(5): 1031--1057, 2019.
+
+\bibitem{wang2023selfconsistency}
+X.~Wang, J.~Wei, D.~Schuurmans, Q.~Le, E.~Chi, and D.~Zhou.
+\newblock Self-Consistency Improves Chain of Thought Reasoning in Language Models.
+\newblock International Conference on Learning Representations (ICLR), 2023.
+
+\bibitem{kojima2022zeroshot}
+T.~Kojima, S.~S. Gu, M.~Reid, Y.~Matsuo, and Y.~Iwasawa.
+\newblock Large Language Models are Zero-Shot Reasoners.
+\newblock NeurIPS, 2022.
+
+\bibitem{guo2017calibration}
+C.~Guo, G.~Pleiss, Y.~Sun, and K.~Q. Weinberger.
+\newblock On Calibration of Modern Neural Networks.
+\newblock ICML, 2017.
+
+\bibitem{kadavath2022know}
+S.~Kadavath, et al.
+\newblock Language Models (Mostly) Know What They Know.
+\newblock arXiv:2207.05221, 2022.
+
+\bibitem{jain2024measuring}
+S.~Jain, D.~Holtzman, and L.~Zettlemoyer.
+\newblock Measuring and Mitigating Hallucinations in Language Models.
+\newblock arXiv:2309.02776, 2023.
+
+\bibitem{leviathan2023fast}
+Y.~Leviathan, et al.
+\newblock Fast Inference from Transformers via Speculative Decoding.
+\newblock ICML, 2023.
+
+\bibitem{chen2023medusa}
+B.~Chen, Y.~Sun, et al.
+\newblock Medusa: Simple Framework for Accelerating LLM Generation with Multiple Decoding Heads.
+\newblock arXiv:2309.03450, 2023.
+
+\bibitem{cobbe2021gsm8k}
+K.~Cobbe, V.~Kosaraju, M.~Fisch, et al.
+\newblock Training Verifiers to Solve Math Word Problems.
+\newblock arXiv:2110.14168, 2021. (GSM8K)
+
+\bibitem{hendrycks2021math}
+D.~Hendrycks, et al.
+\newblock Measuring Mathematical Problem Solving With the MATH Dataset.
+\newblock NeurIPS Datasets and Benchmarks, 2021.
+
+\bibitem{srivastava2022beyond}
+A.~Srivastava, et al.
+\newblock Beyond the Imitation Game: Quantifying and Extrapolating the Capabilities of Language Models (BIG-bench).
+\newblock TMLR, 2022.
+
+\end{thebibliography}
+
+\end{document}

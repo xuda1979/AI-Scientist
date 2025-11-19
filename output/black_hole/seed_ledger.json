@@ -1,0 +1,84 @@
+{
+  "env": {
+    "env": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONHASHSEED": "0"
+    },
+    "platform": "Windows-11-10.0.26100-SP0",
+    "python": "3.13.5"
+  },
+  "files": [
+    "datatableAblation.dat",
+    "datatableAblationSig.dat",
+    "datatableAnalogSidebands.dat",
+    "datatableCVsummary.dat",
+    "datatableDressingDilation.dat",
+    "datatableEchoExample_30Msun.dat",
+    "datatableEchoSNR.dat",
+    "datatableEchoSystematics.dat",
+    "datatableEchoTrials.dat",
+    "datatableEinsteinLangevin.dat",
+    "datatableExactComb.dat",
+    "datatableGreybodySweep.dat",
+    "datatableGtwo.dat",
+    "datatableHydroOTOC.dat",
+    "datatableKcov.dat",
+    "datatableMarkovBaseline.dat",
+    "datatableMarkovBaseline.dat",
+    "datatableMinimalCombRE.dat",
+    "datatablePTMPO.dat",
+    "datatablePTMPOerror.dat",
+    "datatablePTMPOscaling.dat",
+    "datatablePagecurve.dat",
+    "datatablePhotonSphereLyap.dat",
+    "datatableQEC.dat",
+    "datatableQTPEgap.dat",
+    "datatableRingdown3Pole.dat",
+    "datatableSoftFlux.dat"
+  ],
+  "models": {
+    "g2": {
+      "closed_form": "exp(-|du|/tau_mem) * (1 + 0.1*cos(2*pi*du/(2.5*tau_mem)))",
+      "runs": 200,
+      "tau_mem": 8.0
+    },
+    "page_curve": {
+      "S_initial": 12,
+      "closed_form": "min(t, S_initial - t) ; hawking baseline = 0.5*min(t, S_initial)",
+      "rmse_vs_ideal_markov": 5.291502622129181
+    }
+  },
+  "module_seeds": {
+    "cv_base": 49,
+    "g2": 123,
+    "toy": 42
+  },
+  "params": {
+    "dump_raw": "csv",
+    "floatfmt": "fixed6",
+    "g2_runs": 200,
+    "kfolds": 5,
+    "l_mem": 6,
+    "num_runs": 100,
+    "pythonhashseed": 0,
+    "s_initial": 12,
+    "save_ledger": "seed_ledger.json",
+    "seed": 42,
+    "seed_cv": null,
+    "seed_g2": null,
+    "seed_toy": null,
+    "steps": 12,
+    "tau_mem": 8.0,
+    "threads": 1
+  },
+  "raw_files": [
+    "raw_pagecurve.csv",
+    "raw_g2.csv"
+  ],
+  "script_sha256": "df4edff333649cd1642ff1473ed066b993e858304e01b8bbfc6330b5f76ff1ed",
+  "timestamp": 1763522678,
+  "timestamp_iso": "2025-11-19T03:24:38Z"
+}

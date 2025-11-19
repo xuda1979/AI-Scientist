@@ -289,7 +289,7 @@ def _openai_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
         print("OFFLINE_MODE enabled - returning stub response without contacting API")
         return _offline_response(prompt_type)
 
-    if False and pdf_path and pdf_path.exists():  # PDF upload disabled
+    if pdf_path and pdf_path.exists():  # PDF upload ENABLED
         print(f"[PDF] Including PDF in request: {pdf_path.name}")
     
     # Set longer timeout for GPT-5
@@ -453,7 +453,7 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
         try:
             processed_messages = messages.copy()
 
-            if False and pdf_path and pdf_path.exists() and _model_supports_vision(model):  # PDF upload disabled
+            if pdf_path and pdf_path.exists() and _model_supports_vision(model):  # PDF upload ENABLED
                 try:
                     for i in range(len(processed_messages) - 1, -1, -1):
                         if processed_messages[i]["role"] == "user":
@@ -463,13 +463,13 @@ def _try_openai_model(messages: List[Dict[str, str]], model: str, temp: float, r
                             )
                             break
 
-                    print(f" PDF reference added to request: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
+                    print(f"✓ PDF reference added to request: {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
 
                 except Exception as pdf_error:
                     print(f"WARNING: Failed to process PDF reference: {pdf_error}")
                     print("Continuing with text-only request...")
 
-            elif False and pdf_path and pdf_path.exists() and not _model_supports_vision(model):  # PDF upload disabled
+            elif pdf_path and pdf_path.exists() and not _model_supports_vision(model):  # PDF upload ENABLED
                 print(f"INFO: Model {model} does not support vision input. Adding PDF reference note...")
                 for i in range(len(processed_messages) - 1, -1, -1):
                     if processed_messages[i]["role"] == "user":
@@ -1144,7 +1144,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     os.environ["HTTPS_PROXY"] = "http://127.0.0.1:7078"
     print(f"Set proxy for Gemini API: {os.environ['HTTPS_PROXY']}")
     
-    if False and pdf_path and pdf_path.exists():  # PDF upload disabled
+    if pdf_path and pdf_path.exists():  # PDF upload ENABLED
         print(f"INFO: Including PDF in Gemini request: {pdf_path.name}")
     
     try:
@@ -1175,7 +1175,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
                 combined_prompt += f"Assistant: {content}\n\n"
         
         # Add PDF content if provided
-        if False and pdf_path and pdf_path.exists():  # PDF upload disabled
+        if pdf_path and pdf_path.exists():  # PDF upload ENABLED
             try:
                 # For Google AI, we need to upload the file using the file API
                 # This is a simplified approach - in production you might want to use the proper file upload API
@@ -1789,10 +1789,16 @@ def _generate_best_revision_candidate(
         start_time = time.time()
         
         try:
-            # Determine whether to use diff mode:
-            # - Initial draft (no existing .tex): Request FULL paper content
-            # - Subsequent revisions (existing .tex): Request ONLY diffs
-            use_diff_mode = not is_initial_draft
+            # Determine whether to use diff mode based on paper.tex existence:
+            # - No paper.tex file: Request FULL paper content
+            # - paper.tex exists: Request ONLY diffs (to avoid LLM output token limits)
+            paper_tex_path = project_dir / "paper.tex"
+            use_diff_mode = paper_tex_path.exists()
+            
+            if use_diff_mode:
+                print(f"       Using DIFF mode (paper.tex exists)")
+            else:
+                print(f"       Using FULL mode (paper.tex does not exist)")
             
             # Create varied revision prompts to encourage diversity
             base_prompt = _revise_prompt(
@@ -1850,9 +1856,19 @@ def _generate_best_revision_candidate(
                         print(f"       ⚠ Diff application failed: {msg}, using original")
                         candidate = current_tex  # Fallback to original if diff fails
                 else:
-                    # Fallback: If no diff detected in diff mode, assume full content
-                    print(f"       ⚠ Expected diff format but got full content, using as-is")
-                    candidate = candidate_response
+                    # Fallback: If no diff detected in diff mode, LLM returned full content
+                    print(f"       ⚠ WARNING: Expected diff format but got full content!")
+                    print(f"       ⚠ This may be truncated due to LLM output token limits.")
+                    print(f"       ⚠ Response length: {len(candidate_response)} chars")
+                    
+                    # Check if response looks complete (has \end{document})
+                    if "\\end{document}" in candidate_response:
+                        print(f"       → Full content appears complete, using as-is")
+                        candidate = candidate_response
+                    else:
+                        print(f"       → Full content appears TRUNCATED (no \\end{{document}})")
+                        print(f"       → Keeping original paper to avoid data loss")
+                        candidate = current_tex  # Don't use truncated content!
             else:
                 # FULL CONTENT MODE: Initial draft, use complete paper
                 print(f"       Candidate {i + 1}: Full paper content (initial draft)")
@@ -2553,10 +2569,47 @@ def _initial_draft_prompt(
         {"role": "user", "content": user_content},
     ]
 
-def _collect_project_files(project_dir: Path) -> str:
-    """Collect all relevant files in the project directory for review context."""
+def _collect_project_files(project_dir: Path, specify_files: Optional[list] = None) -> str:
+    """Collect all relevant files in the project directory for review context.
+    
+    Args:
+        project_dir: Project directory to scan
+        specify_files: Optional list of specific files to include (relative to project_dir).
+                      If provided, only these files will be collected.
+    """
     file_contents = []
     
+    # If specific files are specified, only collect those
+    if specify_files:
+        for filename in specify_files:
+            file_path = project_dir / filename
+            if not file_path.exists():
+                print(f"Warning: Specified file not found: {filename}")
+                continue
+            
+            if not file_path.is_file():
+                print(f"Warning: Specified path is not a file: {filename}")
+                continue
+                
+            try:
+                # Try to read as text file
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+        
+                
+                file_contents.append(f"=== FILE: {filename} ===\n{content}\n")
+                
+            except (UnicodeDecodeError, PermissionError) as e:
+                print(f"Warning: Could not read specified file {filename}: {e}")
+                continue
+        
+        if file_contents:
+            return "\n".join(file_contents)
+        else:
+            return "No specified files could be loaded."
+    
+    # Original behavior: collect all matching files
     # Define file extensions and patterns to include
     include_patterns = [
         "*.py", "*.tex", "*.bib", "*.txt", "*.csv", "*.json", "*.md", "*.yml", "*.yaml", 
@@ -2589,9 +2642,8 @@ def _collect_project_files(project_dir: Path) -> str:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             content = f.read()
                         
-                        # Limit file size to avoid overwhelming the context
-                        if len(content) > 50000:  # 50KB limit per file
-                            content = content[:50000] + "\n... (file truncated for length)"
+                        # NO TRUNCATION - Include full files always
+                        # LLM can handle large context windows now
                         
                         relative_path = file_path.relative_to(project_dir)
                         file_contents.append(f"=== FILE: {relative_path} ===\n{content}\n")
@@ -2616,7 +2668,8 @@ def _combined_review_edit_revise_prompt(
     user_prompt: Optional[str] = None, 
     iteration_count: int = 1, 
     quality_issues: Optional[List[str]] = None,
-    supplemental_context: str = ""
+    supplemental_context: str = "",
+    specify_files: Optional[list] = None
 ) -> List[Dict[str, str]]:
     """Combined prompt for review and revision with diff output."""
     sys_prompt = (
@@ -2638,16 +2691,30 @@ def _combined_review_edit_revise_prompt(
         "Use the PDF to assess the visual presentation, layout, figure placement, and overall appearance, "
         "while using the LaTeX source to verify technical requirements and code structure.\n\n"
         
-        "📊 CRITICAL PDF VISUAL INSPECTION REQUIREMENTS:\n"
+        "� CRITICAL LATEX STRUCTURE VALIDATION:\n"
+        "MANDATORY checks for the LaTeX source code structure - these MUST be fixed if found:\n"
+        "1. ⚠️ FILECONTENTS BLOCK: Must start at line 1 with \\begin{filecontents*}{refs.bib}, NO content before it\n"
+        "2. ⚠️ FILECONTENTS CLOSURE: Must have \\end{filecontents*} BEFORE \\documentclass\n"
+        "3. ⚠️ BIBLIOGRAPHY LOCATION: ALL @article/@inproceedings entries MUST be inside filecontents block, NOT in document body\n"
+        "4. ⚠️ DOCUMENT START: Content should start AFTER \\begin{document}, not before \\documentclass\n"
+        "5. ⚠️ DUPLICATE TAGS: Remove any duplicate \\end{abstract}, \\end{figure}, or \\end{document} tags\n"
+        "6. ⚠️ PROPER ORDER: filecontents → documentclass → usepackage → begin{document} → content → bibliography → end{document}\n"
+        "7. ⚠️ CITATION COVERAGE: If bibliography has N entries, paper text should cite most/all of them using \\cite{}\n"
+        "If ANY of these structural issues exist, your revision MUST fix them completely.\n\n"
+        
+        "�📊 CRITICAL PDF VISUAL INSPECTION REQUIREMENTS:\n"
         "If a PDF is provided, perform THOROUGH visual analysis of the rendered document:\n"
+        "- CONTENT BEFORE TITLE: Check if there's any text, references, or content appearing BEFORE the paper title\n"
         "- GRAPH/FIGURE SIZING: Check if graphs, charts, plots are properly sized and not stretching beyond page margins\n"
+        "- BLACK/EMPTY FIGURES: Verify all figures display content (not blank/black boxes indicating missing plots)\n"
         "- TEXT POSITIONING: Verify all text elements (axis labels, legends, captions, annotations) are in correct positions\n"
         "- TABLE FORMATTING: Ensure tables fit within page width, text is readable, no content is cut off\n"
         "- FONT CONSISTENCY: Check that font sizes are appropriate and consistent throughout figures\n"
         "- VISUAL CLARITY: Verify graphs are not pixelated, blurry, or distorted\n"
         "- MARGIN COMPLIANCE: Ensure no content extends beyond page margins or overlaps with other elements\n"
         "- FIGURE REFERENCES: Confirm all figures are properly numbered and referenced in text\n"
-        "- CAPTION ALIGNMENT: Check that captions are properly aligned and positioned relative to their figures/tables\n\n"
+        "- CAPTION ALIGNMENT: Check that captions are properly aligned and positioned relative to their figures/tables\n"
+        "- REFERENCES RENDERING: Check if References section actually lists citations (not showing 'undefined' warnings)\n\n"
         
         "📋 PAPER STRUCTURE AND LAYOUT ANALYSIS:\n"
         "Perform comprehensive structural review of the paper organization:\n"
@@ -2717,9 +2784,22 @@ def _combined_review_edit_revise_prompt(
         
         "REVISION OUTPUT FORMAT:\n"
         "Always provide complete revised file contents in this exact format:\n\n"
+        "⚠️ CRITICAL REVISION REQUIREMENTS BEFORE YOU START:\n"
+        "1. COUNT REFERENCES: The paper MUST have at least 15-20 authentic references\n"
+        "   - If current paper has <15 references, your revision MUST ADD more references\n"
+        "   - Use \\begin{filecontents*}{refs.bib}...\\end{filecontents*} at the TOP of paper.tex\n"
+        "   - All references must be REAL published works (author names, journal, year, etc.)\n"
+        "2. CHECK PAPER LENGTH: The paper MUST be 5000-8000 words (excluding references)\n"
+        "   - If current paper is <5000 words, your revision MUST ADD substantial content\n"
+        "   - EXPAND sections with more details, examples, analysis, and explanations\n"
+        "   - DO NOT just add fluff - add genuine academic substance\n"
+        "3. VERIFY COMPLETENESS: Every revised file must be COMPLETE, not a partial diff\n"
+        "   - Include ALL sections from \\documentclass to \\end{document}\n"
+        "   - Include ALL function definitions in simulation.py\n"
+        "   - Do NOT use placeholders like '...rest of content...' or '...continued...'\n\n"
         "```tex\n"
         "# File: paper.tex\n"
-        "[Complete revised LaTeX content here]\n"
+        "[Complete revised LaTeX content here - MUST include filecontents with 15-20 references]\n"
         "```\n\n"
         "```python\n"
         "# File: simulation.py\n"
@@ -2761,44 +2841,218 @@ def _combined_review_edit_revise_prompt(
         "  * Consider landscape orientation (\\begin{landscape}) for very wide tables\n\n"
     )
     
-    # Add custom user prompt if provided
+    # CRITICAL: Always include user prompt in system message for EVERY iteration
+    # This ensures the LLM maintains awareness of user's original requirements throughout all cycles
     if user_prompt:
         sys_prompt = (
-            f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
-            "The above user instruction takes precedence when evaluating and revising the paper. "
-            "However, still maintain the critical technical requirements.\n\n"
+            f"{'='*80}\n"
+            f"🎯 PRIORITY INSTRUCTION FROM USER (ITERATION {iteration_count}):\n"
+            f"{'='*80}\n"
+            f"{user_prompt}\n"
+            f"{'='*80}\n\n"
+            "⚠️ CRITICAL: The above user instruction takes HIGHEST PRECEDENCE when evaluating and revising the paper.\n"
+            "You MUST follow this instruction in EVERY review/revision cycle.\n"
+            "However, still maintain the critical technical requirements below.\n\n"
+            + sys_prompt
+        )
+    else:
+        # Even without user prompt, remind LLM this is part of an iterative process
+        sys_prompt = (
+            f"ℹ️ ITERATION {iteration_count} of iterative review/revision process.\n"
+            f"No specific user prompt provided - follow standard review criteria.\n\n"
             + sys_prompt
         )
     
-    # Collect all project files for complete context
-    project_files_content = ""
-    if project_dir and project_dir.exists():
-        project_files_content = _collect_project_files(project_dir)
+    # Collect project files for context, but skip if paper is already large to avoid token limit
+    # Rough estimate: 1 token ≈ 4 characters, so we want to keep total under 100,000 tokens (400,000 chars)
+    current_size = len(sys_prompt) + len(paper_tex) + len(sim_summary)
+    max_context_size = 250000  # Reserve space for system prompt, quality issues, etc. (conservative limit)
     
+    project_files_content = ""
+    if project_dir and project_dir.exists() and current_size < max_context_size:
+        # Calculate how much space we have left for project files
+        remaining_space = max_context_size - current_size
+        project_files_raw = _collect_project_files(project_dir, specify_files)
+        # Truncate if needed
+        if len(project_files_raw) > remaining_space:
+            project_files_content = project_files_raw[:remaining_space] + "\n\n... [Project files truncated due to size limits]"
+        else:
+            project_files_content = project_files_raw
+    elif current_size >= max_context_size:
+        project_files_content = "[Project files omitted due to large paper size to stay within token limits]"
+    
+    # Build user message with clear iteration context
     user = (
-        f"This is iteration {iteration_count}. Please complete the 2-step workflow:\n\n"
+        f"{'='*80}\n"
+        f"ITERATION {iteration_count} - Review and Revision Request\n"
+        f"{'='*80}\n\n"
+    )
+    
+    # ALWAYS remind about user prompt in EVERY iteration
+    if user_prompt:
+        user += (
+            f"🎯 USER'S ORIGINAL REQUEST (must be followed in ALL iterations):\n"
+            f"{'-'*80}\n"
+            f"{user_prompt}\n"
+            f"{'-'*80}\n\n"
+            f"⚠️ REMINDER: This user request must guide your review and revision in iteration {iteration_count}.\n\n"
+        )
+    
+    user += (
+        "Please complete the 2-step workflow:\n\n"
         "STEP 1: REVIEW\n"
         "Conduct a thorough peer review of the paper using top journal standards.\n\n"
         "STEP 2: REVISION\n"
-        "Provide complete file diffs for all necessary changes to address the review issues.\n\n"
+        "Provide COMPLETE REVISED FILE CONTENTS for all files that need changes.\n"
+        "⚠️ CRITICAL: Do NOT provide minimal diffs or small patches - provide the ENTIRE FILE CONTENT.\n"
+        "⚠️ CRITICAL: The revised paper MUST be LONGER and MORE DETAILED than the original.\n"
+        "⚠️ CRITICAL: If the paper has few/no references, you MUST ADD 15-20 authentic references with \\begin{filecontents*}{refs.bib}.\n"
+        "⚠️ CRITICAL: EXPAND sections to professional length (500-1500 words each, NOT 100-200 words).\n"
+        "⚠️ CRITICAL: ADD content, DON'T DELETE content unless it's clearly wrong or harmful.\n\n"
+        "🚫 ABSOLUTE REQUIREMENT - NEVER TRUNCATE:\n"
+        "- Your revised paper.tex MUST include EVERYTHING from \\documentclass to \\end{document}\n"
+        "- NEVER end with '...', '... rest unchanged ...', or '... continued ...'\n"
+        "- If you run out of space, PRIORITIZE:\n"
+        "  1. Keep existing content INTACT (don't delete sections)\n"
+        "  2. ADD references if missing (minimum 15-20 in \\begin{filecontents*}{refs.bib})\n"
+        "  3. ADD content to short sections (expand to 500+ words each)\n"
+        "  4. Ensure \\end{document} is ALWAYS included\n"
+        "- A truncated revision that loses content is WORSE than no revision at all\n"
+        "- The system will REJECT any revision that makes the paper shorter or removes references\n\n"
         "----- CURRENT PAPER (LATEX) -----\n" + paper_tex + "\n"
         "----- SIMULATION CODE & OUTPUTS -----\n" + sim_summary + "\n"
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
     )
     
-    # Add quality issues if detected
+    # Add quality issues if detected (limit to top 15 to avoid token overflow)
     if quality_issues:
+        # Check if there are critical LaTeX structure issues
+        has_latex_structure_issues = any('CRITICAL LATEX STRUCTURE' in issue or 'CRITICAL BIBLIOGRAPHY' in issue 
+                                         for issue in quality_issues)
+        
         user += (
             "\n----- DETECTED QUALITY ISSUES -----\n"
             "The following specific quality issues have been automatically detected and MUST be addressed:\n\n"
         )
-        for issue in quality_issues:
+        
+        # Show LaTeX structure issues first if present
+        latex_issues = [iss for iss in quality_issues if 'CRITICAL LATEX STRUCTURE' in iss or 'CRITICAL BIBLIOGRAPHY' in iss]
+        other_issues = [iss for iss in quality_issues if iss not in latex_issues]
+        
+        for issue in latex_issues:
+            user += f"🔴 {issue}\n"
+        for issue in other_issues[:15]:
             user += f"• {issue}\n"
+        
+        if len(other_issues) > 15:
+            user += f"\n... and {len(other_issues) - 15} more issues (see quality report)\n"
+            
         user += (
             "\n----- END QUALITY ISSUES -----\n\n"
             "CRITICAL: Your revision MUST specifically address ALL of the above quality issues. "
             "These are not suggestions - they are required fixes that must be implemented.\n"
         )
+        
+        # Add special instruction for LaTeX structure issues
+        if has_latex_structure_issues:
+            user += (
+                "\n"
+                "🚨 CRITICAL LaTeX STRUCTURE ISSUES DETECTED 🚨\n"
+                "The LaTeX file has BROKEN STRUCTURE that prevents proper compilation and bibliography rendering.\n"
+                "You MUST provide the COMPLETE paper.tex file (from line 1 to \\end{document}) in your revision.\n\n"
+                "DO NOT attempt to use git diff format for this revision - the file structure is too broken.\n"
+                "Instead, provide the FULL corrected paper.tex content starting with:\n\n"
+                "```tex\n"
+                "# File: paper.tex\n"
+                "\\begin{filecontents*}{refs.bib}\n"
+                "@article{firstref2023,\n"
+                "  ... [ALL bibliography entries here] ...\n"
+                "}\n"
+                "\\end{filecontents*}\n\n"
+                "\\documentclass{IEEEtran}\n"
+                "... [rest of paper] ...\n"
+                "\\end{document}\n"
+                "```\n\n"
+                "This is MANDATORY when LaTeX structure issues are present.\n"
+                "=================================================================\n\n"
+            )
+    import re
+    ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', paper_tex))
+    word_count = len(re.findall(r'\b\w+\b', paper_tex.split('\\begin{document}')[-1] if '\\begin{document}' in paper_tex else paper_tex)) // 2  # Rough estimate
+    
+    # ESCALATING EMPHASIS based on iteration number and reference deficit
+    urgency_level = "IMPORTANT" if iteration_count <= 2 else "CRITICAL" if iteration_count <= 4 else "URGENT - FINAL WARNING"
+    ref_deficit = max(0, 15 - ref_count)
+    
+    user += (
+        "\n----- AUTOMATIC QUALITY ANALYSIS -----\n"
+        f"📊 CURRENT PAPER STATISTICS (Iteration {iteration_count}):\n"
+        f"   - Estimated word count: ~{word_count} words\n"
+        f"   - Reference count: {ref_count} references\n"
+        f"   - Target word count: 5000-8000 words\n"
+        f"   - Target reference count: 15-20 references\n\n"
+    )
+    
+    critical_issues = []
+    if ref_count < 15:
+        # Escalating reference emphasis across iterations
+        ref_emphasis_header = f"{'🔴' * min(iteration_count, 10)} {urgency_level}: BIBLIOGRAPHY REQUIRED {'🔴' * min(iteration_count, 10)}"
+        critical_issues.append(ref_emphasis_header)
+        critical_issues.append(f"❌ CRITICAL: Only {ref_count} references found (need 15-20)")
+        critical_issues.append(f"   → YOU MUST ADD {ref_deficit} MORE authentic, peer-reviewed references")
+        critical_issues.append(f"   → YOUR REVISED paper.tex MUST START WITH:")
+        critical_issues.append(f"")
+        critical_issues.append(f"      \\begin{{filecontents*}}{{refs.bib}}")
+        critical_issues.append(f"      @article{{Smith2023,")
+        critical_issues.append(f"        author = {{Smith, John and Doe, Jane}},")
+        critical_issues.append(f"        title = {{A Real Published Paper Title}},")
+        critical_issues.append(f"        journal = {{IEEE Transactions on...}},")
+        critical_issues.append(f"        year = {{2023}},")
+        critical_issues.append(f"        volume = {{10}},")
+        critical_issues.append(f"        pages = {{1--20}}")
+        critical_issues.append(f"      }}")
+        critical_issues.append(f"      @inproceedings{{Jones2022,")
+        critical_issues.append(f"        author = {{Jones, Mary}},")
+        critical_issues.append(f"        title = {{Another Real Paper}},")
+        critical_issues.append(f"        booktitle = {{Proceedings of...}},")
+        critical_issues.append(f"        year = {{2022}}")
+        critical_issues.append(f"      }}")
+        critical_issues.append(f"      ... ADD AT LEAST {ref_deficit} MORE ENTRIES like above ...")
+        critical_issues.append(f"      \\end{{filecontents*}}")
+        critical_issues.append(f"")
+        critical_issues.append(f"   → Then in your paper text, cite them: \\cite{{Smith2023}}, \\cite{{Jones2022}}")
+        critical_issues.append(f"   → The system will REJECT any revision that doesn't add references!")
+        
+        if iteration_count >= 3:
+            critical_issues.append(f"\n📚 ITERATION {iteration_count} REMINDER: You have been asked {iteration_count-1} times to add references!")
+            critical_issues.append(f"   This is a CORE requirement. Academic papers NEED citations.")
+            critical_issues.append(f"   Add references to: Introduction, Related Work, Methods, and Conclusion.")
+            critical_issues.append(f"   ⚠️ WARNING: If you don't add references THIS TIME, your revision will be REJECTED.")
+        
+        if iteration_count >= 5:
+            critical_issues.append(f"\n⚠️ FINAL WARNING (Iteration {iteration_count}): This is your LAST chance to add references!")
+            critical_issues.append(f"   Without proper citations, this paper cannot be published.")
+            critical_issues.append(f"   PRIORITY #1 for this revision: ADD BIBLIOGRAPHY with {ref_deficit}+ references.")
+            critical_issues.append(f"   🚫 The validation system will automatically REJECT revisions without enough references.")
+    
+    if word_count < 3000:
+        critical_issues.append(f"❌ CRITICAL: Paper too short (~{word_count} words, need 5000-8000)")
+        critical_issues.append(f"   → Your revision MUST EXPAND sections with {5000-word_count}+ more words")
+        critical_issues.append(f"   → ADD detailed explanations, examples, analysis, related work")
+    
+    if critical_issues:
+        user += "🚨 MANDATORY FIXES REQUIRED:\n\n"
+        for issue in critical_issues:
+            user += f"{issue}\n"
+        user += (
+            f"\n{'⚠️ '*20}\n"
+            f"Iteration {iteration_count}: These issues have persisted. Your revision MUST address them.\n"
+            f"Focus your effort on: {'ADDING REFERENCES' if ref_count < 15 else 'EXPANDING CONTENT'}\n"
+            f"{'⚠️ '*20}\n"
+            "----- END QUALITY ANALYSIS -----\n\n"
+        )
+    else:
+        user += "✓ Paper meets minimum length and reference requirements.\n----- END QUALITY ANALYSIS -----\n\n"
     
     # Add LaTeX compilation information
     if latex_errors:
@@ -2807,6 +3061,12 @@ def _combined_review_edit_revise_prompt(
             latex_errors + 
             "\n----- END LATEX ERRORS -----\n\n"
             "CRITICAL: Fix ALL LaTeX compilation errors in your revision diffs.\n"
+            "CRITICAL: Check LaTeX SOURCE for structural issues:\n"
+            "  - Content appearing BEFORE \\begin{filecontents*}{refs.bib}\n"
+            "  - Missing \\end{filecontents*} before \\documentclass\n"
+            "  - Bibliography entries (@article, @inproceedings) scattered in document body instead of filecontents block\n"
+            "  - Duplicate \\end{abstract}, \\end{figure}, \\end{document} tags\n"
+            "  - Proper order: filecontents → \\end{filecontents*} → \\documentclass → content → \\end{document}\n"
         )
     else:
         user += (
@@ -3036,7 +3296,7 @@ def _apply_file_changes(file_changes: dict, project_dir: Path, config=None) -> b
     
     return True
 
-def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None, enable_quality_enhancements: bool = True) -> List[Dict[str, str]]:
+def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, user_prompt: Optional[str] = None, enable_quality_enhancements: bool = True, specify_files: Optional[list] = None) -> List[Dict[str, str]]:
     sys_prompt = (
         "Act as a top-tier journal reviewer (Nature, Science, Cell level) with expertise in LaTeX formatting and scientific programming. "
         "Your review must meet the highest academic standards. Be constructive but demanding. "
@@ -3108,6 +3368,9 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "   - References are directly relevant to the topic\n"
         "   - NO placeholder, fake, or made-up citations\n"
         "   - All references must be cited in the text using \\cite{} commands\n"
+        "   - 🔴 PRIORITY: If paper has fewer than 15 references, this is a CRITICAL deficiency requiring immediate action\n"
+        "   - 🔴 Reference deficit must be addressed BEFORE any other improvements\n"
+        "   - 🔴 A paper without proper citations cannot be published - this is NON-NEGOTIABLE\n"
         "6. SELF-CONTAINED VISUALS: ALL tables, figures, and diagrams must be:\n"
         "   - Defined within the LaTeX file using TikZ, tabular, PGFPlots, etc., OR\n"
         "   - Generated by simulation.py and saved as local files with proper \\includegraphics references\n"
@@ -3226,7 +3489,58 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "- APPROPRIATE STRUCTURE: Paper organization must match the research type and field standards\n"
         "- FIGURE/TABLE PLACEMENT: All figures and tables must be placed either inline where cited or at document end before references - NEVER after or between references\n"
         
-        "🔬 EXPERIMENTAL RIGOR REQUIREMENTS (CRITICAL FOR PUBLICATION):\n"
+        "� MANDATORY REVIEW OUTPUT FORMAT:\n"
+        "Your review MUST be structured with the following sections (use these exact headers):\n\n"
+        
+        "=== SCIENTIFIC CONTENT REVIEW ===\n"
+        "1. **CRITICAL ISSUES & MAJOR WEAKNESSES:**\n"
+        "   List 3-5 fundamental problems that would prevent publication:\n"
+        "   - 📚 BIBLIOGRAPHY DEFICIT: If paper has <15 references, this MUST be listed as the FIRST and HIGHEST PRIORITY critical issue\n"
+        "   - 📚 A paper without adequate citations cannot be published - this is a showstopper requiring immediate action\n"
+        "   - Methodological flaws (invalid assumptions, circular reasoning, unsupported claims)\n"
+        "   - Lack of novelty or significance (incremental work, well-known results)\n"
+        "   - Missing comparisons with baselines or state-of-the-art\n"
+        "   - Inadequate experimental validation (synthetic-only data, cherry-picked results)\n"
+        "   - Theoretical gaps (missing proofs, unjustified complexity claims)\n"
+        "   - Reproducibility issues (missing implementation details, unclear parameters)\n"
+        "   - Overstated claims not supported by evidence\n\n"
+        
+        "2. **MODERATE WEAKNESSES:**\n"
+        "   List 2-4 issues that diminish quality but could be addressed:\n"
+        "   - Limited scope of experiments or analysis\n"
+        "   - Incomplete ablation studies\n"
+        "   - Weak discussion of limitations\n"
+        "   - Missing error analysis or statistical significance tests\n"
+        "   - Unclear presentation of key concepts\n\n"
+        
+        "3. **STRENGTHS:**\n"
+        "   List 2-3 positive aspects of the work:\n"
+        "   - Novel contributions or insights\n"
+        "   - Strong experimental validation\n"
+        "   - Clear presentation\n"
+        "   - Practical applicability\n\n"
+        
+        "=== TECHNICAL QUALITY REVIEW ===\n"
+        "4. **LaTeX/Formatting Issues:**\n"
+        "   - Compilation errors, missing packages, formatting problems\n"
+        "   - Figure/table placement and sizing issues\n"
+        "   - Citation and reference problems\n\n"
+        
+        "5. **Code/Simulation Quality:**\n"
+        "   - Algorithm correctness and efficiency\n"
+        "   - Results documentation and reproducibility\n"
+        "   - Figure generation quality\n\n"
+        
+        "=== SUMMARY & RECOMMENDATION ===\n"
+        "6. **Overall Assessment:**\n"
+        "   - Is this work suitable for a top-tier venue? Why or why not?\n"
+        "   - What are the 2-3 most critical changes needed for acceptance?\n"
+        "   - Estimated revisions needed: Minor / Major / Reject\n\n"
+        
+        "IMPORTANT: Be HONEST and CRITICAL. Do not accept mediocre work. If the paper has fundamental flaws,\n"
+        "say so explicitly in the CRITICAL ISSUES section. Reviewers at top venues are demanding - you should be too.\n\n"
+        
+        "�🔬 EXPERIMENTAL RIGOR REQUIREMENTS (CRITICAL FOR PUBLICATION):\n"
         "Reviewers at top venues expect rigorous experimental validation. Check for these common weaknesses:\n\n"
         
         "1. SYNTHETIC-ONLY EVALUATION WEAKNESS:\n"
@@ -3317,19 +3631,37 @@ def _review_prompt(paper_tex: str, sim_summary: str, project_dir: Path = None, u
         "Pay special attention to reference authenticity, results documentation, figure generation, filename removal, structural appropriateness, and figure/table placement relative to references."
     )
     
-    # Add custom user prompt if provided - it takes priority
+    # CRITICAL: Always include user prompt for consistency across all iterations
     if user_prompt:
         sys_prompt = (
-            f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
-            "The above user instruction takes precedence when evaluating the paper. "
+            f"{'='*80}\n"
+            f"🎯 PRIORITY INSTRUCTION FROM USER:\n"
+            f"{'='*80}\n"
+            f"{user_prompt}\n"
+            f"{'='*80}\n\n"
+            "⚠️ CRITICAL: The above user instruction takes HIGHEST PRECEDENCE.\n"
+            "Evaluate the paper with this user requirement as your PRIMARY criterion.\n"
             "However, still maintain the critical technical requirements (single file, embedded references, etc.).\n\n"
             + sys_prompt
         )
     
-    # Collect all project files for complete context
+    # Collect project files for context, but skip if paper is already large to avoid token limit
+    # Rough estimate: 1 token ≈ 4 characters, so we want to keep total under 100,000 tokens (400,000 chars)
+    current_size = len(sys_prompt) + len(paper_tex) + len(sim_summary)
+    max_context_size = 200000  # More conservative limit for review
+    
     project_files_content = ""
-    if project_dir and project_dir.exists():
-        project_files_content = _collect_project_files(project_dir)
+    if project_dir and project_dir.exists() and current_size < max_context_size:
+        # Calculate how much space we have left for project files
+        remaining_space = max_context_size - current_size
+        project_files_raw = _collect_project_files(project_dir, specify_files)
+        # Truncate if needed
+        if len(project_files_raw) > remaining_space:
+            project_files_content = project_files_raw[:remaining_space] + "\n\n... [Project files truncated due to size limits]"
+        else:
+            project_files_content = project_files_raw
+    elif current_size >= max_context_size:
+        project_files_content = "[Project files omitted due to large paper size to stay within token limits]"
     
     user = (
         "Here is the current paper (LaTeX):\n\n"
@@ -3351,11 +3683,15 @@ def _editor_prompt(review_text: str, iteration_count: int, user_prompt: Optional
         "Papers should only be accepted when they meet publication standards for impact, rigor, and clarity."
     )
     
-    # Add custom user prompt if provided - it takes priority
+    # CRITICAL: Always include user prompt in editorial decisions
     if user_prompt:
         sys_prompt = (
-            f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
-            "The above user instruction should guide your revision approach. "
+            f"{'='*80}\n"
+            f"🎯 EDITOR'S NOTE - USER'S PRIORITY REQUEST (Iteration {iteration_count}):\n"
+            f"{'='*80}\n"
+            f"{user_prompt}\n"
+            f"{'='*80}\n\n"
+            "⚠️ CRITICAL: Your editorial decision must ensure the revision addresses the above user request.\n"
             "Balance user preferences with publication standards.\n\n"
             + sys_prompt
         )
@@ -3376,6 +3712,20 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
         # Initialize error log variable
         error_log = ""
         
+        # Helper: auto-disable microtype on font expansion errors
+        def _disable_microtype(p: Path) -> bool:
+            try:
+                txt = p.read_text(encoding='utf-8', errors='ignore')
+                # Comment out any microtype package lines
+                patched = re.sub(r"^\\s*\\usepackage\[[^\]]*\]\{microtype\}\s*$", r"% \g<0>  % auto-disabled", txt, flags=re.MULTILINE)
+                patched = re.sub(r"^\\s*\\usepackage\{microtype\}\s*$", r"% \g<0>  % auto-disabled", patched, flags=re.MULTILINE)
+                if patched != txt:
+                    p.write_text(patched, encoding='utf-8')
+                    return True
+            except Exception:
+                pass
+            return False
+        
         # Check if paper.tex uses filecontents to embed refs.bib
         paper_content = paper_path.read_text(encoding='utf-8', errors='ignore')
         uses_filecontents = '\\begin{filecontents' in paper_content and 'refs.bib' in paper_content
@@ -3394,6 +3744,29 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
             text=True,
             timeout=timeout  # Use dynamic timeout parameter
         )
+        # Detect font expansion error and retry with microtype disabled
+        log_path = paper_path.with_suffix('.log')
+        if log_path.exists():
+            try:
+                log_text = log_path.read_text(encoding='utf-8', errors='ignore')
+                if 'pdfTeX error (font expansion): auto expansion is only possible with scalable' in log_text:
+                    if _disable_microtype(paper_path):
+                        # Clean refs.bib to force regeneration if embedded
+                        if uses_filecontents:
+                            refs_file = paper_path.parent / "refs.bib"
+                            if refs_file.exists():
+                                refs_file.unlink()
+                        # Retry first run
+                        result = subprocess.run(
+                            ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+                            cwd=paper_path.parent,
+                            capture_output=True,
+                            text=True,
+                            timeout=timeout,
+                            check=False
+                        )
+            except Exception:
+                pass
         
         # Run bibtex if .aux file exists (for bibliography processing)
         aux_path = paper_path.with_suffix('.aux')
@@ -3577,7 +3950,7 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
         print(f"⚠ {error_msg}")
         return False, None, error_msg
 
-def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None, enable_quality_enhancements: bool = True, use_diff_mode: bool = True) -> List[Dict[str, str]]:
+def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_errors: str = "", project_dir: Path = None, user_prompt: Optional[str] = None, quality_issues: Optional[List[str]] = None, enable_quality_enhancements: bool = True, use_diff_mode: bool = True, specify_files: Optional[list] = None) -> List[Dict[str, str]]:
     """
     Generate revision prompt.
     
@@ -3906,19 +4279,36 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "Return ONLY the complete revised LaTeX file with ALL issues addressed, authentic references, self-contained visuals, appropriate structure for the paper type, and proper size constraints applied."
     )
     
-    # Add custom user prompt if provided - it takes priority
+    # CRITICAL: Always include user prompt for consistency in revision
     if user_prompt:
         sys_prompt = (
-            f"PRIORITY INSTRUCTION FROM USER: {user_prompt}\n\n"
-            "The above user instruction takes precedence when revising the paper. "
+            f"{'='*80}\n"
+            f"🎯 PRIORITY INSTRUCTION FROM USER:\n"
+            f"{'='*80}\n"
+            f"{user_prompt}\n"
+            f"{'='*80}\n\n"
+            "⚠️ CRITICAL: The above user instruction takes HIGHEST PRECEDENCE when revising the paper.\n"
             "However, still maintain the critical technical requirements (single file, embedded references, compilable LaTeX).\n\n"
             + sys_prompt
         )
     
-    # Collect all project files for complete context
+    # Collect project files for context, but skip if paper is already large to avoid token limit
+    # Rough estimate: 1 token ≈ 4 characters, so we want to keep total under 100,000 tokens (400,000 chars)
+    current_size = len(sys_prompt) + len(paper_tex) + len(sim_summary) + len(review_text)
+    max_context_size = 180000  # Conservative limit for revision (includes review text)
+    
     project_files_content = ""
-    if project_dir and project_dir.exists():
-        project_files_content = _collect_project_files(project_dir)
+    if project_dir and project_dir.exists() and current_size < max_context_size:
+        # Calculate how much space we have left for project files
+        remaining_space = max_context_size - current_size
+        project_files_raw = _collect_project_files(project_dir, specify_files)
+        # Truncate if needed
+        if len(project_files_raw) > remaining_space:
+            project_files_content = project_files_raw[:remaining_space] + "\n\n... [Project files truncated due to size limits]"
+        else:
+            project_files_content = project_files_raw
+    elif current_size >= max_context_size:
+        project_files_content = "[Project files omitted due to large paper size to stay within token limits]"
     
     user = (
         "----- CURRENT PAPER (LATEX) -----\n" + paper_tex + "\n"
@@ -3927,14 +4317,20 @@ def _revise_prompt(paper_tex: str, sim_summary: str, review_text: str, latex_err
         "----- ALL PROJECT FILES (FOR CONTEXT) -----\n" + project_files_content + "\n"
     )
     
-    # Add quality issues if detected
+    # Add quality issues if detected (limit to top 15 to avoid token overflow)
     if quality_issues:
         user += (
             "\n----- DETECTED QUALITY ISSUES -----\n"
             "The following specific quality issues have been automatically detected and MUST be addressed:\n\n"
         )
-        for issue in quality_issues:
+        # Limit to first 15 issues to avoid token overflow
+        issues_to_show = quality_issues[:15]
+        for issue in issues_to_show:
             user += f"• {issue}\n"
+        
+        if len(quality_issues) > 15:
+            user += f"\n... and {len(quality_issues) - 15} more issues (see quality report)\n"
+            
         user += (
             "\n----- END QUALITY ISSUES -----\n\n"
             "CRITICAL: Your revision MUST specifically address ALL of the above quality issues. "
@@ -3995,7 +4391,8 @@ def run_workflow(
     cancel_event: Optional[threading.Event] = None,  # Optional cancellation signal from GUI
     all_code_mode: bool = False,     # Enable unrestricted code generation mode
     code_output_dir: str = "code",   # Directory for generated code files
-    execution_log_file: str = "execution_log.txt"  # Execution log filename
+    execution_log_file: str = "execution_log.txt",  # Execution log filename
+    science_only: bool = False,      # NEW: Simplified mode - only improve scientific content
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
 
@@ -4042,9 +4439,127 @@ def run_workflow(
 
     _check_cancellation(cancel_event, "project preparation")
 
+    # ═══════════════════════════════════════════════════════════════
+    # SCIENCE-ONLY MODE: Simplified workflow for quick improvements
+    # ═══════════════════════════════════════════════════════════════
+    if science_only:
+        print("\n" + "="*80)
+        print("SCIENCE-ONLY MODE ACTIVATED")
+        print("="*80)
+        print("Simplified workflow: Improve scientific content → Output git diff")
+        print("Skipping all validation, quality checks, and iterative refinement")
+        print("="*80 + "\n")
+        
+        # Read current paper
+        if not paper_path.exists():
+            print("ERROR: No paper.tex found. Science-only mode requires existing paper.")
+            return project_dir
+        
+        current_paper = paper_path.read_text(encoding="utf-8", errors="ignore")
+        
+        # Simple, focused prompt
+        simple_prompt = [
+            {
+                "role": "system",
+                "content": "You are a scientific writing assistant. Improve the scientific content of the paper."
+            },
+            {
+                "role": "user", 
+                "content": (
+                    "Improve the scientific content of the paper. "
+                    "Then output git diff code showing the changes.\n\n"
+                    "Current paper:\n\n"
+                    f"{current_paper}"
+                )
+            }
+        ]
+        
+        print(f"Sending request to {model}...")
+        print(f"Paper size: {len(current_paper)} characters\n")
+        print("⏳ Waiting for LLM response (this may take 30-90 seconds)...")
+        print("   Please be patient and do not interrupt the process.")
+        print("   Progress indicators will appear as the request completes.\n")
+        
+        try:
+            # Get LLM response
+            response = _universal_chat(
+                simple_prompt,
+                model=model,
+                request_timeout=request_timeout,
+                prompt_type="science_only",
+                fallback_models=config.fallback_models if config else []
+            )
+            print("\n✓ LLM response received successfully!")
+            
+            # Save response
+            output_file = project_dir / "science_only_response.txt"
+            output_file.write_text(response, encoding="utf-8")
+            
+            print("="*80)
+            print("SCIENCE-ONLY MODE RESPONSE")
+            print("="*80)
+            print(response)
+            print("="*80)
+            print(f"\nResponse saved to: {output_file}")
+            print("="*80)
+            
+            # Try to extract and apply diff if present (auto-apply for convenience)
+            import re
+            from utils.diff_utils import is_diff_format, apply_diffs_to_files
+
+            diff_applied = False
+            diff_file = project_dir / "science_only.diff"
+
+            # Save raw response as diff if it contains diff markers
+            if is_diff_format(response):
+                diff_file.write_text(response, encoding="utf-8")
+                print(f"\nDetected diff format in response. Saved to: {diff_file}")
+            else:
+                diff_match = re.search(r'```diff\n(.*?)\n```', response, re.DOTALL)
+                if diff_match:
+                    diff_content = diff_match.group(1)
+                    diff_file.write_text(diff_content, encoding="utf-8")
+                    print(f"\nDiff extracted and saved to: {diff_file}")
+
+            # Attempt to auto-apply diff to paper.tex
+            if diff_file.exists():
+                file_contents = { 'paper.tex': current_paper }
+                # Use full response to preserve file headers if present; otherwise, use saved diff
+                diff_source = response if is_diff_format(response) else diff_file.read_text(encoding="utf-8", errors="ignore")
+                modified_files, success, msg = apply_diffs_to_files(file_contents, diff_source)
+                if success and 'paper.tex' in modified_files:
+                    paper_path.write_text(modified_files['paper.tex'], encoding="utf-8")
+                    print(f"\n✓ Applied science-only diff to paper.tex: {msg}")
+                    diff_applied = True
+                else:
+                    print(f"\n⚠ Could not auto-apply diff: {msg}")
+                    print(f"You can try to apply it manually with git:\n  cd {project_dir}\n  git apply {diff_file.name}")
+            
+        except KeyboardInterrupt:
+            print("\n" + "="*80)
+            print("⚠️  PROCESS INTERRUPTED BY USER")
+            print("="*80)
+            print("The science-only mode was interrupted before completion.")
+            print("To successfully run this mode, please:")
+            print("  1. Run the script again")
+            print("  2. Wait patiently for 30-90 seconds")
+            print("  3. Do not press Ctrl+C or close the terminal")
+            print("="*80)
+            raise
+        except Exception as e:
+            print(f"\n ERROR in science-only mode: {e}")
+            print("\nFull error details:")
+            import traceback
+            traceback.print_exc()
+            print("\nTroubleshooting:")
+            print("  1. Check your internet connection")
+            print("  2. Verify OpenAI API key is valid")
+            print("  3. Try running test_api_connection.py to verify API access")
+        
+        return project_dir
+
     # Progress tracking variables
     quality_history = []
-    stagnation_count = 0
     best_quality_score = 0.0
     
     # Get custom user prompt if not provided as parameter
@@ -4062,7 +4577,7 @@ def run_workflow(
         print("\nLeave empty to use standard prompts only.")
         print("-" * 60)
         
-        user_prompt = timeout_input("Enter your custom prompt (or press Enter to skip):", timeout=30, default="").strip()
+        user_prompt = timeout_input("Enter your custom prompt (or press Enter to skip):", timeout=600, default="").strip()
         if not user_prompt:
             user_prompt = None
         else:
@@ -4266,6 +4781,28 @@ def run_workflow(
         )
         paper_path.write_text(draft, encoding="utf-8")
         
+        # CRITICAL: Validate initial draft meets minimum requirements
+        import re
+        draft_ref_count = len(re.findall(r'\\bibitem\{|@\w+\{', draft))
+        draft_word_count = len(re.findall(r'\b\w+\b', draft.split('\\begin{document}')[-1] if '\\begin{document}' in draft else draft)) // 2
+        
+        print(f"\n{'='*80}")
+        print(f"📊 INITIAL DRAFT VALIDATION")
+        print(f"{'='*80}")
+        print(f"Word count: ~{draft_word_count} words (target: 5000-8000)")
+        print(f"Reference count: {draft_ref_count} refs (target: 15-20)")
+        
+        if draft_ref_count < 10:
+            print(f"\n⚠️ WARNING: Initial draft has only {draft_ref_count} references!")
+            print(f"   First iteration will focus on adding more citations.\n")
+        if draft_word_count < 3000:
+            print(f"\n⚠️ WARNING: Initial draft is short (~{draft_word_count} words)!")
+            print(f"   First iteration will focus on expanding content.\n")
+        
+        if draft_ref_count >= 10 and draft_word_count >= 3000:
+            print(f"✓ Initial draft meets minimum requirements")
+        print(f"{'='*80}\n")
+        
         if enable_ideation:
             print(" Initial draft created with ideation-selected concept")
         else:
@@ -4276,6 +4813,19 @@ def run_workflow(
 
     # Extract/refresh simulation.py from LaTeX initially
     extract_simulation_from_tex(paper_path, sim_path)
+    
+    # AUTOMATIC VALIDATION: Check if simulation.py is corrupted
+    if sim_path.exists():
+        sim_content = sim_path.read_text(encoding='utf-8', errors='ignore')
+        if '... (file truncated for length)' in sim_content or '[CONTEXT TRUNCATED' in sim_content:
+            print(f"\n{'='*80}")
+            print(f"⚠️  DETECTED CORRUPTED SIMULATION FILE")
+            print(f"{'='*80}")
+            print(f"The simulation.py file contains truncation markers.")
+            print(f"This is likely from a previous workflow run with bugs.")
+            print(f"The file will be regenerated in the first iteration.\n")
+            # Clear the corrupted content
+            sim_path.write_text("# Placeholder - will be regenerated from paper.tex\n", encoding='utf-8')
 
     _check_cancellation(cancel_event, "pre-iteration setup")
 
@@ -4332,6 +4882,23 @@ def run_workflow(
         if config.figure_validation:
             fig_issues = _validate_figure_generation(current_tex, sim_path, project_dir)
             quality_issues.extend(fig_issues)
+        
+        # LATEX STRUCTURE VALIDATION (CRITICAL FOR PDF GENERATION)
+        from utils.latex_structure_validator import validate_latex_structure, validate_pdf_visual_issues
+        latex_structure_issues = validate_latex_structure(current_tex, paper_path)
+        if latex_structure_issues:
+            print(f"🔴 CRITICAL LaTeX structure issues detected ({len(latex_structure_issues)} total):")
+            for idx, issue in enumerate(latex_structure_issues, 1):
+                print(f"   {idx}. {issue}")
+            quality_issues.extend(latex_structure_issues)
+        
+        # PDF VISUAL VALIDATION (if PDF was generated)
+        pdf_visual_issues = validate_pdf_visual_issues(paper_path, paper_path.with_suffix('.pdf'))
+        if pdf_visual_issues:
+            print(f"⚠ PDF visual issues detected ({len(pdf_visual_issues)} total):")
+            for idx, issue in enumerate(pdf_visual_issues, 1):
+                print(f"   {idx}. {issue}")
+            quality_issues.extend(pdf_visual_issues)
         
         # EXPERIMENTAL RIGOR VALIDATION
         from utils.experimental_rigor_validator import validate_experimental_rigor
@@ -4397,38 +4964,31 @@ def run_workflow(
         logger.info(f"Iteration {i} quality score: {quality_score:.2f}")
         print(f"Iteration {i} quality score: {quality_score:.2f}")
         
-        # Check for improvement
+        # Track best quality score (for reporting only, no early stopping)
         if quality_score > best_quality_score:
             best_quality_score = quality_score
-            stagnation_count = 0
-        else:
-            stagnation_count += 1
-        
-        # Early stopping for stagnation
-        if stagnation_count >= 2 and i > 1:
-            print(f" Quality stagnation detected ({stagnation_count} iterations without improvement)")
         
         # COMBINED REVIEW AND REVISION IN ONE CALL
         print(f"Running combined review/editorial/revision process...")
         
-        # Generate PDF for AI review if LaTeX compilation was successful and PDF review is enabled
+        # Generate PDF for AI review when PDF review is enabled (even if LaTeX has errors - AI needs to see visual issues)
         pdf_path = None
-        if latex_success and config.enable_pdf_review:
+        if config.enable_pdf_review:
+            print(f"📄 PDF review enabled - generating PDF for visual inspection...")
             pdf_success, generated_pdf_path, pdf_error = _generate_pdf_for_review(paper_path, dynamic_timeout)
             if pdf_success and generated_pdf_path:
                 pdf_path = generated_pdf_path
                 file_size = pdf_path.stat().st_size
                 print(f"✓ PDF generated for AI review: {pdf_path.name} ({file_size:,} bytes)")
                 logger.info(f"PDF generated for AI review: {pdf_path.name} ({file_size:,} bytes)")
+                if not latex_success:
+                    print(f"  ℹ Note: PDF generated despite LaTeX errors - AI will review visual issues")
             else:
                 print(f"✗ PDF generation failed: {pdf_error}")
                 logger.warning(f"PDF generation failed: {pdf_error}")
-        elif not config.enable_pdf_review:
+        else:
             print(f"ℹ PDF review disabled in configuration - sending text-only content to AI model")
             logger.info("PDF review disabled - text-only review mode")
-        else:
-            print(f"⚠ Skipping PDF generation due to LaTeX compilation failure")
-            logger.warning("PDF generation skipped due to LaTeX compilation failure")
         
         review, decision = run_review_revision_step(
             current_tex,
@@ -4470,7 +5030,7 @@ def run_workflow(
         print(f"Review completed")
         print(f"Review complete, applying revisions...")
 
-        # SIMPLIFIED STOPPING LOGIC BASED ON QUALITY THRESHOLD
+        # SIMPLIFIED STOPPING LOGIC BASED ON QUALITY THRESHOLD ONLY
         meets_quality_threshold = quality_score >= config.quality_threshold
         
         if latex_success and meets_quality_threshold:
@@ -4478,11 +5038,6 @@ def run_workflow(
             final_metrics = _extract_quality_metrics(current_tex, sim_summary)
             print(f"Final paper metrics: {final_metrics}")
             break
-        elif stagnation_count >= 2 and not config.no_early_stopping:
-            print(f"[STOP] Quality stagnating for {stagnation_count} iterations. Ending revisions.")
-            break
-        elif stagnation_count >= 2 and config.no_early_stopping:
-            print(f"[INFO] Quality stagnating for {stagnation_count} iterations, but early stopping is disabled. Continuing...")
         
         print(f"Iteration {i}: Combined review and revision completed")
     
@@ -4520,7 +5075,7 @@ def run_workflow(
         
         # First pdflatex run to generate .aux file (and regenerate refs.bib from filecontents)
         print(f"  [1/4] First pdflatex run...")
-        subprocess.run(
+        first_run = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", "paper.tex"],
             cwd=project_dir,
             stdout=subprocess.PIPE,
@@ -4528,6 +5083,34 @@ def run_workflow(
             timeout=dynamic_timeout,
             check=False
         )
+        # Auto-recover from font expansion error by disabling microtype
+        log_file = project_dir / "paper.log"
+        if log_file.exists():
+            try:
+                log_text = log_file.read_text(encoding='utf-8', errors='ignore')
+                if 'pdfTeX error (font expansion): auto expansion is only possible with scalable' in log_text:
+                    print("        ⚠ font expansion error detected — disabling microtype and retrying...")
+                    tex = paper_path.read_text(encoding='utf-8', errors='ignore')
+                    patched = re.sub(r"^\\s*\\usepackage\[[^\]]*\]\{microtype\}\s*$", r"% \\usepackage[expansion=false]{microtype}  % auto-disabled", tex, flags=re.MULTILINE)
+                    patched = re.sub(r"^\\s*\\usepackage\{microtype\}\s*$", r"% \\usepackage{microtype}  % auto-disabled", patched, flags=re.MULTILINE)
+                    if patched != tex:
+                        paper_path.write_text(patched, encoding='utf-8')
+                        # Clean refs.bib to force regeneration if embedded
+                        if uses_filecontents:
+                            refs_file = project_dir / "refs.bib"
+                            if refs_file.exists():
+                                refs_file.unlink()
+                        # Retry first run
+                        subprocess.run(
+                            ["pdflatex", "-interaction=nonstopmode", "paper.tex"],
+                            cwd=project_dir,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            timeout=dynamic_timeout,
+                            check=False
+                        )
+            except Exception:
+                pass
         
         # Run bibtex if .aux file exists and contains citation data
         aux_file = project_dir / "paper.aux"
@@ -4824,8 +5407,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use (default: gpt-5-pro)")
     p.add_argument("--request-timeout", type=int, default=3600, help="Per-request timeout seconds (0 means no timeout)")
     p.add_argument("--max-retries", type=int, default=3, help="Max OpenAI retries")
-    p.add_argument("--max-iterations", type=int, default=4, help="Max review->revise iterations")
-    p.add_argument("--no-early-stopping", action="store_true", help="Disable early stopping for quality stagnation (run all max iterations)")
+    p.add_argument("--max-iterations", type=int, default=4, help="Max review->revise iterations (always runs full iterations, no early stopping)")
     p.add_argument("--modify-existing", action="store_true", help="If output dir already has paper.tex, modify in place")
     p.add_argument("--strict-singletons", action="store_true", default=True, help="Keep only paper.tex & simulation.py (others archived)")
     p.add_argument("--python-exec", default=None, help="Python interpreter for running simulation.py")
@@ -4860,6 +5442,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # Custom prompt parameter
     p.add_argument("--user-prompt", type=str, default=None, help="Custom prompt that takes priority over standard requirements")
     
+    # Science-only mode - simplified workflow
+    p.add_argument("--science-only", action="store_true", help="Enable science-only mode: simplified workflow that only improves scientific content and outputs git diff (skips all validation and iteration)")
+    
     # Diff output parameter - now enabled by default
     p.add_argument("--no-output-diffs", action="store_true", help="Disable diff file saving for each review/revision cycle")
     p.add_argument("--output-diffs", action="store_true", default=True, help="Save diff files for each review/revision cycle to track changes (default: enabled)")
@@ -4884,6 +5469,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--all-code", action="store_true", help="Enable unrestricted code generation mode: LLM can create any code files (not just simulation.py), generate execution commands, and iterate based on results")
     p.add_argument("--code-output-dir", type=str, default="code", help="Directory name within project for generated code files (default: 'code')")
     p.add_argument("--execution-log", type=str, default="execution_log.txt", help="Filename for logging command execution results")
+    
+    # File selection
+    p.add_argument("--specify-files", nargs="+", default=None, help="Only upload specified files to LLM (e.g., --specify-files paper.tex simulation.py)")
     
     args = p.parse_args(argv)
     
@@ -5716,6 +6304,13 @@ def _validate_bibliography(paper_content: str) -> List[str]:
     return issues
 
 if __name__ == "__main__":
+    # Fix Unicode encoding issues on Windows
+    import sys
+    if sys.platform == 'win32':
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    
     print("Starting Enhanced SciResearch Workflow...")
     try:
         ns = parse_args()
@@ -5737,9 +6332,8 @@ if __name__ == "__main__":
         
         print(f"Working with: {ns.output_dir}")
         print(f"Using model: {ns.model}")
-        print(f"Max iterations: {ns.max_iterations}")
+        print(f"Max iterations: {ns.max_iterations} (always runs full iterations)")
         print(f"Quality threshold: {ns.quality_threshold}")
-        print(f"Early stopping: {'disabled' if ns.no_early_stopping else 'enabled'}")
         print(f"Reference validation: {'enabled' if ns.check_references else 'disabled'}")
         print(f" Figure validation: {'enabled' if ns.validate_figures else 'disabled'}")
         print(f"PDF review: {'enabled' if ns.enable_pdf_review else 'disabled'}")
@@ -5758,7 +6352,7 @@ if __name__ == "__main__":
         config.content_protection = ns.enable_content_protection
         config.auto_approve_changes = getattr(ns, 'auto_approve_changes', False)
         config.content_protection_threshold = ns.content_protection_threshold
-        config.no_early_stopping = ns.no_early_stopping
+        # Note: Early stopping permanently removed
         
         # Handle test scaling mode
         if ns.test_scaling:
@@ -5809,7 +6403,8 @@ if __name__ == "__main__":
             enable_blueprint_planning=ns.enable_blueprint_planning,
             all_code_mode=ns.all_code,
             code_output_dir=ns.code_output_dir,
-            execution_log_file=ns.execution_log
+            execution_log_file=ns.execution_log,
+            science_only=ns.science_only
         )
         print(f" Workflow completed! Results in: {result_dir}")
     except WorkflowCancelled as e:

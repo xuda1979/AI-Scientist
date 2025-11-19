@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-10-28T13:38:10.101399",
+  "file": "output\\acsc\\paper.tex",
+  "backup": "output\\acsc\\backups\\paper.tex_pre_revision_133810",
+  "metrics": {
+    "word_count": 4576,
+    "char_count": 39118,
+    "section_count": 10,
+    "subsection_count": 17,
+    "figure_count": 3,
+    "table_count": 3,
+    "equation_count": 0,
+    "citation_count": 11,
+    "paragraph_count": 92,
+    "page_estimate": 18.304
+  }
+}
