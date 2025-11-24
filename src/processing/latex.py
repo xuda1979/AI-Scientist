@@ -66,7 +66,11 @@ class LaTeXProcessor:
 
             needs_bibliography = False
             aux_path = paper_path.with_suffix('.aux')
-            if aux_path.exists():
+            has_bib_file = list(paper_path.parent.glob("*.bib"))
+
+            if has_bib_file:
+                needs_bibliography = True
+            elif aux_path.exists():
                 try:
                     aux_content = aux_path.read_text(encoding="utf-8", errors="ignore")
                     bibliography_indicators = ("\\bibdata", "\\bibstyle", "\\citation{")

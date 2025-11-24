@@ -1,0 +1,298 @@
+\documentclass[aspectratio=169]{beamer} % Use 16:9 aspect ratio for modern screens
+\usepackage[utf8]{inputenc}
+\usepackage{ctex} % For Chinese support
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+% --- Theme & Color Configuration ---
+\usetheme{Madrid}
+\useoutertheme{infolines} % Clean footer
+\useinnertheme{circles}   % Round bullets
+
+% Define custom professional colors (Quantum/Tech Style)
+\definecolor{TechBlue}{RGB}{0, 51, 102}    % Deep Navy Blue
+\definecolor{TechLightBlue}{RGB}{51, 102, 153} % Lighter Blue
+\definecolor{TechAccent}{RGB}{204, 153, 0} % Gold/Amber for accents
+
+% Apply colors
+\setbeamercolor{structure}{fg=TechBlue}
+\setbeamercolor{palette primary}{bg=TechBlue, fg=white}
+\setbeamercolor{palette secondary}{bg=TechLightBlue, fg=white}
+\setbeamercolor{palette tertiary}{bg=TechBlue!90!black, fg=white}
+\setbeamercolor{frametitle}{bg=TechBlue, fg=white}
+\setbeamercolor{title}{bg=TechBlue, fg=white}
+\setbeamercolor{block title}{bg=TechBlue, fg=white}
+\setbeamercolor{block body}{bg=TechBlue!10, fg=black}
+\setbeamercolor{item}{fg=TechAccent} % Gold bullets
+
+% Font adjustments
+\usefonttheme{professionalfonts}
+
+% Title Page Information
+\title[2025年度述职报告]{2025年度高职级专家述职报告}
+\subtitle{\textbf{创新 $\cdot$ 突破 $\cdot$ 引领} \\ \vspace{0.2cm} \large \textbf{总体方向：AI for Quantum \& AI for Science}} % Added a strong subtitle
+\author[许达]{汇报人：许达  \\ 部门：未来院3室 \\入职时间：2025年7月15日}
+\date{2025年11月}
+\institute[研究院]{中国移动研究院}
+
+% Add a logo if you have one (uncomment and adjust path)
+% \logo{\includegraphics[height=1cm]{logo.png}}
+
+\begin{document}
+
+% Slide 1: Title Page with a visual touch
+\begin{frame}[plain]
+    \titlepage
+\end{frame}
+
+% Slide 2: Table of Contents
+\begin{frame}{目录}
+    \tableofcontents
+\end{frame}
+
+% Section 1
+\section{技术攻关成果}
+\begin{frame}{技术攻关成果：年度亮点工作完成情况}
+    \begin{itemize}
+        \item \textbf{总体方向}：深耕 \textbf{AI for Quantum} 与 \textbf{AI for Science} 交叉领域，聚焦三项核心工作：
+        \begin{itemize}
+            \item ALPHAQUBIT（AI增强量子纠错译码器）
+            \item AI-Scientist科研智能体
+            \item quantum-qwen25-coder量子代码大模型
+        \end{itemize}
+        \item \textbf{论文方面}：已投稿论文1篇，本周将完成第2篇投稿；多篇论文草稿与初稿在撰写中。
+        \item \textbf{工程方面}：ALPHAQUBIT超导部分完成V1，离子阱模块对接北京市科委量子项目；AI-Scientist V1已在本组及跨部门试用。
+        \item \textbf{支撑价值}：为“量子×大模型×智能体”的长期技术路线奠定关键基座，形成可复用代码与规范。
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{技术攻关成果（1）：ALPHAQUBIT量子纠错译码器}
+    \begin{block}{项目目标与角色}
+        \textbf{项目目标}：面向超导 \& 离子阱量子计算装置，构建AI增强的量子纠错软件QEC平台。\\
+        \textbf{担任角色}：技术负责人/架构师。主导模型架构设计与核心算法攻关。
+    \end{block}
+    \begin{itemize}
+        \item \textbf{超导模块}：完成V1版本的功能实现与仿真验证，形成端到端可运行的纠错译码链路。
+        \item \textbf{离子阱模块}：正在按北京市科委项目需求开发，将于近期对接真实装置数据与实验流程。
+        \item \textbf{模型创新}：引入多头隐含注意力（Multi-Head Latent Attention）架构，加速训练和推理。
+        \item \textbf{工程成果}：形成清晰的模块划分、单元测试与Benchmark脚本，可复用性强。
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{技术攻关成果（2）：AI-Scientist科研智能体}
+    \begin{block}{项目目标与角色}
+        \textbf{项目目标}：让智能体贯穿科研全链路：选题 $\rightarrow$ 检索 $\rightarrow$ 代码实验 $\rightarrow$ 数据分析 $\rightarrow$ 论文写作。\\
+        \textbf{担任角色}：项目发起人/核心开发者。主导智能体工作流设计与Prompt工程优化。
+    \end{block}
+    \begin{itemize}
+        \item \textbf{已实现能力}：自动论文检索与阅读辅助、实验代码生成、结果记录整理、初稿撰写与润色。
+        \item \textbf{应用成效}：已辅助本组及跨部门同事完成多篇论文草稿/初稿，显著缩短科研迭代周期。
+        \item \textbf{论文进展}：在AI赋能量子与量子纠错方向已投稿1篇，高水平论文1篇将于本周投稿。
+        \item \textbf{工程贡献}：沉淀通用科研工作流模板，为研究院推广“AI for Science”提供样板。
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{技术攻关成果（3）：quantum-qwen25-coder代码大模型}
+    \begin{block}{项目目标与角色}
+        \textbf{项目目标}：面向量子科学研究与量子编程场景的专业代码大模型。\\
+        \textbf{担任角色}：技术骨干。负责数据管线构建与微调策略制定。
+    \end{block}
+    \begin{itemize}
+        \item \textbf{代码侧进展}：已完成数据管线与训练脚本开发，本周启动第一阶段微调训练。
+        \item \textbf{训练策略}：采用参数高效微调（如LoRA等）与并行加速策略，提高算力利用率。
+        \item \textbf{能力规划}：重点提升量子算法设计、量子电路编程与科研分析脚本的生成质量。
+        \item \textbf{推理时算法}：探索推理时算法增强模型的科学推理与自检能力。
+    \end{itemize}
+\end{frame}
+
+
+
+\begin{frame}{技术攻关成果（4）：硬核成果与贡献}
+    \begin{itemize}
+        \item \textbf{部门级}
+        \begin{itemize}
+            \item 完成ALPHAQUBIT和AI-Scientist两个项目的V1版本；建立代码规范、单测模板与文档模板。
+        \end{itemize}
+        \item \textbf{院级}
+        \begin{itemize}
+            \item ALPHAQUBIT离子阱模块作为关键软件能力融入北京市科委量子项目，支撑我院发布的“无极一号”等装置实验。
+            \item 形成“量子×大模型×智能体”的系统技术路线，支撑研究院在量智融合方向的布局。
+        \end{itemize}
+        \item \textbf{公司级}
+        \begin{itemize}
+            \item 以AI-Scientist作为科研生产力工具，逐步推广到更多团队，提升整体科研效率与产出。
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+% Section 2
+\section{技术影响力}
+\begin{frame}{技术影响力：行业引领与生态构建}
+    \begin{itemize}
+        \item \textbf{行业技术卡位}
+        \begin{itemize}
+            \item 围绕“AI增强量子纠错”和“量子专用代码大模型”布局，聚焦目前国内外空白/稀缺方向。
+            \item 支撑北京市科委量子项目，助力公司深度融入“北京量子高地”建设。
+        \end{itemize}
+        \item \textbf{科研与开源影响}
+        \begin{itemize}
+            \item ALPHAQUBIT、AI-Scientist、quantum-qwen25-coder三个项目开源代码逐步完善，面向社区发布。
+            \item AI赋能量子纠错方向论文已投稿，目标冲击高水平期刊/会议，提升研究院学术影响力。
+        \end{itemize}
+        \item \textbf{内部示范效应}
+        \begin{itemize}
+            \item 通过实际Demo和内部分享，引导更多同事尝试使用智能体与代码大模型提升工作效率。
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+% Section 3
+\section{专业队伍培养}
+\begin{frame}{专业队伍培养：团队梯队建设与经验传承}
+    \begin{itemize}
+        \item \textbf{角色定位}
+        \begin{itemize}
+            \item 作为4-2级技术专家，重点在“量子×AI软件工程”方向发挥带头作用。
+            \item 在软件架构设计、代码质量控制和工程工具选型等方面提供指导。
+        \end{itemize}
+        \item \textbf{梯队建设与赋能}
+        \begin{itemize}
+            \item 与同事共同建立规范化的代码管理与开发流程（Git规范、Code Review、自动化测试）。
+            \item 搭建并维护团队自有算力环境，沉淀One-Click训练与评测脚本，降低入门门槛。
+            \item 通过技术分享会和Pair-Programming形式，帮助年轻同事理解大模型微调与智能体开发方法。
+        \end{itemize}
+        \item \textbf{知识沉淀}
+        \begin{itemize}
+            \item 输出ALPHAQUBIT架构设计、AI-Scientist工作流说明等内部技术文档多份，形成可复用模板。
+            \item 撰写各类内部技术调研报告约20篇，为团队技术决策提供有力支撑。
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+% Section 4
+\section{问题与改进}
+\begin{frame}{问题与改进：短板与改进措施}
+    \begin{columns}
+        \column{0.5\textwidth}
+        \begin{block}{个人能力短板}
+            \begin{itemize}
+                \item 对公司内部业务场景和产业化需求理解仍需加深，科研与业务结合度有提升空间。
+                \item 在跨团队资源协调与项目管理上仍偏“工程导向”，需要进一步提升统筹与沟通能力。
+            \end{itemize}
+        \end{block}
+        
+        \column{0.5\textwidth}
+        \begin{block}{科研推进难点}
+            \begin{itemize}
+                \item 真实量子装置实验数据有限，模型主要依赖模拟器训练，泛化能力和实机效果需进一步验证。
+                \item 大模型训练算力资源紧张，影响迭代速度和多方案对比实验。
+            \end{itemize}
+        \end{block}
+    \end{columns}
+    
+    \vspace{0.5cm}
+    \begin{block}{针对性改进措施}
+        \begin{itemize}
+            \item 主动参与更多跨部门需求讨论，将量子与AI技术更紧密地对接具体业务问题。
+            \item 强化实验设计与A/B评测方法，通过精细化实验提高每次训练的“信息增益”。
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+% Section 5
+\section{未来规划}
+\begin{frame}{未来规划}
+    \begin{block}{2026年科研与产品化目标}
+        \begin{itemize}
+            \item \textbf{ALPHAQUBIT}：完成离子阱V1在我院“无极一号”等装置上的在线部署与场景验证，形成v1.0文档与Benchmark。
+            \item \textbf{quantum-qwen25-coder}：发布 v0.x $\rightarrow$ v1.0，在典型量子编程任务上达到可用水平，产出2–3篇算法相关论文。
+            \item \textbf{AI-Scientist}：接入自研科研推理模型，形成研究院标杆级自动化科研流水线案例。
+        \end{itemize}
+    \end{block}
+    
+    \begin{itemize}
+        \item \textbf{团队建设重点}：重点培养“量子+AI”复合型人才，建立常态化技术分享机制，提升团队整体工程与算法能力。
+        \item \textbf{工程积累}：2025年已完成代码总行数约13万行（含三大项目核心代码），持续保持高质量工程标准。
+        \item \textbf{论文目标}：2025年内完成2篇投稿，多篇在撰写与修改中。
+        \item \textbf{资源诉求}：当前仅有约5块Ascend 910B算力卡，可满足基础实验但难以支撑多模型并行与大规模实验。
+    \end{itemize}
+\end{frame}
+
+
+
+\appendix
+\section{附录：学术成果详细介绍}
+
+\begin{frame}{附录1：Horizon Memory Combs 的量子模拟}
+    \begin{block}{论文概要}
+        \textbf{题目}：Quantum Simulation of Horizon Memory Combs \\
+        \textbf{核心贡献}：设计并实现了HMC模型的门级量子线路，在NISQ设备上模拟了黑洞蒸发的非马尔可夫动力学特征。
+    \end{block}
+    \begin{itemize}
+        \item \textbf{与量子计算/算法的联系}：
+        \begin{itemize}
+            \item \textbf{量子线路设计}：将黑洞的“快速置乱”（Fast Scrambling）特性映射为随机幺正线路（Random Unitary Circuits），并利用2-design性质进行线路优化。
+            \item \textbf{算法验证}：计划在无极一号上验证，验证了Page曲线的幺正回转，是“量子引力实验在量子计算机上实现”的典型案例。
+            \item \textbf{非马尔可夫特征检测}：提出了利用$g^{(2)}$二阶关联函数检测量子记忆效应的算法，该方法可直接应用于量子网络中非马尔可夫噪声的标定与抑制。
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{附录2：Beyond Chain-of-Thought (Test-Time Compute Scaling)}
+    \begin{block}{论文概要}
+        \textbf{题目}：Beyond Chain-of-Thought: Test-Time Compute Scaling for Deliberative Large Language Models \\
+        \textbf{核心贡献}：提出了“预算审慎推理”（Budgeted Deliberation）的统一形式化框架，并设计了10种超越线性CoT的测试时计算算法（如IGD, RS-MCTT等）。
+    \end{block}
+    \begin{itemize}
+        \item \textbf{核心技术点}：
+        \begin{itemize}
+            \item \textbf{Budget-Performance Frontier (BPF)}：定义并量化了测试时计算投入与模型性能的边界曲线。
+            \item \textbf{Index-Guided Deliberation (IGD)}：引入Gittins索引机制，实现多推理线程的动态最优调度。
+            \item \textbf{Risk-Sensitive MCTT}：结合风险敏感控制理论，改进了蒙特卡洛思维树搜索的鲁棒性。
+        \end{itemize}
+        \item \textbf{当前进展}：
+        \begin{itemize}
+            \item \textbf{代码实现}：\textcolor{red}{\textbf{已完成核心算法代码开发}}，包括IGD调度器与RS-MCTT搜索树。
+            \item \textbf{测试验证}：\textcolor{red}{\textbf{正在进行合成数据与基准测试验证}}，初步验证了BPF曲线的收益递减规律。
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{附录3：时空彭罗斯不等式的谱几何证明（量子纠错视角）}
+    \begin{block}{论文题目}
+        \textbf{A Rigorous Spectral Proof of the Spacetime Penrose Inequality}
+    \end{block}
+    
+    \begin{itemize}
+        \item \textbf{核心突破}：提出“谱质量泛函”与“谱共形流”新框架，严格证明了广义相对论核心猜想 ($M_{ADM} \ge \sqrt{A/16\pi}$)。
+        \item \textbf{量子纠错理论的深度应用}：
+        \begin{itemize}
+            \item \textbf{全息对偶}：建立视界面积（黑洞熵）与量子纠错码纠缠熵的数学映射。
+            \item \textbf{谱稳定性验证}：利用拉普拉斯算子的谱间隙（Spectral Gap）分析几何稳定性，从数学上等价于验证\textbf{量子纠错码的抗噪鲁棒性}。
+            \item \textbf{几何流即解码}：构造的“谱流”演化过程，物理图像上对应于将受扰动的时空量子态“解码”恢复至史瓦西基态的操作。
+        \end{itemize}
+        \item \textbf{价值}：为理解引力全息性质与量子信息的内在联系提供了全新的数学工具。
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{附录4：二次增长图上的谱Zeta函数渐近律}
+    \begin{block}{论文概要}
+        \textbf{题目}：Sharp Spectral Zeta Asymptotics on Graphs of Quadratic Growth \\
+        \textbf{核心贡献}：证明了在具有二次体积增长的图（如二维晶格、无序介质）上，谱Zeta函数 $Z_n(1)$ 遵循精确的渐近律 $Z_n(1) \sim \mathcal{G} N_n \log N_n$。
+    \end{block}
+    \begin{itemize}
+        \item \textbf{与量子科学的联系}：
+        \begin{itemize}
+            \item \textbf{量子场论正则化}：谱Zeta函数是量子场论中计算单圈有效作用量（One-loop Effective Action）和卡西米尔效应（Casimir Effect）的核心工具（Zeta Function Regularization）。
+            \item \textbf{无序量子系统}：该理论适用于随机电导模型（Random Conductance Model）和渗流簇（Percolation Clusters），为研究\textbf{无序量子材料}中的安德森局域化（Anderson Localization）与量子输运提供了几何谱学基础。
+            \item \textbf{量子引力离散化}：在二维量子引力（如Liouville Quantum Gravity）的离散模型中，谱渐近行为反映了时空的有效维度与共形异常。
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \centering
+    \Huge 谢谢！
+\end{frame}
+
+\end{document}

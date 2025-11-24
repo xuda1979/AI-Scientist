@@ -1,6 +1,6 @@
-label severity mitigation diagnostic
-calibration_lines 2 notch+taper+aux_coherence incoherent_across_IFO
-short_glitches 3 gating+chi2+morphology phase_inconsistency
-spectral_leakage 2 multi_taper+injections window_dependence
-lensing_multipath 1 sky_delay_consistency nonstationary_delays
-nonlinear_overtones 2 joint_multimode_bayes posterior_predictive
+Confounder Mitigation Diagnostic
+{Calibration lines / combs} {Notch/taper + coherence with aux. channels} {Incoherence across detectors}
+{Short glitches / transients} {Gating + morphology vetoes; chi-sq tests} {Inconsistent phase; time-shift nulls}
+{Spectral leakage} {Multi-taper windows + injection tests} {Sidebands move with window size}
+{Lensing multipath} {Sky-location/delay consistency} {Non-stationary delays across events}
+{Nonlinear overtones} {Joint multi-mode fits; Bayesian model compare} {Posterior predictive checks}

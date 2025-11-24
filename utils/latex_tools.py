@@ -168,8 +168,9 @@ def compile_latex(project_dir: Path, tex_file: str = "paper.tex") -> Tuple[bool,
     # Check if paper uses external bibliography (not embedded thebibliography)
     has_embedded_bib = r"\begin{thebibliography}" in tex_content
     has_bib_command = r"\bibliography{" in tex_content or r"\bibliographystyle{" in tex_content
-    
-    if not has_embedded_bib and (has_bib_command or aux_file.exists()):
+    has_bib_file = list(project_dir.glob("*.bib"))
+
+    if not has_embedded_bib and (has_bib_command or aux_file.exists() or has_bib_file):
         needs_bibtex = True
         # Also check .aux file for \bibdata or \bibstyle commands
         if aux_file.exists():

@@ -1,0 +1,5 @@
+MassLabel SBH_order InvSBH_order Amp_order
+{$10\,M_\odot$} \sim 10^{79} \sim 10^{-79} \sim 10^{-81}
+{$30\,M_\odot$} \sim 10^{79} \sim 10^{-79} \sim 10^{-81}
+{$10^6\,M_\odot$} \sim 10^{89} \sim 10^{-89} \sim 10^{-91}
+{$10^8\,M_\odot$} \sim 10^{93} \sim 10^{-93} \sim 10^{-95}

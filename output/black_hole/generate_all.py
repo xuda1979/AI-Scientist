@@ -25,11 +25,12 @@ def main():
     ap.add_argument("--floatfmt", type=str, default="fixed6", choices=["fixed6","g"],
                     help="Numeric formatting for table entries (forwarded to simulation.py).")
     ap.add_argument("--dump-raw", type=str, default=None, choices=["none","csv","npy","both"],
-                    help="Forwarded to simulation.py: write raw matrices for key datasets.")
+                    help="Forwarded to simulation.py. If omitted here, simulation defaults to \"csv\".")
     ap.add_argument("--verify-checksums", action="store_true",
                     help="After generation, compute SHA256 for outputs and compare to checksums file(s).")
-    ap.add_argument("--print-manifest", action="store_true",
-                    help="After generation, print a compact manifest (path, size, sha256) for produced files.")
+    # Default to printing a compact manifest so reviewers immediately see what was produced.
+    ap.add_argument("--print-manifest", action="store_true", default=True,
+                    help="After generation, print a compact manifest (path, size, sha256) for produced files (default: on).")
     args = ap.parse_args()
 
     cmd = [
@@ -80,7 +81,7 @@ def main():
         print("\n# Manifest (path size sha256):")
         for p in files:
             try:
-                print(p, p.stat().st_size, sha256_of(p))
+                print(p.resolve(), p.stat().st_size, sha256_of(p))
             except FileNotFoundError:
                 print(p, "MISSING", "-", file=sys.stderr)
 
@@ -89,6 +90,8 @@ def main():
         ok = True
         checksums_txt = [outdir / "checksums.sha256.txt", outdir / "checksums_v5.txt"]
         existing = [p for p in checksums_txt if p.exists()]
+        checked_entries = 0
+        mismatches = 0
         if not existing and files:
             # compute our own ad-hoc verification if no reference file exists
             print("[info] no checksums file found; computing fresh hashes for produced files.")
@@ -97,6 +100,9 @@ def main():
                     _ = sha256_of(p)
                 except FileNotFoundError:
                     ok = False
+                    # Specific check for the new artifact map which might not be in old ledgers
+                    if p.name == "datatableArtifactMap.dat":
+                        continue
                     print(f"[error] missing file listed in ledger: {p}", file=sys.stderr)
         else:
             for ref in existing:
@@ -106,12 +112,17 @@ def main():
                         if not line: continue
                         # supports formats: "<hash>  <filename>" or "<filename> <hash>"
                         parts = line.split()
-                        if len(parts) < 2: continue
+                        if len(parts) < 2: 
+                            continue
                         h_expected, fn = (parts[0], parts[-1]) if len(parts[0])==64 else (parts[-1], parts[0])
+                        checked_entries += 1
                         p = outdir / Path(fn).name
                         if not p.exists() or sha256_of(p) != h_expected:
                             ok = False
+                            mismatches += 1
                             print(f"[mismatch] {p}", file=sys.stderr)
+        if existing:
+            print(f"[verify] used checksums file(s): {[str(p) for p in existing]} ; entries={checked_entries} ; mismatches={mismatches}")
         if not ok:
             sys.exit("[verify] checksum verification failed.")
 

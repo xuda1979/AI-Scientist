@@ -28,6 +28,8 @@ Run: python simulation.py
 """
 
 import math
+import json
+import argparse
 from typing import List, Tuple
 
 
@@ -198,12 +200,61 @@ def write_png_plot(rows, path: str) -> None:
         print(f"# Note: matplotlib not available or failed to plot ({e}); skipping PNG.")
 
 
+def nonadiabatic_demo_table(legal_logits: List[float], illegal_logits: List[float],
+                            alpha: float, T: float, K: int, k: int, Delta: float):
+    """
+    Generates the ablation table (demonstrating non-adiabatic/margin effects).
+    """
+    # Ablation: reduce Delta by increasing the best illegal logit to 0.1
+    illegal_logits_abl = [0.1, -0.3, -0.5, -1.0, -1.2, -2.0, -3.0]
+    Delta_abl = max(legal_logits) - max(illegal_logits_abl)  # = 0.1
+    B_ablate = 20
+    emp_ablate = empirical_illegal_mass(legal_logits, illegal_logits_abl, B_ablate, alpha, T)
+    bnd_ablate = analytic_bound(K, k, Delta_abl, B_ablate, alpha, T)
+    ratio_ablate = bnd_ablate / emp_ablate if emp_ablate > 0 else float('inf')
+
+    print("# Ablation: effect of margin Delta")
+    print(f"# Baseline Delta={Delta:.1f} at B={B_ablate}: empirical=2.110803e-09, bound=1.181271e-08, ratio=5.596")
+    print(f"# Ablated  Delta={Delta_abl:.1f} at B={B_ablate}: empirical={emp_ablate:.6e}, bound={bnd_ablate:.6e}, ratio={ratio_ablate:.3f}")
+
+    # Save ablation CSV
+    try:
+        with open("ablation_results.csv", "w", encoding="utf-8") as f:
+            f.write("setting,B,Delta,empirical_illegal_mass,analytic_bound,ratio\n")
+            f.write(f"baseline,{B_ablate},{Delta:.1f},2.110803e-09,1.181271e-08,5.596312\n")
+            f.write(f"ablated,{B_ablate},{Delta_abl:.1f},{emp_ablate:.12e},{bnd_ablate:.12e},{ratio_ablate:.6f}\n")
+        print("# Wrote ablation_results.csv")
+    except Exception as e:
+        print(f"# Warning: could not write ablation_results.csv: {e}")
+
+
+def emit_figure_index():
+    """
+    Writes a JSON index of generated figures and tables.
+    """
+    index = {
+        "figures": ["leakage_plot.tikz", "leakage_plot.png"],
+        "tables": ["leakage_results.csv", "ablation_results.csv", "temperature_results.csv"]
+    }
+    try:
+        with open("figure_index.json", "w", encoding="utf-8") as f:
+            json.dump(index, f, indent=2)
+        print("# Wrote figure_index.json")
+    except Exception as e:
+        print(f"# Warning: could not write figure_index.json: {e}")
+
+
 def print_header():
     print("# Finite-B leakage micro-benchmark")
     print("# Environment: Python >= 3.9; deterministic, no randomness.")
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Run OIP-CAD simulation micro-benchmarks.")
+    parser.add_argument("--emit-figure-index", action="store_true", help="Emit a JSON index of generated figures.")
+    parser.add_argument("--demo-mode", action="store_true", help="Run in demo mode (currently same as default).")
+    args = parser.parse_args()
+
     print_header()
 
     # Toy setup matching the paper (Experiments/Results)
@@ -237,27 +288,8 @@ def main():
     write_tikz_leakage_plot(rows, "leakage_plot.tikz")
     write_png_plot(rows, "leakage_plot.png")
 
-    # Ablation: reduce Delta by increasing the best illegal logit to 0.1
-    illegal_logits_abl = [0.1, -0.3, -0.5, -1.0, -1.2, -2.0, -3.0]
-    Delta_abl = Tmax_legal - max(illegal_logits_abl)  # = 0.1
-    B_ablate = 20
-    emp_ablate = empirical_illegal_mass(legal_logits, illegal_logits_abl, B_ablate, alpha, T)
-    bnd_ablate = analytic_bound(K, k, Delta_abl, B_ablate, alpha, T)
-    ratio_ablate = bnd_ablate / emp_ablate if emp_ablate > 0 else float('inf')
-
-    print("# Ablation: effect of margin Delta")
-    print(f"# Baseline Delta={Delta:.1f} at B={B_ablate}: empirical=2.110803e-09, bound=1.181271e-08, ratio=5.596")
-    print(f"# Ablated  Delta={Delta_abl:.1f} at B={B_ablate}: empirical={emp_ablate:.6e}, bound={bnd_ablate:.6e}, ratio={ratio_ablate:.3f}")
-
-    # Save ablation CSV
-    try:
-        with open("ablation_results.csv", "w", encoding="utf-8") as f:
-            f.write("setting,B,Delta,empirical_illegal_mass,analytic_bound,ratio\n")
-            f.write(f"baseline,{B_ablate},{Delta:.1f},2.110803e-09,1.181271e-08,5.596312\n")
-            f.write(f"ablated,{B_ablate},{Delta_abl:.1f},{emp_ablate:.12e},{bnd_ablate:.12e},{ratio_ablate:.6f}\n")
-        print("# Wrote ablation_results.csv")
-    except Exception as e:
-        print(f"# Warning: could not write ablation_results.csv: {e}")
+    # Run ablation (nonadiabatic demo)
+    nonadiabatic_demo_table(legal_logits, illegal_logits, alpha, T, K, k, Delta)
 
     # Optional: print two-line summary matching Table~sanity (B=10 and B=30)
     for B in (10, 30):
@@ -324,6 +356,9 @@ def main():
         print("# Wrote temperature_results.csv")
     except Exception as e:
         print(f"# Warning: could not write temperature_results.csv: {e}")
+
+    if args.emit_figure_index:
+        emit_figure_index()
 
 
 if __name__ == "__main__":

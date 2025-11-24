@@ -4,4 +4,4 @@ n_amp 5
 n_decay 3
 N_trials 750
 p0 0.003000
-p_eff 0.000004
+p_eff 4.000e-06

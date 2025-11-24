@@ -40,7 +40,7 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
     working_dir = paper_path.parent
     
     try:
-        # Run pdflatex with timeout
+        # 1. First pdflatex run
         result = subprocess.run(
             ["pdflatex", "-interaction=nonstopmode", paper_path.name],
             cwd=working_dir,
@@ -51,6 +51,50 @@ def _compile_latex_and_get_errors(paper_path: Path, timeout: int = 120) -> Tuple
             errors='ignore'
         )
         
+        # 2. Run bibtex if needed
+        # Check for .bib files in the directory or bibliography commands
+        has_bib_file = list(working_dir.glob("*.bib"))
+        aux_file = paper_path.with_suffix('.aux')
+        needs_bibtex = False
+        
+        if has_bib_file:
+             needs_bibtex = True
+        elif aux_file.exists():
+             try:
+                 aux_content = aux_file.read_text(encoding='utf-8', errors='ignore')
+                 if r"\bibdata" in aux_content or r"\bibstyle" in aux_content:
+                     needs_bibtex = True
+             except:
+                 pass
+
+        if needs_bibtex:
+            try:
+                subprocess.run(
+                    ["bibtex", paper_path.stem],
+                    cwd=working_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
+            except FileNotFoundError:
+                pass # Bibtex not found, continue
+            except Exception:
+                pass # Bibtex failed, continue
+
+            # 3. Run pdflatex again (twice to resolve references)
+            for _ in range(2):
+                result = subprocess.run(
+                    ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+                    cwd=working_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
+
         # Check if PDF was generated successfully
         pdf_path = paper_path.with_suffix('.pdf')
         latex_success = pdf_path.exists() and pdf_path.stat().st_size > 0
@@ -101,7 +145,47 @@ def _generate_pdf_for_review(paper_path: Path, timeout: int = 120) -> Tuple[bool
     working_dir = paper_path.parent
     
     try:
-        # Run pdflatex multiple times for proper cross-references
+        # 1. First pdflatex run
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", paper_path.name],
+            cwd=working_dir,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            encoding='utf-8',
+            errors='ignore'
+        )
+
+        # 2. Run bibtex if needed
+        has_bib_file = list(working_dir.glob("*.bib"))
+        aux_file = paper_path.with_suffix('.aux')
+        needs_bibtex = False
+        
+        if has_bib_file:
+             needs_bibtex = True
+        elif aux_file.exists():
+             try:
+                 aux_content = aux_file.read_text(encoding='utf-8', errors='ignore')
+                 if r"\bibdata" in aux_content or r"\bibstyle" in aux_content:
+                     needs_bibtex = True
+             except:
+                 pass
+
+        if needs_bibtex:
+            try:
+                subprocess.run(
+                    ["bibtex", paper_path.stem],
+                    cwd=working_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
+            except:
+                pass
+
+        # 3. Run pdflatex multiple times for proper cross-references
         for run_num in range(2):  # Usually 2 runs are enough
             result = subprocess.run(
                 ["pdflatex", "-interaction=nonstopmode", paper_path.name],

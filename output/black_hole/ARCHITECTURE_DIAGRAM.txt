@@ -1,0 +1,206 @@
+PT–MPO ARCHITECTURE: TOY MODEL vs. INFRASTRUCTURE
+================================================
+
+BEFORE (Mixed Concerns):
+------------------------
+┌─────────────────────────────────────────────┐
+│           simulation.py                      │
+│                                              │
+│  ┌────────────────────────────────────────┐ │
+│  │   run_tensor_step()                    │ │
+│  │                                        │ │
+│  │   • Generate Haar unitary              │ │
+│  │   • Apply to state                     │ │
+│  │   • SVD for entanglement               │ │
+│  │   • Truncate to capacity               │ │
+│  │   • Normalize                          │ │
+│  │                                        │ │
+│  │   (TOY + INFRASTRUCTURE MIXED)         │ │
+│  └────────────────────────────────────────┘ │
+│                                              │
+│  page_curve_ensemble()                       │
+│  calculate_entropy()                         │
+│  error budgets, convergence checks...        │
+└─────────────────────────────────────────────┘
+
+Problem: Hard to swap in real physics without rewriting everything
+
+
+AFTER (Clean Separation):
+--------------------------
+┌─────────────────────────────────────────────────────────────┐
+│                    simulation.py                            │
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐│
+│  │ set_physical_step_update(fn)  ← USER HOOK              ││
+│  │   Registers microscopic model callback                 ││
+│  └────────────────────────────────────────────────────────┘│
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐│
+│  │   run_tensor_step(S_prev, target_chi, rng)            ││
+│  │                                                        ││
+│  │   if _PhysicalStepUpdate is not None:                 ││
+│  │       ┌──────────────────────────────────────┐        ││
+│  │       │ Delegate to user callback             │        ││
+│  │       │ (4D GR, JT, QFT, whatever you want)  │ ◄──────┼┤ YOUR PHYSICS
+│  │       └──────────────────────────────────────┘        ││
+│  │       • Truncate to target_chi                        ││
+│  │       • Normalize                                     ││
+│  │   else:                                               ││
+│  │       ┌──────────────────────────────────────┐        ││
+│  │       │ Default toy model:                   │        ││
+│  │       │ • Generate Haar unitary              │        ││
+│  │       │ • Apply to state                     │        ││
+│  │       │ • SVD for entanglement               │        ││
+│  │       │ • Truncate to capacity               │        ││
+│  │       │ • Normalize                          │        ││
+│  │       └──────────────────────────────────────┘        ││
+│  └────────────────────────────────────────────────────────┘│
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐│
+│  │ PT–MPO INFRASTRUCTURE (model-agnostic)                ││
+│  │                                                        ││
+│  │ • page_curve_ensemble() : ensemble averages           ││
+│  │ • calculate_entropy()   : von Neumann entropy         ││
+│  │ • error budgets         : convergence tracking        ││
+│  │ • capacity constraints  : enforce S_BH ceiling        ││
+│  │ • checksum/provenance   : reproducibility             ││
+│  └────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+
+Benefit: Toy model isolated in "else" branch; infrastructure works with any physics
+
+
+DATA FLOW WITH CUSTOM CALLBACK:
+--------------------------------
+
+Your microscopic model (e.g., 4D_gravity_eft.py):
+
+  def schwarzschild_kernel_step(S_prev, target_chi, rng):
+      # 1. Load kernel from eq. 4.14 / App. F
+      K_omega = load_schwarzschild_kernel(...)
+      
+      # 2. Build one-step influence functional
+      influence = build_process_tensor(K_omega, time_step)
+      
+      # 3. Apply to current state
+      state = singular_values_to_state(S_prev)
+      new_state = apply_influence(influence, state)
+      
+      # 4. Extract new singular values
+      s_vals = state_to_singular_values(new_state)
+      return s_vals
+
+Main script:
+
+  import simulation
+  from my_physics import schwarzschild_kernel_step
+  
+  # Register your physics
+  simulation.set_physical_step_update(schwarzschild_kernel_step)
+  
+  # Run simulation - uses YOUR physics instead of Haar
+  # python simulation.py --outdir . --steps 12 --num-runs 50
+
+Flow:
+
+  main() 
+    → page_curve_ensemble()
+      → _page_value(t)
+        → run_tensor_step()  ← checks _PhysicalStepUpdate
+          → schwarzschild_kernel_step()  ← YOUR CALLBACK
+            → [your 4D/QFT logic]
+            → returns s_vals
+          → truncate to target_chi
+          → normalize
+          → return
+        → calculate_entropy()
+      → statistical averaging
+    → write datatables
+
+
+TESTING HIERARCHY:
+------------------
+
+test_physical_callback.py
+  ├─ Test 1: Default toy model (no callback)
+  │    └─ Verifies Haar scrambler still works
+  │
+  ├─ Test 2: Custom callback (passthrough)
+  │    └─ Verifies callback replaces toy model
+  │
+  ├─ Test 3: Capacity constraint
+  │    └─ Verifies truncation enforced even with callback
+  │
+  └─ Test 4: End-to-end Page curve
+       └─ Verifies full simulation with callback
+
+
+DOCUMENTATION STRUCTURE:
+-------------------------
+
+PHYSICS_HOOK_README.md (9.8 KB)
+  • Complete explanation of changes
+  • Usage guide with examples
+  • Implementation checklist
+  • Technical notes
+
+PHYSICS_HOOK_PATCH_SUMMARY.md (6 KB)
+  • Summary of modifications
+  • Verification results
+  • Testing record
+
+QUICK_REFERENCE.txt (4.1 KB)
+  • Quick lookup for developers
+  • Common mistakes
+  • Debugging tips
+
+example_physical_step.py (5.4 KB)
+  • Three example callbacks
+  • Usage demonstration
+
+test_physical_callback.py (5.4 KB)
+  • Comprehensive test suite
+  • All tests pass ✓
+
+
+KEY BENEFITS:
+-------------
+
+1. BACKWARD COMPATIBLE
+   Default behavior unchanged; existing workflows work as-is
+
+2. CLEAN SEPARATION
+   Toy model clearly isolated; infrastructure is model-agnostic
+
+3. EXTENSIBLE
+   One-function interface to swap in real physics
+
+4. ROBUST
+   Automatic capacity enforcement, normalization, error handling
+
+5. DOCUMENTED
+   ~30 KB of docs, examples, tests
+
+6. TESTED
+   All 4 tests pass; full simulation verified
+
+
+NEXT STEPS FOR NON-TOY PHYSICS:
+--------------------------------
+
+1. Implement microscopic model (4D GR, JT, QFT, ...)
+   → Use influence functional from eq. 4.14 / App. F
+   → Or derive from your specific action
+
+2. Extract one-step entanglement spectrum
+   → Apply channel/process tensor to state
+   → Compute singular values across memory cut
+
+3. Package as callback: (S_prev, target_chi, rng) → s_vals
+
+4. Register via set_physical_step_update(callback)
+
+5. Run simulation.py as usual
+   → All PT–MPO machinery uses your physics
+   → Compare to toy model to understand structural vs. microscopic effects

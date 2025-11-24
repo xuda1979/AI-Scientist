@@ -1,0 +1,20 @@
+# Use the latest official Ubuntu image as the base
+FROM ubuntu:latest
+
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install common packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    vim \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set a working directory
+WORKDIR /app
+
+# Default command
+CMD ["bash"]

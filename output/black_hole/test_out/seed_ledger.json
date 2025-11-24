@@ -1,0 +1,101 @@
+{
+  "env": {
+    "env": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "PYTHONHASHSEED": "0"
+    },
+    "platform": "Windows-11-10.0.26100-SP0",
+    "python": "3.13.5"
+  },
+  "figure_cli": {
+    "echo_snr_vsN": "python simulation.py (uses echo_snr_vsN with default epsilon)",
+    "g2_sidebands": "python simulation.py --tau-mem {tau_mem}",
+    "page_curve": "python simulation.py --s-initial {S_initial} --steps {steps}"
+  },
+  "files": [
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableAblation.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableAblationSig.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableAnalogSidebands.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableCVsummary.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableConstantsLedger.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableDressingDilation.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableEchoExample_30Msun.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableEchoSNR.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableEchoSystematics.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableEchoTrials.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableEinsteinLangevin.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableExactComb.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableGreybodyErrorSweep.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableGreybodyKbinToy.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableGreybodySweep.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableGtwo.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableHydroOTOC.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableKcov.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableMarkovBaseline.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableMarkovBaseline.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableMinimalCombRE.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePTMPO.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePTMPOCertificate.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePTMPOerror.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePTMPOscaling.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePagecurve.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePagecurveAblations.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatablePhotonSphereLyap.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableQEC.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableQEIVariance.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableQTPEgap.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableRingdown3Pole.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableSchwarzianKernel.dat",
+    "C:\\Users\\Lenovo\\software\\AI-Scientist\\datatableSoftFlux.dat"
+  ],
+  "models": {
+    "g2": {
+      "closed_form": "exp(-|du|/tau_mem) * (1 + 0.1*cos(2*pi*du/(2.5*tau_mem)))",
+      "runs": 8,
+      "tau_mem": 8.0
+    },
+    "page_curve": {
+      "S_initial": 12,
+      "c_scale": 1.0,
+      "closed_form": "min(t, S_initial - t) ; hawking baseline = 0.5*min(t, S_initial)",
+      "rmse_vs_ideal_markov": 0.0,
+      "scramble": 1.0
+    },
+    "schwarzian_kernel": {
+      "S_BH_scale": 12000000.0,
+      "beta": 8.0,
+      "notes": "Digamma-based low-frequency Schwarzian + analytic log/pole corrections"
+    }
+  },
+  "module_seeds": {
+    "cv_base": 49,
+    "g2": 123,
+    "toy": 42
+  },
+  "params": {
+    "dump_raw": "none",
+    "floatfmt": "fixed6",
+    "g2_runs": 8,
+    "kfolds": 5,
+    "l_mem": 6,
+    "num_runs": 6,
+    "page_c_scale": 1.0,
+    "page_scramble": 1.0,
+    "pythonhashseed": 0,
+    "s_initial": 12,
+    "save_ledger": "seed_ledger.json",
+    "seed": 42,
+    "seed_cv": null,
+    "seed_g2": null,
+    "seed_toy": null,
+    "steps": 4,
+    "tau_mem": 8.0,
+    "threads": 1
+  },
+  "script_sha256": "93df0b990c612691d6529b7577839a709d276c829ef5a282be9d92d12ee1d388",
+  "timestamp": 1763603720,
+  "timestamp_iso": "2025-11-20T01:55:20Z"
+}

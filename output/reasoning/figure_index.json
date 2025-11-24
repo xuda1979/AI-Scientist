@@ -1,0 +1,11 @@
+{
+  "figures": [
+    "leakage_plot.tikz",
+    "leakage_plot.png"
+  ],
+  "tables": [
+    "leakage_results.csv",
+    "ablation_results.csv",
+    "temperature_results.csv"
+  ]
+}

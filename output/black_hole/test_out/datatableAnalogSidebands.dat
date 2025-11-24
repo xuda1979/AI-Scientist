@@ -1,0 +1,5 @@
+platform unit tau_mem delta_f
+BEC_lowQ u 10.000000 0.100000
+BEC_highQ u 25.000000 0.040000
+optical_fiber u 8.000000 0.125000
+circuitQED u 15.000000 0.066667

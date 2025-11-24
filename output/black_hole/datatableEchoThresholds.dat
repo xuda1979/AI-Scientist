@@ -1,0 +1,4 @@
+Detector N_stack eps_min
+{Adv. LIGO (O5)} 50 1.009e-23
+{Voyager-like} 50 3.363e-24
+{LISA (mHz)} 30 4.342e-20

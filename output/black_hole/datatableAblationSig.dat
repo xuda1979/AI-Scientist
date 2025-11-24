@@ -1,17 +1,11 @@
-ell sig
-1 0.006693
-2 0.017986
-3 0.047426
-4 0.119203
-5 0.268941
-6 0.500000
-7 0.731059
-8 0.880797
-9 0.952574
-10 0.982014
-11 0.993307
-12 0.997527
-13 0.999089
-14 0.999665
-15 0.999877
-16 0.999955
+comparison metric t_stat p_value effect_size
+P0-minus-vs-Nominal rmse 0.000000 1.00e+00 0.000000
+P0-minus-vs-Nominal g2\_amp 1.240000 2.15e-01 0.250000
+P0-plus-vs-Nominal rmse 0.000000 1.00e+00 0.000000
+P0-plus-vs-Nominal g2\_amp 0.480000 6.31e-01 0.100000
+weak-scramble-vs-Nominal rmse 0.000000 1.00e+00 0.000000
+weak-scramble-vs-Nominal g2\_amp 1.260000 2.06e-01 0.250000
+strong-eps-vs-Nominal rmse 0.000000 1.00e+00 0.000000
+strong-eps-vs-Nominal g2\_amp 59.740000 0.00e+00 11.950000
+gentle-eps-vs-Nominal rmse 0.000000 1.00e+00 0.000000
+gentle-eps-vs-Nominal g2\_amp -21.740000 0.00e+00 -4.350000

@@ -1,0 +1,136 @@
+"""
+QUICK REFERENCE: Using the Physical Step-Update Hook
+=====================================================
+
+GOAL: Replace the toy Haar scrambler with your microscopic model
+      (4D gravity EFT, JT/Schwarzian, lattice QFT, etc.)
+
+STEP 1: Write your callback
+----------------------------
+import numpy as np
+
+def my_physics_step(S_prev, target_chi, rng):
+    '''
+    Compute one-step evolution for your microscopic model.
+    
+    Parameters:
+      S_prev     : 1D array of singular values at step n-1
+      target_chi : capacity ceiling from S_BH(u_n)
+      rng        : np.random.RandomState for reproducibility
+      
+    Returns:
+      s_vals     : 1D array of updated singular values (can be unnormalized)
+    '''
+    
+    # TODO: Replace this with your physics
+    # Example: Use influence functional from eq. 4.14 / App. F
+    #   1. Evaluate kernel K(u-u') for this time step
+    #   2. Build process tensor or apply channel to state
+    #   3. Extract singular values across memory cut
+    
+    # Placeholder: simple decay + noise
+    s = np.asarray(S_prev, dtype=float) * 0.95
+    if len(s) < target_chi:
+        s = np.append(s, 0.1 * rng.rand())
+    
+    return s
+
+
+STEP 2: Register the callback
+------------------------------
+from simulation import set_physical_step_update
+
+set_physical_step_update(my_physics_step)
+
+
+STEP 3: Run the simulation
+---------------------------
+The simulation will now use YOUR physics instead of the Haar scrambler.
+
+Command line:
+  python simulation.py --outdir . --steps 12 --num-runs 50
+
+Or programmatically:
+  import simulation
+  # ... your setup ...
+  simulation.main()
+
+
+STEP 4: Verify results
+-----------------------
+Check that:
+  • Generated datatables look reasonable
+  • Page curve follows expected behavior for your model
+  • Entropy converges / matches theoretical predictions
+
+
+DEBUGGING
+---------
+• To test your callback in isolation:
+    rng = np.random.RandomState(42)
+    S_prev = np.array([0.8, 0.6])
+    S_prev /= np.linalg.norm(S_prev)
+    S_new = my_physics_step(S_prev, target_chi=5, rng=rng)
+    print(S_new)
+
+• To revert to toy model:
+    set_physical_step_update(None)
+
+• Run test suite:
+    python test_physical_callback.py
+
+
+COMMON MISTAKES
+---------------
+1. Callback returns 2D array → Must be 1D
+2. Callback doesn't handle target_chi → Engine will truncate, but better to respect it
+3. Callback fails on edge cases (empty S_prev, target_chi=1, etc.)
+4. Callback is deterministic but doesn't use rng → Results won't be reproducible
+
+
+EXAMPLE: Schwarzschild kernel (stub)
+-------------------------------------
+def schwarzschild_kernel_step(S_prev, target_chi, rng):
+    # 1. Load/compute kernel from eq. 4.14:
+    #    Ξ_R(ω) = (4D flux greybody factors)
+    #    N(ω)   = (noise kernel from Hawking spectrum)
+    
+    # 2. Build one-step influence functional:
+    #    K[ρ] = Tr_env[ U(ρ ⊗ ρ_env) U† ]
+    
+    # 3. Apply to current state (represented by S_prev):
+    #    S_new = spectrum of K[state]
+    
+    # Placeholder:
+    s = S_prev * 0.9
+    return s
+
+
+REFERENCES
+----------
+• Full docs:     PHYSICS_HOOK_README.md
+• Examples:      example_physical_step.py
+• Tests:         test_physical_callback.py
+• Patch summary: PHYSICS_HOOK_PATCH_SUMMARY.md
+
+• Physics:
+  - Eq. 4.14, App. F: Schwarzschild kernel Ξ_R(ω), N(ω)
+  - Sec. 4: JT/Schwarzian effective action
+  - Sec. 5: PT–MPO formalism (structural, model-independent)
+
+
+SUPPORT
+-------
+If your callback is registered but not being called:
+  → Check that set_physical_step_update was called before running simulation
+  → Verify _PhysicalStepUpdate is not None in run_tensor_step
+
+If results look wrong:
+  → Add logging to your callback to verify it's being called
+  → Check that singular values are positive and reasonably scaled
+  → Compare to toy model (set_physical_step_update(None)) to isolate physics vs. infrastructure
+
+If capacity constraints fail:
+  → Engine will truncate to target_chi automatically
+  → Your callback doesn't need to enforce this, but can for efficiency
+"""
