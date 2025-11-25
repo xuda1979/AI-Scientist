@@ -1127,6 +1127,7 @@ def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Op
     Google AI chat wrapper with similar interface to OpenAI chat and PDF support.
     Based on working reference implementation.
     Sets HTTPS_PROXY specifically for Gemini API calls.
+    Supports gemini-1.5-pro-latest, gemini-1.5-flash-latest, and gemini-1.0-pro.
     
     Args:
         messages: List of chat messages
@@ -2661,21 +2662,44 @@ def _collect_project_files(project_dir: Path, specify_files: Optional[list] = No
         return "No additional project files found."
 
 def _combined_review_edit_revise_prompt(
-    paper_tex: str, 
-    sim_summary: str, 
-    latex_errors: str = "", 
-    project_dir: Path = None, 
-    user_prompt: Optional[str] = None, 
-    iteration_count: int = 1, 
+    paper_tex: str,
+    sim_summary: str,
+    latex_errors: str = "",
+    project_dir: Path = None,
+    user_prompt: Optional[str] = None,
+    iteration_count: int = 1,
     quality_issues: Optional[List[str]] = None,
     supplemental_context: str = "",
-    specify_files: Optional[list] = None
+    specify_files: Optional[list] = None,
+    review_items: Optional[List[str]] = None,
 ) -> List[Dict[str, str]]:
     """Combined prompt for review and revision with diff output."""
+
+    # Define the available review items and their descriptions
+    available_review_items = {
+        "scientific_content": "Scientific rigor, methodology soundness, and novel contribution.",
+        "mathematical_rigor": "Mathematical correctness, proofs, and formulations.",
+        "reference_review": "Authenticity and formatting of references.",
+        "latex_grammar_review": "LaTeX code correctness and grammar.",
+        "graphs_review": "Quality and clarity of graphs and figures.",
+        "overall_review": "A general review of the paper.",
+        "git_diff": "Output git diff code for revisions."
+    }
+
+    # If no specific review items are provided, default to all of them
+    if not review_items:
+        review_items = list(available_review_items.keys())
+
+    # Build the review criteria based on the selected items
+    review_criteria = "\n".join(f"- {available_review_items[item]}" for item in review_items if item in available_review_items)
+
     sys_prompt = (
         "You are a combined AI system acting as: (1) Top-tier journal reviewer and (2) Paper author. "
         "Your task is to review the paper and provide complete file diffs for all revisions needed to improve it.\n\n"
         
+        "REVIEW CRITERIA:\n"
+        f"{review_criteria}\n\n"
+
         "🔒 CRITICAL CONTENT PRESERVATION REQUIREMENTS:\n"
         "- NEVER delete entire sections, subsections, or substantial content blocks\n"
         "- PRESERVE the paper's core content, findings, and methodology\n"
@@ -2746,21 +2770,6 @@ def _combined_review_edit_revise_prompt(
         "WORKFLOW STEPS:\n"
         "1. REVIEW: Conduct a thorough peer review meeting top journal standards\n"
         "2. REVISION: Provide complete file diffs for ALL files that need changes to address review issues\n\n"
-        
-        "REVIEW CRITERIA (same as top-tier journals):\n"
-        "- Scientific rigor, methodology soundness, and novel contribution\n"
-        "- Proper literature review with 15-20 authentic references\n"
-        "- Clear research question, appropriate experimental design\n"
-        "- Results interpretation, limitations acknowledgment\n"
-        "- LaTeX compilation success and proper formatting\n"
-        "- Self-contained visuals with proper size constraints\n"
-        "- No filename references in paper text\n"
-        "- Authentic references (no fake citations)\n"
-        "- Single file structure with embedded references\n"
-        "- Real simulation data usage (no fake numbers)\n"
-        "- Reproducible results documentation\n"
-        "- CRITICAL: Tables/figures positioned contextually in relevant subsections (NOT forced to page tops)\n"
-        "- EXPERIMENTAL RIGOR: Validation on real-world benchmarks, assumption testing, complexity analysis\n\n"
         
         "🔬 EXPERIMENTAL RIGOR CHECKLIST:\n"
         "Critical issues that lead to paper rejection:\n"
@@ -4393,6 +4402,7 @@ def run_workflow(
     code_output_dir: str = "code",   # Directory for generated code files
     execution_log_file: str = "execution_log.txt",  # Execution log filename
     science_only: bool = False,      # NEW: Simplified mode - only improve scientific content
+    review_items: Optional[List[str]] = None, # NEW: Customizable review items
 ) -> Path:
     """Enhanced workflow with quality validation, progress tracking, and custom user prompts."""
 
@@ -5009,6 +5019,7 @@ def run_workflow(
             code_output_dir=code_output_dir,
             execution_log_file=execution_log_file,
             previous_execution_results=previous_execution_results,
+            review_items=review_items,
         )
         
         # In all-code mode, execution results are returned via a global or instance variable
@@ -5404,9 +5415,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                       default="auto", help="Type of document to generate (auto-detect if not specified)")
     
     p.add_argument("--output-dir", default="output", help="Output directory root (contains project subfolder)")
-    p.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use (default: gpt-5-pro)")
+    p.add_argument("--model", default=DEFAULT_MODEL, help="AI model to use (e.g., gpt-5-pro, gemini-1.5-pro-latest)")
     p.add_argument("--request-timeout", type=int, default=3600, help="Per-request timeout seconds (0 means no timeout)")
-    p.add_argument("--max-retries", type=int, default=3, help="Max OpenAI retries")
+    p.add_argument("--max-retries", type=int, default=3, help="Max API retries")
     p.add_argument("--max-iterations", type=int, default=4, help="Max review->revise iterations (always runs full iterations, no early stopping)")
     p.add_argument("--modify-existing", action="store_true", help="If output dir already has paper.tex, modify in place")
     p.add_argument("--strict-singletons", action="store_true", default=True, help="Keep only paper.tex & simulation.py (others archived)")
@@ -5473,6 +5484,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # File selection
     p.add_argument("--specify-files", nargs="+", default=None, help="Only upload specified files to LLM (e.g., --specify-files paper.tex simulation.py)")
     
+    # Review items
+    p.add_argument("--review-items", type=str, default=None, help="Comma-separated list of items to review (e.g., scientific_content,mathematical_rigor)")
+
     args = p.parse_args(argv)
     
     # Handle skip flags
@@ -6404,7 +6418,8 @@ if __name__ == "__main__":
             all_code_mode=ns.all_code,
             code_output_dir=ns.code_output_dir,
             execution_log_file=ns.execution_log,
-            science_only=ns.science_only
+            science_only=ns.science_only,
+            review_items=ns.review_items.split(',') if ns.review_items else None,
         )
         print(f" Workflow completed! Results in: {result_dir}")
     except WorkflowCancelled as e:

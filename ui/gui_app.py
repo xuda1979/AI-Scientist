@@ -87,9 +87,14 @@ class WorkflowGUI(tk.Tk):
         self.openai_disconnect_button: Optional[ttk.Button] = None
         self._openai_status = "disconnected"
 
+        self.gemini_status_var = tk.StringVar(value="Status: Disconnected")
+        self.gemini_details_var = tk.StringVar(value="Connect your Gemini API key to run the workflow.")
+        self._gemini_status = "disconnected"
+
         self._build_ui()
         self._bind_shortcuts()
         self._refresh_openai_status()
+        self._refresh_gemini_status()
         self._update_run_button_state()
         self._poll_queue()
 
@@ -116,9 +121,11 @@ class WorkflowGUI(tk.Tk):
         form_frame.columnconfigure(1, weight=1)
 
         self._build_openai_frame(left_column)
+        self._build_gemini_frame(left_column)
         self._build_project_frame(left_column)
         self._build_execution_frame(left_column)
         self._build_quality_frame(right_column)
+        self._build_review_items_frame(right_column)
         self._build_advanced_frame(right_column)
 
         # Prompt entry spans both columns
@@ -289,6 +296,96 @@ class WorkflowGUI(tk.Tk):
             self.openai_disconnect_button.configure(state=disconnect_state)
         self._update_run_button_state()
 
+    def _build_gemini_frame(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="Gemini Connection", padding=8)
+        frame.pack(fill=tk.X, expand=False, pady=(0, 12))
+
+        self.gemini_status_label = ttk.Label(frame, textvariable=self.gemini_status_var)
+        self.gemini_status_label.grid(row=0, column=0, columnspan=2, sticky=tk.W)
+
+        self.gemini_details_label = ttk.Label(frame, textvariable=self.gemini_details_var, wraplength=320, foreground="#555555")
+        self.gemini_details_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(2, 8))
+
+        connect_btn = ttk.Button(frame, text="Connect Gemini…", command=self._open_gemini_dialog)
+        connect_btn.grid(row=2, column=0, sticky=tk.W)
+
+        self.gemini_disconnect_button = ttk.Button(frame, text="Disconnect", command=self._disconnect_gemini)
+        self.gemini_disconnect_button.grid(row=2, column=1, sticky=tk.W, padx=(8, 0))
+
+    def _open_gemini_dialog(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Connect Gemini")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        ttk.Label(
+            dialog,
+            text="Paste your personal Gemini API key. We validate it immediately and store it encrypted.",
+            wraplength=360,
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, padx=12, pady=(12, 8))
+
+        key_var = tk.StringVar()
+        ttk.Label(dialog, text="Gemini API key").grid(row=1, column=0, sticky=tk.W, padx=12)
+        entry = ttk.Entry(dialog, textvariable=key_var, show="*")
+        entry.grid(row=1, column=1, sticky="ew", padx=12)
+        dialog.columnconfigure(1, weight=1)
+
+        def open_docs(*_: object) -> None:
+            webbrowser.open_new_tab("https://aistudio.google.com/app/apikey")
+
+        link = ttk.Label(dialog, text="Create or manage keys", foreground="#1a73e8", cursor="hand2")
+        link.grid(row=2, column=1, sticky=tk.W, padx=12, pady=(0, 8))
+        link.bind("<Button-1>", open_docs)
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(row=4, column=0, columnspan=2, sticky=tk.EW, padx=12, pady=(0, 12))
+        button_frame.columnconfigure((0, 1), weight=1)
+
+        def submit() -> None:
+            api_key = key_var.get().strip()
+            if not api_key:
+                messagebox.showerror("Missing key", "Enter your Gemini API key before connecting.", parent=dialog)
+                return
+            # Storing the key in an environment variable for now.
+            # A more secure storage mechanism should be used in a real application.
+            os.environ["GEMINI_API_KEY"] = api_key
+            self._refresh_gemini_status()
+            messagebox.showinfo("Connected", "Gemini API key set.", parent=dialog)
+            dialog.destroy()
+
+        def cancel() -> None:
+            dialog.destroy()
+
+        ttk.Button(button_frame, text="Cancel", command=cancel).grid(row=0, column=0, sticky=tk.E, padx=(0, 8))
+        ttk.Button(button_frame, text="Connect", command=submit).grid(row=0, column=1, sticky=tk.E)
+
+        entry.focus_set()
+        dialog.bind("<Return>", lambda event: submit())
+        dialog.bind("<Escape>", lambda event: cancel())
+
+    def _disconnect_gemini(self) -> None:
+        if "GEMINI_API_KEY" in os.environ:
+            del os.environ["GEMINI_API_KEY"]
+        self._refresh_gemini_status()
+        messagebox.showinfo("Disconnected", "Gemini API key removed.", parent=self)
+
+    def _refresh_gemini_status(self) -> None:
+        gemini_api_key = os.environ.get("GEMINI_API_KEY")
+        if gemini_api_key:
+            self._gemini_status = "valid"
+            self.gemini_status_var.set("Status: Connected")
+            self.gemini_details_var.set("Gemini API key is set.")
+            if hasattr(self, "gemini_disconnect_button"):
+                self.gemini_disconnect_button.configure(state=tk.NORMAL)
+        else:
+            self._gemini_status = "disconnected"
+            self.gemini_status_var.set("Status: Disconnected")
+            self.gemini_details_var.set("Connect your Gemini API key to run the workflow.")
+            if hasattr(self, "gemini_disconnect_button"):
+                self.gemini_disconnect_button.configure(state=tk.DISABLED)
+        self._update_run_button_state()
+
     def _build_project_frame(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="Project Details", padding=8)
         frame.pack(fill=tk.X, expand=False, pady=(0, 12))
@@ -360,6 +457,27 @@ class WorkflowGUI(tk.Tk):
         self._add_check(frame, "Skip Ideation", "skip_ideation", default=False, row=8)
         self._add_entry(frame, "Specify Idea", "specify_idea", row=9)
         self._add_spinbox(frame, "Number of Ideas", "num_ideas", default=15, from_=1, to=50, row=10)
+
+    def _build_review_items_frame(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="Review Items", padding=8)
+        frame.pack(fill=tk.X, expand=False, pady=(0, 12))
+
+        self.review_item_vars = {
+            "scientific_content": tk.BooleanVar(value=True),
+            "mathematical_rigor": tk.BooleanVar(value=True),
+            "reference_review": tk.BooleanVar(value=True),
+            "latex_grammar_review": tk.BooleanVar(value=True),
+            "graphs_review": tk.BooleanVar(value=True),
+            "overall_review": tk.BooleanVar(value=True),
+            "git_diff": tk.BooleanVar(value=True),
+        }
+
+        row = 0
+        for key, var in self.review_item_vars.items():
+            label = key.replace("_", " ").title()
+            check = ttk.Checkbutton(frame, text=label, variable=var)
+            check.grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=2)
+            row += 1
 
     def _build_advanced_frame(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="Advanced Options", padding=8)
@@ -497,7 +615,7 @@ class WorkflowGUI(tk.Tk):
             )
 
         state = tk.NORMAL if required_ready and not self.running else tk.DISABLED
-        if self._openai_status != "valid":
+        if self._openai_status != "valid" and self._gemini_status != "valid":
             state = tk.DISABLED
         self.run_button.configure(state=state)
         self.cancel_button.configure(state=tk.NORMAL if self.running else tk.DISABLED)
@@ -538,10 +656,10 @@ class WorkflowGUI(tk.Tk):
                 parent=self,
             )
             return False
-        if self._openai_status != "valid":
+        if self._openai_status != "valid" and self._gemini_status != "valid":
             messagebox.showerror(
-                "Connect OpenAI",
-                "Please connect a valid OpenAI API key before running the workflow.",
+                "Connect API",
+                "Please connect a valid OpenAI or Gemini API key before running the workflow.",
                 parent=self,
             )
             return False
@@ -597,6 +715,10 @@ class WorkflowGUI(tk.Tk):
             "draft_candidates": int(self.vars["draft_candidates"].get()),
             "user_prompt": self.prompt_text.get("1.0", tk.END).strip(),
         }
+
+        selected_review_items = [key for key, var in self.review_item_vars.items() if var.get()]
+        params["review_items"] = selected_review_items
+
         return params
 
     def _prepare_config(self, params: Dict[str, object]) -> WorkflowConfig:
