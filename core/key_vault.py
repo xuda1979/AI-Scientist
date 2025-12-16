@@ -6,12 +6,14 @@ import os
 import stat
 import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
 from cryptography.fernet import Fernet
 
+# Python 3.10 compatibility - use timezone.utc instead of UTC
+UTC = timezone.utc
 
 __all__ = ["ApiKeyVaultError", "ApiKeyRecord", "LocalApiKeyVault"]
 

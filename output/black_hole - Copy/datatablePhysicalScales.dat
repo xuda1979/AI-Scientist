@@ -1,0 +1,3 @@
+Mass kappa kappa_inv_ms tau_mem_range tau_echo_range
+{$30\,M_\odot$} 1691.878722 0.591059 0.59--5.9 2.7--27
+{$10^6\,M_\odot$} 0.050756 19701.963800 2.0e4--19.7e4 9.1e4--90.6e4

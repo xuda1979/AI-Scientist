@@ -96,7 +96,7 @@
     "g2_runs": 200,
     "kfolds": 5,
     "l_mem": 6,
-    "num_runs": 50,
+    "num_runs": 100,
     "page_c_scale": 1.0,
     "page_scramble": 1.0,
     "pythonhashseed": 0,
@@ -115,6 +115,6 @@
     "raw_g2.csv"
   ],
   "script_sha256": "3785579fdfcad2ff9dce4011bf55959aa66d88d3887b18585ac15f26f8f7be3e",
-  "timestamp": 1763638506,
-  "timestamp_iso": "2025-11-20T11:35:06Z"
+  "timestamp": 1764229041,
+  "timestamp_iso": "2025-11-27T07:37:21Z"
 }

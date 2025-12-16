@@ -46,6 +46,14 @@ from core.openai_connection import (
     OpenAIConnectionError,
     get_shared_connection_manager,
 )
+from core.yunwu_connection import (
+    YunwuClient,
+    YunwuConnectionError,
+    configure_yunwu,
+    get_yunwu_client,
+    is_yunwu_enabled,
+    set_yunwu_enabled,
+)
 
 OPENAI_CONNECTION = get_shared_connection_manager()
 
@@ -1114,6 +1122,10 @@ def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout:
         if 'ALL PROJECT FILES' in content:
             print("  • Project context files included")
     
+    # Check if Yunwu API is enabled - route all requests through it
+    if is_yunwu_enabled():
+        return _yunwu_chat(messages, model, request_timeout, prompt_type, fallback_models)
+    
     # Detect provider based on model name
     if model.startswith(('gemini', 'models/gemini')):
         # Google AI model
@@ -1121,6 +1133,83 @@ def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout:
     else:
         # OpenAI model
         return _openai_chat(messages, model, request_timeout, prompt_type, fallback_models, pdf_path)
+
+
+def _yunwu_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None) -> str:
+    """
+    Yunwu API chat wrapper (OpenAI-compatible endpoint).
+    Routes requests through the Yunwu API service.
+    
+    Args:
+        messages: List of chat messages
+        model: Model name to use (e.g., 'opus-4.5', 'claude-3-opus')
+        request_timeout: Request timeout in seconds
+        prompt_type: Type of prompt for temperature selection
+        fallback_models: List of fallback models if primary fails
+        
+    Returns:
+        The assistant's response text
+    """
+    logger = logging.getLogger(__name__)
+    
+    yunwu_client = get_yunwu_client()
+    if yunwu_client is None:
+        raise APIError("Yunwu API not configured. Use --yunwu-api with --yunwu-api-key.")
+    
+    # Set timeout
+    if request_timeout is None:
+        request_timeout = 3600  # Default 1 hour timeout
+    
+    # Configure temperature based on prompt type
+    temp_map = {
+        "initial_draft": 0.7,    # Creative for initial drafting
+        "review": 0.3,           # Conservative for reviewing
+        "revise": 0.5,           # Balanced for revisions
+        "editor": 0.2,           # Very conservative for decisions
+        "simulation_fix": 0.4,   # Moderate for code fixes
+        "general": 0.2           # Default conservative
+    }
+    temp = temp_map.get(prompt_type, 0.7)
+    
+    logger.info(f"[Yunwu] Making API call to {model} for {prompt_type}")
+    print(f"[Yunwu API] Making API call to {model} for {prompt_type}...")
+    
+    try:
+        result = yunwu_client.chat(
+            messages=messages,
+            model=model,
+            temperature=temp,
+            timeout=request_timeout,
+        )
+        logger.info(f"[Yunwu] API call successful for {model} ({prompt_type}) - response: {len(result):,} chars")
+        print(f"✓ [Yunwu API] Call successful for {model} - response: {len(result):,} characters")
+        return result
+        
+    except YunwuConnectionError as e:
+        logger.error(f"[Yunwu] API call failed: {e}")
+        
+        # Try fallback models if available
+        if fallback_models:
+            print(f"WARNING: [Yunwu] Primary model {model} failed, trying fallback models...")
+            for fallback_model in fallback_models:
+                try:
+                    print(f"INFO: [Yunwu] Attempting fallback model: {fallback_model}")
+                    return yunwu_client.chat(
+                        messages=messages,
+                        model=fallback_model,
+                        temperature=temp,
+                        timeout=request_timeout,
+                    )
+                except Exception as fallback_error:
+                    print(f"WARNING: [Yunwu] Fallback model {fallback_model} also failed: {fallback_error}")
+                    continue
+        
+        raise APIError(f"[Yunwu] All models failed. Primary error: {e}")
+    
+    except Exception as e:
+        logger.error(f"[Yunwu] Unexpected error: {e}")
+        raise APIError(f"[Yunwu] API request failed: {e}")
+
 
 def _google_chat(messages: List[Dict[str, str]], model: str, request_timeout: Optional[int] = None, prompt_type: str = "general", fallback_models: Optional[List[str]] = None, pdf_path: Optional[Path] = None) -> str:
     """
@@ -5473,6 +5562,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     # File selection
     p.add_argument("--specify-files", nargs="+", default=None, help="Only upload specified files to LLM (e.g., --specify-files paper.tex simulation.py)")
     
+    # Yunwu API connection (OpenAI-compatible endpoint)
+    p.add_argument("--yunwu-api", action="store_true", help="Use Yunwu API instead of OpenAI (OpenAI-compatible endpoint)")
+    p.add_argument("--yunwu-api-key", type=str, default=None, help="Yunwu API key (or set YUNWU_API_KEY env var)")
+    p.add_argument("--yunwu-api-base", type=str, default=None, help="Yunwu API base URL (default: https://yunwu.ai/v1)")
+    
     args = p.parse_args(argv)
     
     # Handle skip flags
@@ -6330,8 +6424,22 @@ if __name__ == "__main__":
             print(f" Configuration saved to: {ns.save_config}")
             sys.exit(0)
         
+        # Initialize Yunwu API if requested
+        if hasattr(ns, 'yunwu_api') and ns.yunwu_api:
+            try:
+                configure_yunwu(
+                    api_key=ns.yunwu_api_key,
+                    base_url=ns.yunwu_api_base,
+                )
+                print(f"✓ Yunwu API enabled - all requests will be routed through Yunwu")
+            except YunwuConnectionError as e:
+                print(f"ERROR: Failed to configure Yunwu API: {e}")
+                sys.exit(1)
+        
         print(f"Working with: {ns.output_dir}")
         print(f"Using model: {ns.model}")
+        if hasattr(ns, 'yunwu_api') and ns.yunwu_api:
+            print(f"API Provider: Yunwu (OpenAI-compatible)")
         print(f"Max iterations: {ns.max_iterations} (always runs full iterations)")
         print(f"Quality threshold: {ns.quality_threshold}")
         print(f"Reference validation: {'enabled' if ns.check_references else 'disabled'}")

@@ -1,0 +1,57 @@
+{
+  "query": "ML for Climate | ML for Climate",
+  "field": "",
+  "novelty_score": 0.834,
+  "diagnostics": "max similarity 0.32, avg similarity 0.22, recent overlap penalty 0.00",
+  "timestamp": "2025-12-11T08:35:35",
+  "retrieved_works": [
+    {
+      "title": "Drought Forecasting with ML-based Regionalized Climate Indices",
+      "url": "https://doi.org/10.5194/egusphere-egu24-3746",
+      "year": 2025,
+      "doi": "10.5194/egusphere-egu24-3746",
+      "similarity": 0.3157894736842105,
+      "source": "crossref"
+    },
+    {
+      "title": "Integrating AI and ML into Early Warning Systems: A Solution to Climate Change Challenges",
+      "url": "https://doi.org/10.2174/9798898811389125010016",
+      "year": 2025,
+      "doi": "10.2174/9798898811389125010016",
+      "similarity": 0.2524271844660194,
+      "source": "crossref"
+    },
+    {
+      "title": "Assessing the Impact of Climate Factors on Sea Ice Extent with ML Regression",
+      "url": "https://doi.org/10.31219/osf.io/gs8ur",
+      "year": 2023,
+      "doi": "10.31219/osf.io/gs8ur",
+      "similarity": 0.24444444444444444,
+      "source": "crossref"
+    },
+    {
+      "title": "Advancing Regional Climate Predictability through ML-enabled Dynamical System Approach",
+      "url": "https://doi.org/10.2172/1769654",
+      "year": 2021,
+      "doi": "10.2172/1769654",
+      "similarity": 0.18,
+      "source": "crossref"
+    },
+    {
+      "title": "Climate extremes factor attribution: a small data challenge in ML realm",
+      "url": "https://doi.org/10.1002/essoar.10505147.1",
+      "year": 2020,
+      "doi": "10.1002/essoar.10505147.1",
+      "similarity": 0.16470588235294117,
+      "source": "crossref"
+    },
+    {
+      "title": "A 15 yr climatology of derecho-producing mesoscale convective systems over the central and eastern United States",
+      "url": "https://doi.org/10.3354/cr024129",
+      "year": 2003,
+      "doi": "10.3354/cr024129",
+      "similarity": 0.15873015873015872,
+      "source": "crossref"
+    }
+  ]
+}

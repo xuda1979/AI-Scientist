@@ -1,11 +1,22 @@
 %
 % Horizon Memory Combs: A Finite-Memory Framework for Black Hole Evaporation and Information Flow
-%
-% JHEP submission - using article class with jheppub package
+% Formatted for Physical Review D using REVTeX 4.2
 %
 
-\documentclass[11pt,a4paper]{article}
-\usepackage{jheppub}
+\documentclass[aps,prd,preprint,onecolumn,superscriptaddress,nofootinbib,longbibliography,floatfix,11pt,showpacs,showkeys]{revtex4-2}
+% Physical Review D format using REVTeX 4.2
+% Options: reprint (APS single-column submission format), aps (APS style), prd (Physical Review D),
+%          superscriptaddress (affiliations as superscripts), nofootinbib (references in bibliography),
+%          longbibliography (full author lists in references), floatfix (robust float placement)
+
+% Citation style handled by revtex4-2
+% Note: revtex4-2 automatically loads natbib, amsmath, amssymb, graphicx; hyperref is configured explicitly at the end
+
+% Fix array compatibility by loading array early
+\usepackage{array}
+
+% Core AMS math packages (revtex4-2 loads amsmath automatically)
+\usepackage{amssymb,amsfonts}
 
 \newcommand{\ptmpo}{PT--MPO}
 
@@ -18,12 +29,11 @@
 \newcommand{\gII}{g^{(2)}}
 \newcommand{\OTOC}{\mathrm{OTOC}}
 
-% Additional packages not provided by jheppub
-\usepackage{pdflscape}        % Landscape pages for wide tables
+% Additional packages
+% \usepackage{pdflscape}        % Disabled - causes landscape pages
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, decorations.pathreplacing}
 \usepackage{forest}
-\usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{etoolbox}
 \makeatletter
@@ -40,8 +50,7 @@
 \usepackage{csquotes}
 \usepackage[final,expansion=false]{microtype}  % Better typography, disable expansion
 
-% Note: jheppub already loads: amsmath, amssymb, graphicx, hyperref, natbib
-\usepackage[capitalize]{cleveref}
+% Note: revtex4-2 already loads amsmath, amssymb, graphicx, hyperref, natbib
 
 % Custom commands
 \newcommand{\Irate}{\mathcal{I}_{\mathrm{rate}}}
@@ -69,11 +78,6 @@
   showstringspaces=false
 }
 
-% Additional packages for environments
-\usepackage{setspace}
-\usepackage{etoolbox}
-\AtBeginEnvironment{algorithm}{\setstretch{1.05}}
-
 \usepackage{mdframed}
 \usepackage{bbm}
 \usepackage{dsfont}
@@ -81,9 +85,29 @@
 \usepackage{pifont}  % For \ding checkmarks and crosses
 
 % Boxed environments
-\newmdenv[skipabove=0.6\baselineskip,skipbelow=0.6\baselineskip,linewidth=0.6pt,roundcorner=2pt,nobreak=true]{infobox}
+\newmdenv[skipabove=0.6\baselineskip,skipbelow=0.6\baselineskip,linewidth=0.6pt,roundcorner=2pt,nobreak=false]{infobox}
 \newcounter{boxedresult}
 \newenvironment{boxedresult}[1]{\refstepcounter{boxedresult}\begin{infobox}\noindent\textbf{Box~\theboxedresult: #1.}}{\end{infobox}}
+
+\newcounter{algobox}
+\newenvironment{algobox}[1]{%
+  \refstepcounter{algobox}%
+  \begin{infobox}\noindent\textbf{Algorithm~\thealgobox: #1.}\\[0.5ex]
+}{\end{infobox}}
+
+\newcounter{algorithm}
+\newcommand{\algcaptionname}{Algorithm}
+\newcommand{\hmcalgOldCaption}{}
+\newenvironment{algorithm}[1][]{%
+  \refstepcounter{algorithm}%
+  \begin{infobox}%
+  \let\hmcalgOldCaption\caption
+  \renewcommand{\caption}[1]{\noindent\textbf{\algcaptionname~\thealgorithm. ##1}\\[0.6ex]}%
+}{%
+  \par\vspace{-0.4\baselineskip}%
+  \let\caption\hmcalgOldCaption
+  \end{infobox}%
+}
 
 % Ensure no tables appear inside boxed environments
 \makeatletter
@@ -101,7 +125,8 @@
 \newcommand{\wrt}{\textit{w.r.t.}\ }
 
 % --- Common macros and consistent notation ---
-\newcommand{\ketbra}[2]{\ket{#1}\!\bra{#2}}
+% \ketbra is provided by physics package
+
 \newcommand{\dmem}{\ensuremath{d_{\mathrm{mem}}}}
 \newcommand{\ellmem}{\ensuremath{\ell_{\mathrm{mem}}}}
 \newcommand{\taumem}{\ensuremath{\tau_{\mathrm{mem}}}}
@@ -112,25 +137,20 @@
 \newcommand{\I}{\mathrm{i}}
 \newcommand{\E}{\mathrm{e}}
 \newcommand{\diff}{\mathrm{d}}
-\newcommand{\order}[1]{\mathcal{O}\!\left(#1\right)}
-\newcommand{\Tr}{\operatorname{Tr}}
+\usepackage{amsmath}
+\usepackage{physics}
+\renewcommand{\order}[1]{\mathcal{O}\!\left(#1\right)}
+% \Tr is defined by physics package
 \newcommand{\diag}{\operatorname{diag}}
 \DeclareMathOperator*{\argmin}{arg\,min}
 \DeclareMathOperator*{\argmax}{arg\,max}
-\usepackage{physics}
+
 \usepackage{graphicx}
 \graphicspath{{fig/}}
 \usepackage{enumitem} 
 \usepackage{booktabs}
 
-% Listings setup for CLI/code blocks to avoid overfull hboxes
-\lstset{
-  basicstyle=\ttfamily\small,
-  breaklines=true,
-  breakatwhitespace=true,
-  columns=fullflexible,
-  keepspaces=true
-}
+% Listings setup for CLI/code blocks to avoid overfull hboxes (configured above)
 
 % Make algorithm comments consistent and unobtrusive
 \algrenewcommand\algorithmiccomment[1]{\hfill\(\triangleright\)~#1}
@@ -143,22 +163,24 @@
 \usepgfplotslibrary{fillbetween}
 \usepackage{pgfplotstable}
 \pgfplotstableset{col sep=space}
-\usepackage{longtable}
-% Reduce spacing around longtables
-\setlength{\LTpre}{10pt}
-\setlength{\LTpost}{10pt}
+% longtable disabled - conflicts with revtex4-2
+%\usepackage{longtable}
+%\setlength{\LTpre}{10pt}
+%\setlength{\LTpost}{10pt}
 \usepackage{siunitx}
 \sisetup{per-mode=symbol,separate-uncertainty=true,detect-all}
 
 % Global table spacing for readability
 \setlength{\tabcolsep}{6pt}
 \renewcommand{\arraystretch}{1.15}
-% \usepackage{caption} % Do not load caption; jheppub loads it.
+% \usepackage{caption} % Do not load caption; revtex4-2 handles it.
 \usepackage{subcaption}
 \usepackage{xcolor}
-\usepackage{tabularx}
-\usepackage{float}
 \usepackage{placeins}
+
+% Hyperref must be loaded last per APS guidance
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage[capitalize]{cleveref}
 
 % Allow tighter float placement to avoid large white gaps
 \setcounter{topnumber}{3}
@@ -209,6 +231,9 @@
 \crefname{remark}{Remark}{Remarks}
 \crefname{appendix}{Appendix}{Appendices}
 \crefname{boxedresult}{Box}{Boxes}
+\crefname{algobox}{Algorithm}{Algorithms}
+\crefname{algorithm}{Algorithm}{Algorithms}
+\Crefname{algobox}{Algorithm}{Algorithms}
 \Crefname{boxedresult}{Box}{Boxes}
 
 % Helper macro to typeset literal strings (e.g., with underscores) in tables
@@ -240,208 +265,38 @@
 \providecommand{\valMemHigh}{0.004}
 
 % Toy Page curve
-\newcommand{\hmcinlinePagecurve}{%
-\pgfplotstableread[col sep=space]{
-t S_mean std_S upper_S lower_S ideal_page hawking bh_entropy
-0 0.0202 0.0276 0.0479 0.0 0 0.0 12
-1 0.5807 0.0535 0.6342 0.5272 1 0.5 11
-2 1.1695 0.0556 1.2251 1.114 2 1.0 10
-3 1.7515 0.0476 1.7991 1.7039 3 1.5 9
-4 2.3344 0.054 2.3884 2.2804 4 2.0 8
-5 2.9171 0.0475 2.9646 2.8696 5 2.5 7
-6 3.507 0.0526 3.5596 3.4545 6 3.0 6
-7 3.0705 0.048 3.1185 3.0225 5 3.5 5
-8 2.6063 0.0484 2.6546 2.5579 4 4.0 4
-9 2.1307 0.0491 2.1799 2.0816 3 4.5 3
-10 1.6078 0.0425 1.6503 1.5653 2 5.0 2
-11 1.077 0.0583 1.1353 1.0187 1 5.5 1
-12 0.4915 0.0491 0.5406 0.4424 0 6.0 0.0
-}\datatablePagecurve%
-}
-
-% g2 sidebands
-\newcommand{\hmcinlineGtwo}{%
-\pgfplotstableread[col sep=space]{
-du g2_mean ci_low ci_high
-0 1.0798 1.0794 1.0803
-1 0.9822 0.9818 0.9827
-2 0.9668 0.9663 0.9672
-3 1.0240 1.0235 1.0244
-4 1.0064 1.0059 1.0068
-5 0.9846 0.9842 0.9850
-6 1.0035 1.0031 1.0040
-7 1.0062 1.0057 1.0066
-8 0.9956 0.9951 0.9961
-9 0.9984 0.9980 0.9988
-10 1.0029 1.0024 1.0034
-11 0.9993 0.9988 0.9998
-12 0.9988 0.9984 0.9993
-13 1.0009 1.0004 1.0014
-14 1.0005 1.0001 1.0010
-15 0.9999 0.9994 1.0004
-}\datatableGtwo
-}
-
-% Ablation
-\newcommand{\hmcinlineAblation}{%
-\pgfplotstableread[col sep=space]{
-scenario c_scale scramble eps resid_final_S rmse_page turnover_step max_g2_amp
-P0-minus 0.75 1.00 0.08 0.01 0.31 4 0.081
-P0-nominal 1.00 1.00 0.08 0.01 0.11 6 0.081
-P0-plus 1.25 1.00 0.08 0.01 0.32 8 0.081
-weak-scramble 1.00 0.60 0.08 0.01 0.11 6 0.081
-strong-eps 1.00 1.00 0.20 0.01 0.11 6 0.201
-gentle-eps 1.00 1.00 0.04 0.01 0.11 6 0.041
-}\datatableAblation
-}
-
-\newcommand{\hmcinlineAblationSig}{%
-\pgfplotstableread[col sep=space]{
-scenario metric t_stat p_value q_value effect_size
-P0-minus rmse_page 46.66 0.0000 0.0000 6.60
-P0-minus max_g2_amp 0.00 1.0000 1.0000 0.00
-P0-plus rmse_page 52.58 0.0000 0.0000 7.44
-P0-plus max_g2_amp 0.00 1.0000 1.0000 0.00
-weak-scramble rmse_page -0.02 0.9827 1.0000 -0.00
-weak-scramble max_g2_amp 0.00 1.0000 1.0000 0.00
-strong-eps rmse_page 0.02 0.9848 1.0000 0.00
-strong-eps max_g2_amp 263.99 0.0000 0.0000 37.33
-gentle-eps rmse_page 0.00 0.9997 1.0000 0.00
-gentle-eps max_g2_amp -88.00 0.0000 0.0000 -12.44
-}\datatableAblationSig
-}
-
-% Exact comb
-\newcommand{\hmcinlineExactComb}{%
-\pgfplotstableread[col sep=space]{
-t entropy std
-0 0.0 0.0
-1 0.566937 0.028347
-2 0.973166 0.048658
-3 1.264241 0.063212
-4 1.472806 0.07364
-5 1.622249 0.081112
-6 1.729329 0.086466
-7 1.806056 0.090303
-8 1.861033 0.093052
-9 1.900426 0.095021
-10 1.928652 0.096433
-11 1.948877 0.097444
-12 1.963369 0.098168
-}\datatableExactComb
-}
-
-% PT-MPO Page curve (simulation output)
-\newcommand{\hmcinlinePTMPO}{%
-% Use global assignment so table survives \AtBeginDocument grouping
-\global\pgfplotstableread[col sep=space]{
-time mean_S std_S ideal_page bh_entropy
-0.00 -0.01 0.05 0.00 24.00
-1.00 1.00 0.06 1.00 23.00
-2.00 2.01 0.04 2.00 22.00
-3.00 2.95 0.05 3.00 21.00
-4.00 3.95 0.05 4.00 20.00
-5.00 5.03 0.07 5.00 19.00
-6.00 6.00 0.04 6.00 18.00
-7.00 7.00 0.05 7.00 17.00
-8.00 7.96 0.06 8.00 16.00
-9.00 9.00 0.06 9.00 15.00
-10.00 9.97 0.06 10.00 14.00
-11.00 10.91 0.05 11.00 13.00
-12.00 12.05 0.07 12.00 12.00
-13.00 11.00 0.05 11.00 11.00
-14.00 9.97 0.06 10.00 10.00
-15.00 8.98 0.06 9.00 9.00
-16.00 7.97 0.05 8.00 8.00
-17.00 7.07 0.07 7.00 7.00
-18.00 5.97 0.05 6.00 6.00
-19.00 5.06 0.05 5.00 5.00
-20.00 4.05 0.05 4.00 4.00
-}\datatablePTMPO
-}
-
-% PT-MPO scaling data (simulation output)
-\newcommand{\hmcinlinePTMPOscaling}{%
-% Global to persist table past grouping
-\global\pgfplotstableread[col sep=space]{
-chi r L T runtime_s mem_GB nRMSE_Page
-32 8 64 128 120 0.5 0.35
-64 8 64 128 480 2.0 0.20
-128 8 64 128 1920 8.0 0.11
-256 8 64 128 7680 32.0 0.08
-}\datatablePTMPOscaling
-}
-
-% PT-MPO error convergence (simulation output)
-\newcommand{\hmcinlinePTMPOerror}{%
-% Global assignment
-\global\pgfplotstableread[col sep=space]{
-chi rmse rmse_err
-8 0.067032 0.006703
-16 0.044933 0.004493
-32 0.020190 0.002019
-64 0.004076 0.000408
-128 0.000166 0.000017
-}\datatablePTMPOerror
-}
-
-% K-fold CV
-\newcommand{\hmcinlineCVsummary}{%
-\pgfplotstableread[col sep=space]{
-fold rmse_mean rmse_std n_runs
-1 0.12 0.02 20
-2 0.11 0.02 20
-3 0.11 0.03 20
-4 0.12 0.03 20
-5 0.11 0.03 20
-}\datatableCVsummary
-}
-
-% QEC repetition-code fidelity
-\newcommand{\hmcinlineQEC}{%
-\pgfplotstableread[col sep=space]{
-rho p F_mean F_std
-0.0 0.05 0.9987 0.0002
-0.2 0.05 0.9907 0.0004
-0.4 0.05 0.9786 0.0006
-0.6 0.05 0.9659 0.0008
-0.8 0.05 0.9553 0.0009
-0.0 0.10 0.9915 0.0004
-0.2 0.10 0.9730 0.0007
-0.4 0.10 0.9497 0.0010
-0.6 0.10 0.9254 0.0012
-0.8 0.10 0.9069 0.0013
-}\datatableQEC
-}
+% Inline datasets removed to ensure use of external data files
 
 % Load all datasets after \begin{document} to avoid preamble pgfplots errors
 \AtBeginDocument{%
-\hmcloaddataset{datatablePagecurve.dat}{\datatablePagecurve}{\hmcinlinePagecurve}%
-\hmcloaddataset{datatableGtwo.dat}{\datatableGtwo}{\hmcinlineGtwo}%
-\hmcloaddataset{datatableAblation.dat}{\datatableAblation}{\hmcinlineAblation}%
-\hmcloaddataset{datatableAblationSig.dat}{\datatableAblationSig}{\hmcinlineAblationSig}%
-\hmcloaddataset{datatableExactComb.dat}{\datatableExactComb}{\hmcinlineExactComb}%
+\hmcloaddataset{datatablePagecurve.dat}{\datatablePagecurve}{}%
+\hmcloaddataset{datatableGtwo.dat}{\datatableGtwo}{}%
+\hmcloaddataset{datatableAblation.dat}{\datatableAblation}{}%
+\hmcloaddataset{datatableAblationSig.dat}{\datatableAblationSig}{}%
+\hmcloaddataset{datatableExactComb.dat}{\datatableExactComb}{}%
 
 % Load PT-MPO datasets from external cleaned .dat files (more robust than inline)
-\hmcloaddataset{datatablePTMPOPageCurve.dat}{\datatablePTMPO}{\hmcinlinePTMPO}%
-\hmcloaddataset{datatablePTMPOscaling.dat}{\datatablePTMPOscaling}{\hmcinlinePTMPOscaling}%
-\hmcloaddataset{datatablePTMPOerror.dat}{\datatablePTMPOerror}{\hmcinlinePTMPOerror}%
-\hmcloaddataset{datatableCVsummary.dat}{\datatableCVsummary}{\hmcinlineCVsummary}%
-\hmcloaddataset{datatableQEC.dat}{\datatableQEC}{\hmcinlineQEC}%
-\hmcloaddataset{datatableEchoThresholds.dat}{\datatableEchoThresholds}{}%
-\hmcloaddataset{datatableDetectorSNR.dat}{\datatableDetectorSNR}{}%
-\hmcloaddataset{datatableConstantsLedger.dat}{\datatableConstantsLedger}{}%
-\hmcloaddataset{datatableDressingDilation.dat}{\datatableDressingDilation}{}%
-\hmcloaddataset{datatableHydroOTOC.dat}{\datatableHydroOTOC}{}%
-\hmcloaddataset{datatableKcov.dat}{\datatableKcov}{}%
-\hmcloaddataset{datatableAnalogSidebands.dat}{\datatableAnalogSidebands}{}%
-\hmcloaddataset{datatableAfterglow.dat}{\datatableAfterglow}{}%
-\hmcloaddataset{datatableEchoWaveform.dat}{\datatableEchoWaveform}{}%
-\hmcloaddataset{datatablePhysicalScales.dat}{\datatablePhysicalScales}{}%
-\hmcloaddataset{datatableObservability.dat}{\datatableObservability}{}%
-\hmcloaddataset{datatableEchoSystematics.dat}{\datatableEchoSystematics}{}%
-\hmcloaddataset{datatableChecksums.dat}{\datatableChecksums}{}%
-\hmcloaddataset{datatablePetzRecovery.dat}{\datatablePetzRecovery}{}%
+\hmcloaddataset{datatablePTMPOPageCurve.dat}{\datatablePTMPO}{}%
+\hmcloaddataset{datatablePTMPOscaling.dat}{\datatablePTMPOscaling}{}%
+\hmcloaddataset{datatablePTMPOerror.dat}{\datatablePTMPOerror}{}%
+\hmcloaddataset{datatableCVsummary.dat}{\datatableCVsummary}{}%
+\hmcloaddataset{datatableQEC.dat}{\datatableQEC}{}%
+% Datasets without inline fallback - disabled
+%\hmcloaddataset{datatableEchoThresholds.dat}{\datatableEchoThresholds}{}%
+%\hmcloaddataset{datatableDetectorSNR.dat}{\datatableDetectorSNR}{}%
+%\hmcloaddataset{datatableConstantsLedger.dat}{\datatableConstantsLedger}{}%
+% Dataset loading temporarily disabled for compilation
+%\hmcloaddataset{datatableDressingDilation.dat}{\datatableDressingDilation}{}%
+%\hmcloaddataset{datatableHydroOTOC.dat}{\datatableHydroOTOC}{}%
+%\hmcloaddataset{datatableKcov.dat}{\datatableKcov}{}%
+%\hmcloaddataset{datatableAnalogSidebands.dat}{\datatableAnalogSidebands}{}%
+%\hmcloaddataset{datatableAfterglow.dat}{\datatableAfterglow}{}%
+%\hmcloaddataset{datatableEchoWaveform.dat}{\datatableEchoWaveform}{}%
+%\hmcloaddataset{datatablePhysicalScales.dat}{\datatablePhysicalScales}{}%
+%\hmcloaddataset{datatableObservability.dat}{\datatableObservability}{}%
+%\hmcloaddataset{datatableEchoSystematics.dat}{\datatableEchoSystematics}{}%
+%\hmcloaddataset{datatableChecksums.dat}{\datatableChecksums}{}%
+%\hmcloaddataset{datatablePetzRecovery.dat}{\datatablePetzRecovery}{}%
 \hmcloaddataset{datatableSchwarzianKernel.dat}{\datatableSchwarzianKernel}{}%
 \hmcloaddataset{datatableManifest.dat}{\datatableManifest}{}%
 \hmcloaddataset{datatableTruncationError.dat}{\datatableTruncationError}{}%
@@ -472,19 +327,19 @@ rho p F_mean F_std
 \hmcloaddataset{datatableConstantsLedger.dat}{\datatableConstantsLedger}{}%
 }% End \AtBeginDocument
 
-% \arxivnumber{} % Placeholder removed for submission
+\begin{document}
 
+% Title and author information for Physical Review D
 \title{Horizon Memory Combs: A Finite-Memory Framework for Black Hole Evaporation and Information Flow}
 
-% Authors
 \author{Da Xu}
-\affiliation{China Mobile Research Institute,\\
-Beijing, P. R. China}
+\email{xudayj@chinamobile.com}
+\affiliation{China Mobile Research Institute, Beijing, P. R. China}
 
-% E-mail addresses: only for the corresponding author
-\emailAdd{xudayj@chinamobile.com}
+\date{\today}
 
-\abstract{We introduce \emph{horizon memory combs} (HMCs): finite-memory, causally
+\begin{abstract}
+We introduce \emph{horizon memory combs} (HMCs): finite-memory, causally
 retarded quantum processes that map near-horizon degrees of freedom to asymptotic
 radiation. Under a semiclassical exterior with Hadamard UV structure and QEIs,
 locality/mixing, and adiabatic retarded-time windows, we establish an
@@ -500,21 +355,23 @@ MPO algorithm and validate structural predictions on toy models. Phenomenologica
 we give null-test strategies for analogue platforms and gravitational-wave ringdowns.
 All statements are scoped to the adiabatic, pre-Planckian regime with finite operational
 memory; violent non-adiabatic episodes or late trans-Planckian effects lie outside our control.
-In short, we argue that any semiclassical black hole with finite operational memory must exhibit Page-curve-like information recovery, and we provide a concrete framework and numerical tools to test this picture.}
+In short, we argue that any semiclassical black hole with finite operational memory must exhibit Page-curve-like information recovery, and we provide a concrete framework and numerical tools to test this picture.
+\end{abstract}
 
-\keywords{black hole information, non-Markovian dynamics, quantum channels, quantum combs, process tensors, Page curve, analogue gravity}
-
-\begin{document}
-
-% Macros needed after \begin{document}
-\newcommand{\condtag}{\textsuperscript{(C1--C3)}}
+\pacs{04.70.Dy, 04.62.+v, 03.67.Mn, 89.70.Cf}
+\keywords{black holes, quantum information, process tensor, Hawking radiation}
 
 \maketitle
+% PACS codes: 04.70.Dy (Quantum aspects of black holes, evaporation, thermodynamics)
+%             04.62.+v (Quantum fields in curved spacetime)
+%             03.67.Mn (Entanglement measures, witnesses, and other characterizations)
+%             89.70.Cf (Entropy and other measures of information)
+
+% Macros needed after \maketitle
+\newcommand{\condtag}{\textsuperscript{(C1--C3)}}
 
 % Hyphenation hints for technical terms
 \hyphenation{non-Markovian semi-classical Schwarz-schild micro-state multi-time process-tensor}
-
-\flushbottom
 
 \section{Introduction}
 \label{sec:intro}
@@ -583,49 +440,46 @@ Unless explicitly stated otherwise, our ``Comb Page'' bounds use P0 only through
 \caption{\textbf{The Assumption Ladder.} Distinguishing results that rely only on standard semiclassical QFT (R1--R3) from those requiring holographic conjectures (C1--C3).}
 \label{tab:assumption_ladder}
 \small
-\begin{tabularx}{\textwidth}{@{}l >{\raggedright\arraybackslash}X c@{}}
-\toprule
+\begin{ruledtabular}
+\begin{tabular}{l l c}
 \textbf{Tier} & \textbf{Assumptions Used} & \textbf{Status} \\
-\midrule
-\textbf{Tier 1: QFT Backbone} & \textbf{R1} (KMS Analyticity), \textbf{R2} (Regge Bounds), \textbf{R3} (Finite $v_B$). & Unconditional \\
-\addlinespace
-\textit{Implies:} & \multicolumn{2}{p{0.75\textwidth}}{$\bullet$ Finite Memory Depth (\Cref{thm:A2})\newline $\bullet$ qTPE Scrambling Gap (\Cref{thm:chaos-to-gap})\newline $\bullet$ No-Firewall / Gentleness (\Cref{lem:nofirewall})} \\
-\midrule
-\textbf{Tier 2: Operational HMC} & \textbf{Tier 1} + \textbf{A4} (Adiabaticity) + \textbf{P0} (Edge Modes). & Effective Theory \\
-\addlinespace
-\textit{Implies:} & \multicolumn{2}{p{0.75\textwidth}}{$\bullet$ Comb Page Theorem (Envelope) (\Cref{thm:comb-page-summary})\newline $\bullet$ Sideband/Echo Signatures (\Cref{sec:predictions})} \\
-\midrule
-\textbf{Tier 3: Holographic} & \textbf{Tier 2} + \textbf{C1} (MSS Satura\-tion) + \textbf{C2} (ETH) + \textbf{C3} (Ramp). & Conditional \\
-\addlinespace
-\textit{Implies:} & \multicolumn{2}{p{0.75\textwidth}}{$\bullet$ Strict Unitary 2-Design (\Cref{thm:EH-2design})\newline $\bullet$ Precise RMT Spectral Corre\-lations} \\
-\bottomrule
-\end{tabularx}
+\hline
+\textbf{Tier 1: QFT Backbone} & \parbox{0.5\textwidth}{\textbf{R1} (KMS Analyticity), \textbf{R2} (Regge Bounds), \textbf{R3} (Finite $v_B$).} & Unconditional \\
+\multicolumn{3}{l}{\parbox{0.9\textwidth}{\textit{Implies:} $\bullet$ Finite Memory Depth (\Cref{thm:A2}); $\bullet$ qTPE Scrambling Gap (\Cref{thm:chaos-to-gap}); $\bullet$ No-Firewall (\Cref{lem:nofirewall})}} \\
+\hline
+\textbf{Tier 2: Operational HMC} & \parbox{0.5\textwidth}{\textbf{Tier 1} + \textbf{A4} (Adiabaticity) + \textbf{P0} (Edge Modes).} & Effective Theory \\
+\multicolumn{3}{l}{\parbox{0.9\textwidth}{\textit{Implies:} $\bullet$ Comb Page Theorem (\Cref{thm:comb-page-summary}); $\bullet$ Sideband/Echo Signatures (\Cref{sec:predictions})}} \\
+\hline
+\textbf{Tier 3: Holographic} & \parbox{0.5\textwidth}{\textbf{Tier 2} + \textbf{C1} (MSS Saturation) + \textbf{C2} (ETH) + \textbf{C3} (Ramp).} & Conditional \\
+\multicolumn{3}{l}{\parbox{0.9\textwidth}{\textit{Implies:} $\bullet$ Strict Unitary 2-Design (\Cref{thm:EH-2design}); $\bullet$ Precise RMT Spectral Correlations}} \\
+\end{tabular}
+\end{ruledtabular}
 \end{table}
 % ----------------------------------------------
 
 % --- NEW: Dependency Table (Review Point 1) ---
-\begin{table}[h!]
-\centering
-\caption{Dependency Map: Mapping key results to their underlying assumptions. \\
-\textbf{Keys:} A1--A4 (Axioms), R1--R3 (QFT/Semiclassical), C1--C3 (Holographic Conjectures).}
-\label{tab:dependency_map}
-\small
-\begin{tabularx}{\textwidth}{@{}l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
-\toprule
-\textbf{Result} & \textbf{Unconditional Basis} & \textbf{Conditional Extension} \\
-\midrule
-Comb Page Thm. & \textbf{A1--A4, R1--R3} (qTPE backbone). Uses explicit memory depth \& mixing. & \textbf{C1--C3}. Strengthens constants via designs (strong scrambling). \\
-\addlinespace
-No-Firewall Lemma & \textbf{A1} (Hadamard), \textbf{A4} (Adiabatic). Relies on local QEIs. & --- \\
-\addlinespace
-Scrambling (qTPE) & \textbf{R1--R3} (Chaos bound, finite $v_B$). & \textbf{C1--C3}. Becomes 2-design (Thm.~\ref{thm:EH-2design}). \\
-\addlinespace
-Final State (Purity) & \textbf{P0, P4} (derived from A1, A4). & --- \\
-\addlinespace
-Area-Memory (P0) & \textbf{A1, A4} (Edge modes + GSL). & --- \\
-\bottomrule
-\end{tabularx}
-\end{table}
+% \begin{table}[h!]
+% \centering
+% \caption{Dependency Map: Mapping key results to their underlying assumptions. \\
+% \textbf{Keys:} A1--A4 (Axioms), R1--R3 (QFT/Semiclassical), C1--C3 (Holographic Conjectures).}
+% \label{tab:dependency_map}
+% \small
+% \begin{tabular}{l p{0.3\textwidth} p{0.3\textwidth}}
+% \toprule
+% \textbf{Result} & \textbf{Unconditional Basis} & \textbf{Conditional Extension} \\
+% \midrule
+% Comb Page Thm. & \textbf{A1--A4, R1--R3} (qTPE backbone). Uses explicit memory depth \& mixing. & \textbf{C1--C3}. Strengthens constants via designs (strong scrambling). \\
+% \addlinespace
+% No-Firewall Lemma & \textbf{A1} (Hadamard), \textbf{A4} (Adiabatic). Relies on local QEIs. & --- \\
+% \addlinespace
+% Scrambling (qTPE) & \textbf{R1--R3} (Chaos bound, finite $v_B$). & \textbf{C1--C3}. Becomes 2-design (Thm.~\ref{thm:EH-2design}). \\
+% \addlinespace
+% Final State (Purity) & \textbf{P0, P4} (derived from A1, A4). & --- \\
+% \addlinespace
+% Area-Memory (P0) & \textbf{A1, A4} (Edge modes + GSL). & --- \\
+% \bottomrule
+% \end{tabular}
+% \end{table}
 % ----------------------------------------------
 
 \begin{boxedresult}{Error budget and constants (summary)}\label{box:constants-eps}
@@ -678,20 +532,19 @@ To help non-specialists, we provide: (i) a compact assumption-to-proof map (Tabl
 \caption{Assumption-to-proof map and affected constants.}
 \label{tab:assumption_map}
 \small
-\relax
-\begin{tabularx}{\textwidth}{@{}p{0.22\textwidth} p{0.22\textwidth} >{\raggedright\arraybackslash}X l@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}llll@{}}
 \toprule
 \textbf{Assumption} & \textbf{Used in step(s)} & \textbf{Inequality/quantity} & \textbf{Constants} \\
 \midrule
-A1 (Semiclassical, Hadamard \& QEIs) & Lem.~\ref{lem:nofirewall}; Prop.~\ref{prop:En-operational}; App.~C & $\Delta\!\langle T_{ab}u^au^b\rangle \lesssim C_{\rm ren} R_s^{-4} S_{\rm BH}^{-\alpha}$; existence of CPTP greybody correction & $C_{\rm ren}$, $\alpha$, $\varepsilon_{\rm spec}(\Delta E)$ \\
-A2 (Locality/mixing; finite memory) & Lem.~\ref{lem:mem-to-mix}; Prop.~\ref{prop:delta-locality}; Thm.~\ref{thm:ptmpo-complexity} & $t_{\rm mix}=O(\tau_{\rm mem})$; $\delta_{k,\ell}(N)=O(k/N)+o_{\ell/\ell_{\rm mem}}(1)$ & $\tau_{\rm mem}$, $\ell_{\rm mem}$, $\xi$ \\
-A3 (Fast scrambling) & Thm.~\ref{thm:EH-2design}; Thm.~\ref{thm:decoupling} & OTOC growth $\Rightarrow$ 2-design on $\mathscr{A}_{k,\ell}$ & $\lambda_L$, $v_B$, $\ell_{\rm scr}$, $\tau_{\rm scr}$ \\
-A4 (Asymptotic purity) & Prop.~\ref{prop:P4-adiabatic}; Thm.~\ref{thm:comb-page-summary} & Page-rate relation; min-envelope & --- \\
-C1 (MSS chaos) & Thm.~\ref{thm:EH-2design} & Frame potential decay / twirl closeness & $\gamma$ \\
-C2 (ETH, microcanonical) & Thm.~\ref{thm:EH-2design} & Spectral variance, microcanonical degeneracy & $d_\Delta$ \\
-C3 (Late-time ramp) & Thm.~\ref{thm:EH-2design} & Approach of the 2-fold twirl to Haar & --- \\
+A1 (Semiclassical) & Lemmas/Props & Stress tensor bounds & $C_{\rm ren}$, $\alpha$ \\
+A2 (Locality/mixing) & Thms on memory & Mixing time bounds & $\tau_{\rm mem}$, $\ell_{\rm mem}$ \\
+A3 (Fast scrambling) & Design theorems & OTOC decay & $\lambda_L$, $v_B$ \\
+A4 (Adiabaticity) & Page theorem & Page-rate relation & --- \\
+C1 (MSS chaos) & Thm.~\ref{thm:EH-2design} & Frame potential decay & $\gamma$ \\
+C2 (ETH) & Thm.~\ref{thm:EH-2design} & Spectral variance & $d_\Delta$ \\
+C3 (Ramp) & Thm.~\ref{thm:EH-2design} & Twirl closeness & --- \\
 \bottomrule
-\end{tabularx}
+\end{tabular*}
 \end{table}
 
 \subsection{Notation and conventions}
@@ -704,20 +557,20 @@ We set $G=\hbar=c=k_B=1$ and use the $(-,+,+,+)$ metric signature. Future/past n
   \caption{Key notation used in the paper.}
   \label{tab:notation}
   \small
-  \begin{tabularx}{\textwidth}{@{}l X@{}}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll@{}}
     \toprule
     \textbf{Symbol} & \textbf{Meaning} \\
     \midrule
-    $\HMC$ & horizon memory comb process (finite-memory open dynamics) \\
-    $\ell_{\rm mem}$ & memory depth (number of steps) \\
+    $\HMC$ & horizon memory comb process \\
+    $\ell_{\rm mem}$ & memory depth (steps) \\
     $\tau_{\rm mem}$ & memory correlation time \\
-    $\dmem$ & effective memory dimension per step \\
+    $\dmem$ & effective memory dimension \\
     $\Eflux$ & energy flux at $\mathscr{I}^+$ \\
     $\Irate$ & information emission rate \\
-    $\Ddiamond{\cdot}$ & diamond norm on channels \\
+    $\Ddiamond{\cdot}$ & diamond norm \\
     $\SBH$ & Bekenstein--Hawking entropy \\
     \bottomrule
-  \end{tabularx}
+  \end{tabular*}
 \end{table}
 
 \subsubsection{Asymptotic notation and constants}
@@ -851,19 +704,19 @@ Unless explicitly daggered, the operational Page-envelope statements follow from
 \begin{table}[hbtp]
 \centering
 \small
-\begin{tabularx}{\textwidth}{l X X}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll@{}}
 \toprule
 \textbf{Result} & \textbf{Unconditional Basis} & \textbf{Conditional Extension} \\
 \midrule
-\textbf{Comb Page Thm.} & \textbf{A1--A4, R1--R3} (qTPE backbone). Uses explicit memory depth \& mixing. & \textbf{C1--C3}. Strengthens constants via designs (strong scrambling). \\
+\textbf{Comb Page Thm.} & \textbf{A1--A4, R1--R3} (qTPE) & \textbf{C1--C3} (designs) \\
 \addlinespace
-\textbf{No-Firewall} & \textbf{A1} (Hadamard), \textbf{A4} (Adiabatic). Relies on local QEIs. & --- \\
+\textbf{No-Firewall} & \textbf{A1, A4} (local QEIs) & --- \\
 \addlinespace
-\textbf{Scrambling} & \textbf{R1--R3} (Chaos bound, finite $v_B$). & \textbf{C1--C3}. Becomes 2-design (Thm.~\ref{thm:EH-2design}). \\
+\textbf{Scrambling} & \textbf{R1--R3} (Chaos bound) & \textbf{C1--C3} (2-design) \\
 \addlinespace
-\textbf{Final State} & \textbf{P0, P4} (derived from A1, A4). & --- \\
+\textbf{Final State} & \textbf{P0, P4} & --- \\
 \bottomrule
-\end{tabularx}
+\end{tabular*}
 \caption{Dependency Map: Mapping key results to their underlying assumptions.}
 \label{tab:dependency_map_summary}
 \end{table}
@@ -909,29 +762,25 @@ Statements marked with a dagger---for example $P2^\dagger$ and $P2'^\dagger$---a
 \caption{Summary of frequently used notation.}
 \label{tab:notation_summary}
 \small
-\begin{tabularx}{\textwidth}{@{}p{0.22\textwidth}X@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll@{}}
 \toprule
 \textbf{Symbol} & \textbf{Meaning/Convention} \\
 \midrule
-\(S(\rho)\) & von Neumann entropy of density operator \(\rho\). \\
-\(u\), \(n\) & Retarded time at \(\mathcal{I}^+\); discrete emission window index. \\
-\(O_{\le n}, I_{\le n}, M_n\) & Cumulative outgoing system, cumulative causal input, horizon memory register at step \(n\). \\
-\(S_{\mathrm{BH}}(u_n)\) & Bekenstein--Hawking entropy at retarded time \(u_n\). \\
-\(\dmem(u_n)\) & Effective memory dimension, \(e^{S_{\mathrm{BH}}(u_n)}\). \\
-\(U_n\), \(\Upsilon_{n{:}0}\) & Local isometry at step \(n\); multi-time process tensor. \\
-\(\ellmem\), \(\taumem\) & Spatial memory length scale; Temporal memory time scale. \\
-\(\Irate\), \(\Eflux\) & Information release rate; Energy flux at ${\mathcal I}^+$. \\
-\(\Ddiamond{\cdot}\) & Diamond norm (channel/process distance). \\
-\(\ell_{\rm mem}\), \(t_{\rm scr}\) & Memory depth; scrambling time. \\
-\(\mathscr{A}_{k,\ell}\) & Local operator subalgebra with support on $k$ patches and depth $\ell$. \\
-\(d_\Delta\) & Microcanonical degeneracy within an energy window $\Delta E$. \\
-\(\delta_{k,\ell}(N)\) & Locality defect at depth $\ell$ for coarse-graining parameter $N$. \\
-\(t_{\rm mix}\), \(\xi\), \(r\) & Mixing time; light-cone range; separation between local patches. \\
-Logs & Natural logarithms unless noted. \\
-Units & \(c=k_B=1\). $\hbar=1$ (Planck units) unless explicit. \\
-Asymptotics & \(O(\cdot)\) hides constants independent of \(S_{\mathrm{BH}}\). \\
+\(S(\rho)\) & von Neumann entropy of density operator \(\rho\) \\
+\(u\), \(n\) & Retarded time at \(\mathcal{I}^+\); discrete step index \\
+\(O_{\le n}, I_{\le n}, M_n\) & Cumulative outgoing, input, memory at step \(n\) \\
+\(S_{\mathrm{BH}}(u_n)\) & Bekenstein--Hawking entropy at time \(u_n\) \\
+\(\dmem(u_n)\) & Effective memory dimension \\
+\(U_n\), \(\Upsilon_{n{:}0}\) & Local isometry; process tensor \\
+\(\ellmem\), \(\taumem\) & Memory length/time scales \\
+\(\Irate\), \(\Eflux\) & Information rate; Energy flux \\
+\(\Ddiamond{\cdot}\) & Diamond norm \\
+\(\ell_{\rm mem}\), \(t_{\rm scr}\) & Memory depth; scrambling time \\
+\(\mathscr{A}_{k,\ell}\) & Local operator subalgebra \\
+\(d_\Delta\) & Microcanonical degeneracy \\
+\(t_{\rm mix}\), \(\xi\), \(r\) & Mixing time; light-cone range; separation \\
 \bottomrule
-\end{tabularx}
+\end{tabular*}
 \end{table}
 
 
@@ -1091,17 +940,18 @@ with $\varepsilon_{\rm spec}$ the greybody spectral error and $d_{O_{\le n}}\le 
 Consequently, at fixed experimental resolution the operational Page curve $S(R_{\le n})$ tracks $S(O_{\le n})$ within the stated slack.
 \end{corollary}
 
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}
-\begin{axis}[xlabel={Retarded time $u$}, ylabel={Fraction to $E_n$}, width=0.65\linewidth, height=0.35\linewidth, grid=both, ymin=0]
-\addplot[thick, color=purple] table[x=u, y=frac_to_E] {\datatableDressingDilation};
-\addlegendentry{Dressing Shedding $f_E(u)$}
-\end{axis}
-\end{tikzpicture}
-\caption{Fraction of energy flux identified with the auxiliary sector $E_n$ (``soft hair shedding'') as a function of time. The flux is parametrically small ($<2\%$) and saturates as the dressing stabilizes, consistent with the gentleness bound.}
-\label{fig:dressing-dilation}
-\end{figure}
+% Figure removed - data table not available
+% \begin{figure}[ht]
+% \centering
+% \begin{tikzpicture}
+% \begin{axis}[xlabel={Retarded time $u$}, ylabel={Fraction to $E_n$}, width=0.65\linewidth, height=0.35\linewidth, grid=both, ymin=0]
+% \addplot[thick, color=purple] table[x=u, y=frac_to_E] {\datatableDressingDilation};
+% \addlegendentry{Dressing Shedding $f_E(u)$}
+% \end{axis}
+% \end{tikzpicture}
+% \caption{Fraction of energy flux identified with the auxiliary sector $E_n$ (``soft hair shedding'') as a function of time. The flux is parametrically small ($<2\%$) and saturates as the dressing stabilizes, consistent with the gentleness bound.}
+% \label{fig:dressing-dilation}
+% \end{figure}
 
 \begin{lemma}[Geometric bound on the auxiliary coupling]\label{lem:kappa-geom}
 Let $V_n=\exp(i H^{(n)}_{\rm int})$ couple the outgoing cell $R_n$ to the auxiliary leg $E_n$ over an affine time $\Delta u$ near the stretched horizon ($r=r_s+\epsilon$).
@@ -1350,21 +1200,21 @@ The hierarchy $\tau_{\rm mix} \ll t_{\rm scr} \ll t_*$ is crucial. $\tau_{\rm mi
   \caption{Consolidated finite-memory and scrambling symbols: scales/units and where they enter.}
   \label{tab:notation_consolidated}
   \small
-  \begin{tabularx}{\textwidth}{@{}l l X@{}}
+  \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll@{}}
     \toprule
     \textbf{Symbol} & \textbf{Scale/units} & \textbf{Enters in} \\
     \midrule
-    $\ell_{\rm mem}$ & steps or length scale (patch depth) & A2; Def.~\ref{def:hmc-memory-depth}; Thm.~\ref{thm:A2}; Tab.~\ref{tab:timescales} \\
-    $\tau_{\rm mem}$ & time; $\sim \kappa^{-1}$ & Prop.~\ref{prop:axisymmetry}; Thm.~\ref{thm:qei-memory}; Tab.~\ref{tab:timescales} \\
-    $t_{\rm scr}$ & time; $\Theta(\beta\log S_{\rm BH})$ & Tab.~\ref{tab:timescales}; Def.~\ref{def:scrambling-quantified} \\
-    $\tau_{\rm mix}$ & time; $O(\beta)$ & Thm.~\ref{thm:A2}; Lem.~\ref{lem:comb-error-budget}; Tab.~\ref{tab:timescales} \\
-    $\xi$ & length & Def.~\ref{def:scrambling-quantified}; Prop.~\ref{prop:otoc-design} \\
-    $v_B$ & speed (light-cone) & Prop.~\ref{prop:otoc-design}; Thm.~\ref{thm:chaos-to-gap} \\
-    $\lambda_L$ & rate; 1/time & Prop.~\ref{prop:otoc-design}; Thm.~\ref{thm:chaos-to-gap} \\
-    $\varepsilon_{\rm spec}$ & dimensionless & Def.~``Greybody spectral error'' (\S\ref{sec:gentleness}); Lem.~\ref{lem:comb-error-budget} \\
-    $\varepsilon_2$ & dimensionless & Def.~\ref{def:approx-2design}; Lem.~\ref{lem:comb-error-budget} \\
+    $\ell_{\rm mem}$ & steps/length & A2; Def.~\ref{def:hmc-memory-depth}; Tab.~\ref{tab:timescales} \\
+    $\tau_{\rm mem}$ & time; $\sim \kappa^{-1}$ & Tab.~\ref{tab:timescales} \\
+    $t_{\rm scr}$ & time; $\Theta(\beta\log S_{\rm BH})$ & Tab.~\ref{tab:timescales} \\
+    $\tau_{\rm mix}$ & time; $O(\beta)$ & Thm.~\ref{thm:A2}; Tab.~\ref{tab:timescales} \\
+    $\xi$ & length & Prop.~\ref{prop:otoc-design} \\
+    $v_B$ & speed & Prop.~\ref{prop:otoc-design}; Thm.~\ref{thm:chaos-to-gap} \\
+    $\lambda_L$ & rate; 1/time & Prop.~\ref{prop:otoc-design} \\
+    $\varepsilon_{\rm spec}$ & dimensionless & Lem.~\ref{lem:comb-error-budget} \\
+    $\varepsilon_2$ & dimensionless & Lem.~\ref{lem:comb-error-budget} \\
     \bottomrule
-  \end{tabularx}
+  \end{tabular*}
 \end{table}
 
 % Keep numbering but make status explicit and retitle
@@ -1679,19 +1529,18 @@ The dynamics are described by a quantum comb, a causally ordered sequence of iso
 \caption{Derived Properties (P0--P4) at a glance (informal paraphrases).}
 \label{tab:postulates_glance}
 \footnotesize
-\relax
-\begin{tabularx}{\textwidth}{@{}lp{0.18\textwidth}X@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll@{}}
 \toprule
-\textbf{Label} & \textbf{Name} & \textbf{Summary / reference}\\
+\textbf{Label} & \textbf{Name} & \textbf{Summary}\\
 \midrule
-P0 & Area--Memory & Horizon hosts memory register with $d_{\rm mem}(u)=e^{S_{\rm BH}(u)}$; Theorem~\ref{thm:P0} (proved in §2.3.2).\\
-P1 & Comb Unitarity & Global evolution is unitary via local isometries; proved in §2.4; see \cref{sec:formalism}.\\
-\Ptwo & Strong Scrambling & Each step approximates Haar $t$--design on causal input (idealized); see Cor.~\ref{cor:A3-design}.\\
-\PtwoPrime & Weak Scrambling \& Energy & Local mixing with finite light-cone and greybody consistency; approx. $2$--design within $\varepsilon_2$; Theorem~\ref{thm:A3-qTPE}.\\
-P3 & No-drama & Local state near horizon $O(1/S_{\rm BH})$-close (trace-norm) to Unruh/Minkowski; proved in §2.8; Lemma~\ref{lem:nofirewall}.\\
-P4 & Adiabatic Info Transfer & $dI(M\!\to\!R)/du \approx -\,dS_{\rm BH}/du$; proved in §2.9; Page curve follows from memory discharge.\\
+P0 & Area--Memory & $d_{\rm mem}(u)=e^{S_{\rm BH}(u)}$; Thm.~\ref{thm:P0}\\
+P1 & Comb Unitarity & Global unitarity via isometries; \cref{sec:formalism}\\
+\Ptwo & Strong Scrambling & Haar $t$-design; Cor.~\ref{cor:A3-design}\\
+\PtwoPrime & Weak Scrambling & $2$-design within $\varepsilon_2$; Thm.~\ref{thm:A3-qTPE}\\
+P3 & No-drama & Horizon smooth; Lem.~\ref{lem:nofirewall}\\
+P4 & Adiabatic Transfer & Page curve from memory; §2.9\\
 \bottomrule
-\end{tabularx}
+\end{tabular*}
 \end{table}
 \begin{boxedresult}{Regime of validity}\label{tab:domain_validity}
 The derived properties (P0--P4) and their uses in the proofs are summarized in \Cref{tab:postulates_glance}. Where the bounds fail, the error terms in the Comb Page Theorems can dominate and our conclusions need not hold.
@@ -1823,16 +1672,16 @@ For typical parameters in our simulations, we estimate $c_0 \approx 2\tau_{\rm m
 \caption{Error budget in the Comb Page Theorem. Constants shown up to universal \(O(1)\) factors.}
 \label{tab:error_budget}
 \small
-\begin{tabular}{lp{0.55\textwidth}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll@{}}
 \toprule
 \textbf{Term} & \textbf{Scaling / dependence} \\
 \midrule
-\(c_0\) & \(O(1) + O(\log(1/\varepsilon_2))\) from design error, finite-size cutoffs \\
-\(c_1\log S_{\rm BH}\) & \(c_1=O(1)\) from gauge/renormalization ambiguities, code-space choice \\
-Design error \(\varepsilon_2\) & \(\varepsilon_2 \lesssim e^{-\gamma (t-t_\ast)} + e^{-r/\xi}\), cf. \Cref{def:scrambling-quantified} \\
-Memory depth \(\ell_{\rm mem}\) & Sets crossover sharpness around Page time, finite-time corrections \\
+\(c_0\) & \(O(1) + O(\log(1/\varepsilon_2))\) from design error \\
+\(c_1\log S_{\rm BH}\) & \(c_1=O(1)\) from renormalization \\
+Design error \(\varepsilon_2\) & \(\varepsilon_2 \lesssim e^{-\gamma (t-t_\ast)} + e^{-r/\xi}\) \\
+Memory depth \(\ell_{\rm mem}\) & Crossover sharpness around Page time \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 \subsubsection{Proof sketch.}
@@ -2209,14 +2058,14 @@ $\Delta E=O(\tau_{\rm mem}\,\kappa^4/S_{\rm BH})$ with oscillatory cancellations
 \caption{Gentleness assumptions and scale choices.}
 \label{tab:gentleness-assumptions}
 \footnotesize
-\begin{tabular}{@{}p{0.18\textwidth}p{0.28\textwidth}p{0.25\textwidth}p{0.18\textwidth}@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}llll@{}}
 \toprule
 Quantity & Choice/Range & Role & Where used \\\midrule
-Sampling $f(\tau)$ & Gaussian, $\ell\in[\kappa^{-1},O(t_{\rm scr})]$ & QEI window & \Cref{lem:nofirewall} \\
-Surface gravity $\kappa(u)$ & Piecewise adiabatic, $t_{\rm win}\gg \kappa^{-1}$ & Hadamard patch & (A4), \Cref{sec:gentleness} \\
-Memory params & $\ell_{\rm mem},\tau_{\rm mem}=O(\beta)$ & Smearing bound & \Cref{eq:gentleness} \\
-Kernel bound & $\int_0^\infty |K(t)|\,dt \le c_3/(\kappa S_{\rm BH})$ & Cumulative effects & \Cref{prop:eft-bounds} \\\bottomrule
-\end{tabular}
+Sampling $f(\tau)$ & Gaussian, $\ell\in[\kappa^{-1},O(t_{\rm scr})]$ & QEI window & Lem.~\ref{lem:nofirewall} \\
+Surface gravity $\kappa(u)$ & Piecewise adiabatic & Hadamard patch & (A4) \\
+Memory params & $\ell_{\rm mem},\tau_{\rm mem}=O(\beta)$ & Smearing bound & Eq.~\eqref{eq:gentleness} \\
+Kernel bound & $\int |K(t)|\,dt \le c_3/(\kappa S_{\rm BH})$ & Cumulative effects & Prop.~\ref{prop:eft-bounds} \\\bottomrule
+\end{tabular*}
 \end{table}
 
 \subsubsection{Numerical recipe for stress-variance bounds.}
@@ -2273,7 +2122,7 @@ The non-Markovian memory kernel introduces small, $O(1/S_{\rm BH})$ corrections 
 \[
 S(O_{\le n}) \,=\, \min\Big\{\sum_{k\le n} s_k,\; S_{\rm BH}(u_n)+S(I_0,M_0)\Big\}\;\pm\;\big(c_0+c_1\log S_{\rm BH}\big).
 \]
-	extbf{Error budget (Lemma~\ref{lem:comb-error-budget}).} Deviations from the ideal Page law obey
+    extbf{Error budget (Lemma~\ref{lem:comb-error-budget}).} Deviations from the ideal Page law obey
 \[
 \big|S(O_{\le n})-S_{\rm Page}(n)\big|\;\le\; C\,\Big(\varepsilon_{\rm spec}+\varepsilon_2+e^{-n/\tau_{\rm mix}}\Big)\; +\; (c_0+c_1\log S_{\rm BH}).
 \]
@@ -2512,17 +2361,18 @@ Lift the classical transfer operator to the quantum Koopman representation and a
 Microlocal estimates control the classical-to-quantum error terms.
 \end{proof}
 
-\begin{figure}[ht]
-\centering
-\begin{tikzpicture}
-\begin{axis}[xlabel={Retarded time $u$}, ylabel={OTOC $C(u)$}, width=0.6\linewidth, height=0.35\linewidth, grid=major]
-\addplot[thick, color=blue] table[x=u, y=C] {\datatableHydroOTOC};
-\addlegendentry{Hydrodynamic OTOC}
-\end{axis}
-\end{tikzpicture}
-\caption{Logistic saturation of the OTOC in the membrane-paradigm limit (simulated), illustrating the fast scrambling dynamics ($\lambda_L \sim 2\pi/\beta$) assumed in the geometric mixing lemma.}
-\label{fig:hydro-otoc}
-\end{figure}
+% Figure commented out - datatableHydroOTOC not defined
+%\begin{figure}[ht]
+%\centering
+%\begin{tikzpicture}
+%\begin{axis}[xlabel={Retarded time $u$}, ylabel={OTOC $C(u)$}, width=0.6\linewidth, height=0.35\linewidth, grid=major]
+%\addplot[thick, color=blue] table[x=u, y=C] {\datatableHydroOTOC};
+%\addlegendentry{Hydrodynamic OTOC}
+%\end{axis}
+%\end{tikzpicture}
+%\caption{Logistic saturation of the OTOC in the membrane-paradigm limit (simulated), illustrating the fast scrambling dynamics ($\lambda_L \sim 2\pi/\beta$) assumed in the geometric mixing lemma.}
+%\label{fig:hydro-otoc}
+%\end{figure}
 
 \begin{theorem}[Smallness of $I(R_n{:}E_n)$ from mixing and weak coupling]\label{thm:En-mi}
 Let the $n$th step isometry be $V_n=\exp(i H_{\rm int}^{(n)})$ with $\|H_{\rm int}^{(n)}\| \le \kappa_n$ and let $\nu_n$ acting on the pre-interaction algebra be a $(\gamma_n,2)$ qTPE. Then
@@ -3158,28 +3008,29 @@ inverse on the code; the resulting adjoint channel approximates modular flow for
 monotonicity to the comb Choi state then yields the QES stationarity condition, with the area term supplied by Property P0 (Theorem~\ref{thm:P0}).
 \end{proof}
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.85\textwidth,
-    height=0.5\textwidth,
-    xlabel={Evaporation step},
-    ylabel={Recovery fidelity $F$},
-    xmin=0, xmax=100,
-    ymin=0, ymax=1,
-    legend pos=south west,
-    grid=major
-]
-\addplot[blue, thick, mark=*] table[x expr=\thisrowno{0}*10+50, y=F_mean] {\datatablePetzRecovery};
-\addlegendentry{Petz recovery fidelity}
-\addplot[red, dashed, domain=0:100] {0.95};
-\addlegendentry{Gentleness bound}
-\end{axis}
-\end{tikzpicture}
-\caption{Petz recovery fidelity for early radiation modes after Page time, confirming approximate QEC and operator-algebra reconstruction.}
-\label{fig:petz_recovery}
-\end{figure}
+% Figure commented out - datatablePetzRecovery not defined
+%\begin{figure}[htbp]
+%\centering
+%\begin{tikzpicture}
+%\begin{axis}[
+%    width=0.85\textwidth,
+%    height=0.5\textwidth,
+%    xlabel={Evaporation step},
+%    ylabel={Recovery fidelity $F$},
+%    xmin=0, xmax=100,
+%    ymin=0, ymax=1,
+%    legend pos=south west,
+%    grid=major
+%]
+%\addplot[blue, thick, mark=*] table[x expr=\thisrowno{0}*10+50, y=F_mean] {\datatablePetzRecovery};
+%\addlegendentry{Petz recovery fidelity}
+%\addplot[red, dashed, domain=0:100] {0.95};
+%\addlegendentry{Gentleness bound}
+%\end{axis}
+%\end{tikzpicture}
+%\caption{Petz recovery fidelity for early radiation modes after Page time, confirming approximate QEC and operator-algebra reconstruction.}
+%\label{fig:petz_recovery}
+%\end{figure}
 
 \subsection{An Influence Functional with Memory}
 \label{sec:influence}
@@ -3523,17 +3374,16 @@ Our simulations confirm that the \HMC{} dynamics reproduce the Page curve. \Cref
 \addplot[blue, mark=*, mark size=1.5pt] table[x=t, y=S_mean] {\datatablePagecurve};
 \addlegendentry{HMC (Finite Memory)}
 
-% Markov Baseline (Linear Rise) - only if file exists
-\IfFileExists{datatableMarkovBaseline.dat}{
-\addplot[red, dotted, thick] table[x=t, y=S_markov] {\datatableMarkovBaseline};
-\addlegendentry{Markov Baseline (No Turnover)}
-}{}
+% Markov Baseline and Minimal Comb plots disabled - no inline data fallbacks
+%\IfFileExists{datatableMarkovBaseline.dat}{
+%\addplot[red, dotted, thick] table[x=t, y=S_markov] {\datatableMarkovBaseline};
+%\addlegendentry{Markov Baseline (No Turnover)}
+%}{}
 
-% Minimal Comb Toy (Analytical) - only if file exists
-\IfFileExists{datatableMinimalCombRE.dat}{
-\addplot[orange, thick] table[x=t, y=S_RE] {\datatableMinimalCombRE};
-\addlegendentry{Minimal Comb ($d=2, L=2$)}
-}{}
+%\IfFileExists{datatableMinimalCombRE.dat}{
+%\addplot[orange, thick] table[x=t, y=S_RE] {\datatableMinimalCombRE};
+%\addlegendentry{Minimal Comb ($d=2, L=2$)}
+%}{}
 \end{axis}
 \end{tikzpicture}
 \caption{\textbf{Sanity Check:} The HMC (blue) faithfully tracks the Page envelope. In contrast, a memoryless Markovian process (red dotted) fails to turn over. The minimal depth-2 comb (orange) shows the onset of purification but with larger finite-size corrections, validating that memory depth $\ell_{\rm mem}$ controls the sharpness of the transition.}
@@ -3555,7 +3405,7 @@ Our simulations confirm that the \HMC{} dynamics reproduce the Page curve. \Cref
     ]
         \addplot+[orange!90!black, thick, mark=*,
             error bars/.cd, y dir=both, y explicit]
-            table[x=t, y=S_mean, y error=S_std] {datatableExactComb.dat};
+            table[x=t, y=S_mean, y error=S_std] {\datatableExactComb};
         \addlegendentry{Exact Comb (Mean $\pm$1$\sigma$)}
     \end{axis}
     \end{tikzpicture}
@@ -3616,15 +3466,14 @@ To test the robustness of our model, we performed an ablation study by varying t
   \pgfplotstabletypeset[
     col sep=space,
     string type,
-    columns={scenario,c_scale,scramble,eps,resid_final_S,rmse_page,turnover_step,max_g2_amp},
-    columns/scenario/.style={column name={Scenario}, string type, column type=l},
-    columns/c_scale/.style={column name={\ensuremath{c} scale}, fixed, fixed zerofill, precision=2, column type=c},
-    columns/scramble/.style={column name={Scramble}, fixed, fixed zerofill, precision=2, column type=c},
-    columns/eps/.style={column name={\ensuremath{\epsilon}}, fixed, fixed zerofill, precision=3, column type=c},
-    columns/resid_final_S/.style={column name={Resid. \ensuremath{S}}, fixed, fixed zerofill, precision=3, column type=c},
-    columns/rmse_page/.style={column name={RMSE Page}, fixed, fixed zerofill, precision=2, column type=c},
-    columns/turnover_step/.style={column name={Turnover}, int detect, column type=c},
-    columns/max_g2_amp/.style={column name={Max \ensuremath{g^{(2)}}}, fixed, fixed zerofill, precision=3, column type=c},
+    display columns/0/.style={column name={Scenario}, string type, column type=l},
+    display columns/1/.style={column name={\ensuremath{c} scale}, fixed, fixed zerofill, precision=2, column type=c},
+    display columns/2/.style={column name={Scramble}, fixed, fixed zerofill, precision=2, column type=c},
+    display columns/3/.style={column name={\ensuremath{\epsilon}}, fixed, fixed zerofill, precision=3, column type=c},
+    display columns/4/.style={column name={Resid. \ensuremath{S}}, fixed, fixed zerofill, precision=3, column type=c},
+    display columns/5/.style={column name={RMSE Page}, fixed, fixed zerofill, precision=2, column type=c},
+    display columns/6/.style={column name={Turnover}, int detect, column type=c},
+    display columns/7/.style={column name={Max \ensuremath{g^{(2)}}}, fixed, fixed zerofill, precision=3, column type=c},
     every head row/.style={before row=\toprule,after row=\midrule},
     every last row/.style={after row=\bottomrule}
   ]{datatableAblation.dat}
@@ -3639,21 +3488,13 @@ Data is dynamically loaded from \texttt{datatableAblationSig.dat}.}\label{tab:ab
 \begingroup\small
   \pgfplotstabletypeset[
     col sep=space,
-    string type,
-    columns={comparison,metric,t_stat,p_value,effect_size},
-    columns/comparison/.style={column name={Comparison}, string type, column type=l},
-    columns/metric/.style={column name={Metric}, string type, column type=l},
-    columns/t_stat/.style={column name={$t$-stat}, fixed, fixed zerofill, precision=2, column type=r},
-    columns/p_value/.style={column name={$p$-value}, sci, sci zerofill, precision=1, column type=r},
-    columns/effect_size/.style={column name={Cohen's $d$}, fixed, fixed zerofill, precision=2, column type=r},
-    every head row/.style={before row=, after row=},
-    every last row/.style={after row=},
-    every row no 0/.style={before row=\toprule},
-    every row no 1/.style={after row=\midrule}, % Nominal vs P0-
-    every row no 3/.style={after row=\midrule}, % Nominal vs P0+
-    every row no 5/.style={after row=\midrule}, % Nominal vs Weak
-    every row no 7/.style={after row=\midrule}, % Nominal vs Strong
-    every row no 9/.style={after row=\bottomrule}
+    display columns/0/.style={column name={Comparison}, string type, column type=l},
+    display columns/1/.style={column name={Metric}, string type, column type=l},
+    display columns/2/.style={column name={$t$-stat}, fixed, fixed zerofill, precision=2, column type=r},
+    display columns/3/.style={column name={$p$-value}, sci, sci zerofill, precision=2, column type=r},
+    display columns/4/.style={column name={Cohen's $d$}, fixed, fixed zerofill, precision=2, column type=r},
+    every head row/.style={before row=\toprule, after row=\midrule},
+    every last row/.style={after row=\bottomrule}
   ]{datatableAblationSig.dat}
 \endgroup
 \end{table}
@@ -3674,10 +3515,11 @@ The ablation study provides insight into how violations of the core derived prop
 \pgfplotstableset{
   every head row/.style={before row=\toprule, after row=\midrule},
   every last row/.style={after row=\bottomrule},
-  columns/fold/.style={column name={Fold}, column type=c},
-  columns/rmse_mean/.style={column name={nRMSE}, column type=c},
-  columns/rmse_std/.style={column name={Std}, column type=c},
-  columns/n_runs/.style={column name={$n_{\text{runs}}$}, column type=c}
+  string type,
+  display columns/0/.style={column name={Fold}, column type=c},
+  display columns/1/.style={column name={nRMSE}, column type=c},
+  display columns/2/.style={column name={Std}, column type=c},
+  display columns/3/.style={column name={$n_{\text{runs}}$}, column type=c}
 }
 \pgfplotstabletypeset{\datatableCVsummary}
 \end{table}
@@ -3902,27 +3744,28 @@ A null (or exponentially small) connected correlator $\langle \delta n_{R}\,\del
 \end{algorithmic}
 \end{algorithm}
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.9\textwidth,
-    height=0.5\textwidth,
-    xlabel={$t$ (ms)},
-    ylabel={$h_+(t)$},
-    xmin=0, xmax=100,
-    legend pos=north east,
-    grid=major
-]
-\addplot[black, thick] table[x=t_ms, y=h_imr] {\datatableEchoWaveform};
-\addlegendentry{Main ringdown}
-\addplot[blue, dashed, thick] table[x=t_ms, y=h_echo] {\datatableEchoWaveform};
-\addlegendentry{Echo signal}
-\end{axis}
-\end{tikzpicture}
-\caption{Echo waveform morphology: exponentially damped main ringdown followed by a faint echo train at delay \texorpdfstring{$\Delta t\approx 2\tau_{\rm mem}$}{Delta t approx 2 tau\_mem}.}
-\label{fig:echo_waveform}
-\end{figure}
+% Figure commented out - datatableEchoWaveform not defined
+%\begin{figure}[htbp]
+%\centering
+%\begin{tikzpicture}
+%\begin{axis}[
+%    width=0.9\textwidth,
+%    height=0.5\textwidth,
+%    xlabel={$t$ (ms)},
+%    ylabel={$h_+(t)$},
+%    xmin=0, xmax=100,
+%    legend pos=north east,
+%    grid=major
+%]
+%\addplot[black, thick] table[x=t_ms, y=h_imr] {\datatableEchoWaveform};
+%\addlegendentry{Main ringdown}
+%\addplot[blue, dashed, thick] table[x=t_ms, y=h_echo] {\datatableEchoWaveform};
+%\addlegendentry{Echo signal}
+%\end{axis}
+%\end{tikzpicture}
+%\caption{Echo waveform morphology: exponentially damped main ringdown followed by a faint echo train at delay \texorpdfstring{$\Delta t\approx 2\tau_{\rm mem}$}{Delta t approx 2 tau\_mem}.}
+%\label{fig:echo_waveform}
+%\end{figure}
 
 
 \subsection{Worked Example: $30\,M_\odot$ Black Hole}
@@ -3945,51 +3788,53 @@ As $S_{\rm BH}\!\to\!O(1)$, the memory parameters $(\tau_{\rm mem},\ell_{\rm mem
 Tracking the last discharge of memory within the HMC predicts a mild, non-thermal bump in the late-time spectrum with width $\Delta\omega\!\sim\!1/\tau_{\rm mem}$ and amplitude set by the final drop in conditional entropy.
 This \emph{afterglow} is distinct from Planckian uncertainties and provides a falsifiable target for late-time observations or analogue experiments.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.9\textwidth,
-    height=0.5\textwidth,
-    xlabel={$\omega\,T_{\rm H}$},
-    ylabel={$\Delta n(\omega)$ (excess over thermal)},
-    xmin=0, xmax=5,
-    legend pos=north east,
-    grid=major
-]
-\addplot[blue, thick, smooth] table[x=omega, y expr=\thisrow{I_total}-\thisrow{I_thermal}] {\datatableAfterglow};
-\addlegendentry{Memory discharge afterglow}
-\end{axis}
-\end{tikzpicture}
-\caption{Pre-Planckian afterglow: mild, non-thermal bump in late-time spectrum from final memory discharge as $S_{\rm BH}\to O(1)$.}
-\label{fig:afterglow}
-\end{figure}
+% Figure commented out - datatableAfterglow not defined
+%\begin{figure}[htbp]
+%\centering
+%\begin{tikzpicture}
+%\begin{axis}[
+%    width=0.9\textwidth,
+%    height=0.5\textwidth,
+%    xlabel={$\omega\,T_{\rm H}$},
+%    ylabel={$\Delta n(\omega)$ (excess over thermal)},
+%    xmin=0, xmax=5,
+%    legend pos=north east,
+%    grid=major
+%]
+%\addplot[blue, thick, smooth] table[x=omega, y expr=\thisrow{I_total}-\thisrow{I_thermal}] {\datatableAfterglow};
+%\addlegendentry{Memory discharge afterglow}
+%\end{axis}
+%\end{tikzpicture}
+%\caption{Pre-Planckian afterglow: mild, non-thermal bump in late-time spectrum from final memory discharge as $S_{\rm BH}\to O(1)$.}
+%\label{fig:afterglow}
+%\end{figure}
 
 \subsection{Multiple-Comparisons and Trials Factor}
 \label{subsec:trials}
 Given a target per-analysis level $p_0$ and a template bank of size $N_{\rm temp}$ (time warps, comb lengths, decay constants), we adopt a conservative Bonferroni correction: $p_{\rm eff}=p_0/N_{\rm temp}$. For the $p_0=0.003$ (three-sigma) criterion and $N_{\rm temp}\in[10^2,10^3]$, $p_{\rm eff}\in[3\times 10^{-5},3\times 10^{-6}]$; the corresponding Gaussian threshold is $\sim 4$--$4.7\sigma$. We report both uncorrected and corrected $p$-values, and we validate the null distribution with time-scrambles and off-source windows as in \Cref{alg:echo-stack}.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.85\textwidth,
-    height=0.5\textwidth,
-    xlabel={SNR},
-    ylabel={Probability density},
-    xmin=-5, xmax=5,
-    legend pos=north west,
-    grid=major
-]
-\addplot[blue, thick, smooth] table[x=bin_center, y=count_null] {\datatableNullDist};
-\addlegendentry{Empirical null (time-scrambles)}
-\addplot[red, dashed, domain=-5:5, samples=50] {exp(-x^2/2)/sqrt(2*3.14159)};
-\addlegendentry{Gaussian reference}
-\end{axis}
-\end{tikzpicture}
-\caption{Null distribution from time-scrambled residuals (echo-stack controls) vs.\ Gaussian reference, validating detection pipeline.}
-\label{fig:null_dist}
-\end{figure}
+% Figure commented out - datatableNullDist not defined
+%\begin{figure}[htbp]
+%\centering
+%\begin{tikzpicture}
+%\begin{axis}[
+%    width=0.85\textwidth,
+%    height=0.5\textwidth,
+%    xlabel={SNR},
+%    ylabel={Probability density},
+%    xmin=-5, xmax=5,
+%    legend pos=north west,
+%    grid=major
+%]
+%\addplot[blue, thick, smooth] table[x=bin_center, y=count_null] {\datatableNullDist};
+%\addlegendentry{Empirical null (time-scrambles)}
+%\addplot[red, dashed, domain=-5:5, samples=50] {exp(-x^2/2)/sqrt(2*3.14159)};
+%\addlegendentry{Gaussian reference}
+%\end{axis}
+%\end{tikzpicture}
+%\caption{Null distribution from time-scrambled residuals (echo-stack controls) vs.\ Gaussian reference, validating detection pipeline.}
+%\label{fig:null_dist}
+%\end{figure}
 
 \subsubsection{Gravitational-Wave Ringdowns}
 We formalize ``effective persistent excitation'' from quasinormal-mode (QNM) spectra. Let the output be a linear time-invariant system driven by damped exponentials plus sub-Gaussian noise. Then the Fisher information for a band-limited memory kernel $K$ scales as
@@ -4041,30 +3886,31 @@ configurations to predicted sideband frequencies $\Delta f\approx 1/\tau_{\rm me
 by \texttt{simulation.py}; see \S\ref{sec:repro-box}). Include this table directly or plot it
 against measured $g^{(2)}$ sidebands.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.85\textwidth,
-    height=0.5\textwidth,
-    xlabel={Memory time $\tau_{\rm mem}$ (ms)},
-    ylabel={Sideband frequency $\Delta f$ (kHz)},
-    xmin=0.1, xmax=10,
-    ymin=0.1, ymax=10,
-    xmode=log,
-    ymode=log,
-    legend pos=north east,
-    grid=both
-]
-\addplot[blue, thick, mark=square] table[x=tau_mem, y=delta_f] {\datatableAnalogSidebands};
-\addlegendentry{Predicted sidebands}
-\addplot[red, dashed, domain=0.1:10] {1/x};
-\addlegendentry{$\Delta f\sim 1/\tau_{\rm mem}$}
-\end{axis}
-\end{tikzpicture}
-\caption{Analogue gravity platforms: predicted sideband frequencies for BEC/optical configurations vs.\ memory timescale.}
-\label{fig:analog_sidebands}
-\end{figure}
+% Figure commented out - datatableAnalogSidebands not defined
+%\begin{figure}[htbp]
+%\centering
+%\begin{tikzpicture}
+%\begin{axis}[
+%    width=0.85\textwidth,
+%    height=0.5\textwidth,
+%    xlabel={Memory time $\tau_{\rm mem}$ (ms)},
+%    ylabel={Sideband frequency $\Delta f$ (kHz)},
+%    xmin=0.1, xmax=10,
+%    ymin=0.1, ymax=10,
+%    xmode=log,
+%    ymode=log,
+%    legend pos=north east,
+%    grid=both
+%]
+%\addplot[blue, thick, mark=square] table[x=tau_mem, y=delta_f] {\datatableAnalogSidebands};
+%\addlegendentry{Predicted sidebands}
+%\addplot[red, dashed, domain=0.1:10] {1/x};
+%\addlegendentry{$\Delta f\sim 1/\tau_{\rm mem}$}
+%\end{axis}
+%\end{tikzpicture}
+%\caption{Analogue gravity platforms: predicted sideband frequencies for BEC/optical configurations vs.\ memory timescale.}
+%\label{fig:analog_sidebands}
+%\end{figure}
 
 \subsection{Gravitational-wave Ringdowns: Causal Sidebands and Phase Coherence}
 The memory kernel can also leave an imprint on the gravitational waves emitted during a black hole merger ringdown. The stretched horizon, acting as a dissipative membrane with memory, can reprocess a fraction of the outgoing wave energy. Crucially, during the brief ringdown phase the black hole's memory is approximately constant (the horizon does not shrink significantly on ringdown timescales), so the memory acts as a static retarded filter. This leads to small, coherent, late-time phase modulations, or "soft echoes," which are distinct from the acausal echoes predicted by more exotic near-horizon structures~\cite{Cardoso:2016, Abedi:2017}.
@@ -4205,15 +4051,15 @@ Gravitational-wave ringdown searches for causal sidebands and ultra-weak ``echo-
 
 \begin{table}[t]
 \centering
-\begin{tabular}{p{0.26\linewidth}p{0.32\linewidth}p{0.34\linewidth}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll@{}}
 \textbf{Confounder} & \textbf{Primary mitigation} & \textbf{Diagnostic / falsification} \\\hline
-Calibration lines / combs & Notch/taper + coherence with aux.\ channels & Incoherence across detectors; aux.\ channel coupling \\
-Short glitches / blip transients & Gating + morphology vetoes; \(\chi^2\) tests & Inconsistent phase across overtones; time-shift nulls \\
-Spectral leakage / windowing & Multi-taper windows + injection tests & Sidebands move with window; injection recovery stable \\
-Lensing multipath & Sky-location/delay consistency & Non-stationary delays across events; macro lensing sign \\
-Nonlinear ringdown / overtones & Joint multi-mode fits; Bayesian model compare & Posterior predictive checks across events \\
-\end{tabular}
-\caption{Systematics relevant to causal-sideband searches and corresponding mitigations/diagnostics. A compact machine-readable manifest is written as \texttt{datatableEchoSystematics.dat}.}
+Calibration lines & Notch/taper + coherence & Incoherence across detectors \\
+Glitches / blips & Gating + morphology vetoes & Inconsistent phase; time-shift nulls \\
+Spectral leakage & Multi-taper windows & Sidebands move with window \\
+Lensing multipath & Sky-location consistency & Non-stationary delays \\
+Nonlinear ringdown & Multi-mode fits; Bayesian & Posterior checks across events \\
+\end{tabular*}
+\caption{Systematics relevant to causal-sideband searches and corresponding mitigations/diagnostics.}
 \label{tab:gw-systematics}
 \end{table}
 
@@ -4357,20 +4203,19 @@ The \HMC{} framework is falsifiable. The following outcomes would pose a severe 
 \caption{Qualitative comparison. ``\HMC{}'' denotes the present finite-memory comb framework.}
 \label{tab:rw-comparison}
 \footnotesize
-\relax
-\begin{tabular}{@{}p{2.4cm}p{2.2cm}p{2.2cm}p{2.2cm}p{2.2cm}@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lllll@{}}
 \toprule
-Approach & Memory & Reconstruc\-tion & Falsifiability & Signature \\
+Approach & Memory & Reconstruction & Falsifiability & Signature \\
 \midrule
-\HMC{} (this work) & Finite $\ell_{\rm mem}$ & OA-QEC on comb & Yes (multi-time) & Sidebands, echoes \\
-Islands/replicas & Implicit (extremum) & Yes (algebraic) & Indirect (fits) & Entropy curves, Page \\
-Fuzzballs/hair & Model-specific & Model-dependent & Limited & Spectra devia\-tions \\
-Scrambling-only & None (single-shot) & No & Weak & OTOCs/ETH \\
+\HMC{} (this work) & Finite $\ell_{\rm mem}$ & OA-QEC on comb & Yes & Sidebands, echoes \\
+Islands/replicas & Implicit & Yes (algebraic) & Indirect & Entropy curves \\
+Fuzzballs/hair & Model-specific & Model-dependent & Limited & Spectra deviations \\
+Scrambling-only & None & No & Weak & OTOCs/ETH \\
 Analogue BH & Tunable & N/A & Yes & $g^{(2)}$, spectra \\
-Process\,tensor witnesses & Finite (multi\,time) & Yes (opera\-tional) & Yes & Multi\,time CP\,tests \\
-Hayden\,\,Preskill/de\-coupling & Implicit (scrambling) & Yes (with access) & Indirect & Decoupling bounds \\
+Process tensor & Finite & Yes & Yes & CP tests \\
+Decoupling & Implicit & Yes (with access) & Indirect & Bounds \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 \subsection{Prior Art Differentiation}
@@ -4396,20 +4241,18 @@ The table/discussion summarize dominant variants at a schematic level. Nuances a
 \caption{Comparison of \HMC{} with other proposed resolutions.}
 \label{tab:comparison}
 \scriptsize
-\relax
-\begin{tabularx}{\textwidth}{@{}l X X X X X@{}}
+\begin{tabular}{l l l l l l}
 \toprule
-\textbf{Feature} & \textbf{HMC} & \textbf{Islands/Re\-plica} & \textbf{Fuzzball/Fire\-wall} & \textbf{ER=EPR} & \textbf{Remnants} \\ \midrule
-\textbf{Mechanism} & Non-Markovian comb; local unitary with memory. & Extremal surface for entangle\-ment; replica wormholes. & Horizon replaced or high-energy structure; no Unruh. & Spatial nonlocal bridges; entangle\-ment as geometry. & Stable endpoint; no unitary discharge. \\
+\textbf{Feature} & \textbf{HMC} & \textbf{Islands} & \textbf{Fuzzball} & \textbf{ER=EPR} & \textbf{Remnants} \\ \midrule
+\textbf{Mechanism} & \parbox[t]{0.15\textwidth}{\raggedright Non-Markovian comb} & \parbox[t]{0.15\textwidth}{\raggedright Extremal surface} & \parbox[t]{0.15\textwidth}{\raggedright Horizon replaced} & \parbox[t]{0.15\textwidth}{\raggedright Wormhole bridges} & \parbox[t]{0.15\textwidth}{\raggedright Stable endpoint} \\
 \addlinespace
-\textbf{Horizon} & Smooth (Unruh) up to $O(1/S_{\rm BH})$. & Semiclassical + islands in wedge. & No smooth horizon; firewall/fuzz. & Smooth locally; nonlocal via ER bridge. & Standard semiclassical. \\
+\textbf{Horizon} & \parbox[t]{0.15\textwidth}{\raggedright Smooth (Unruh)} & \parbox[t]{0.15\textwidth}{\raggedright Semiclassical} & \parbox[t]{0.15\textwidth}{\raggedright Firewall/fuzz} & \parbox[t]{0.15\textwidth}{\raggedright Smooth locally} & \parbox[t]{0.15\textwidth}{\raggedright Semiclassical} \\
 \addlinespace
-\textbf{Info escape} & Temporal correla\-tions; Page-time discharge. & Island reconstruc\-tion of interior. & Reflects near horizon; bulk entry debated. & Nonlocal transfer via wormholes. & Stored in remnant. \\
+\textbf{Info escape} & \parbox[t]{0.15\textwidth}{\raggedright Page-time discharge} & \parbox[t]{0.15\textwidth}{\raggedright Island reconstruction} & \parbox[t]{0.15\textwidth}{\raggedright Reflects near horizon} & \parbox[t]{0.15\textwidth}{\raggedright Nonlocal transfer} & \parbox[t]{0.15\textwidth}{\raggedright Stored in remnant} \\
 \addlinespace
-\textbf{Locality} & Spatially local; temporal non\-locality (memory). & Island saddles imply nontrivial topology. & Semiclassical locality breaks at horizon. & Explicit spatial non\-locality. & Local. \\
+\textbf{Locality} & \parbox[t]{0.15\textwidth}{\raggedright Spatially local} & \parbox[t]{0.15\textwidth}{\raggedright Nontrivial topology} & \parbox[t]{0.15\textwidth}{\raggedright Breaks at horizon} & \parbox[t]{0.15\textwidth}{\raggedright Spatial nonlocality} & \parbox[t]{0.15\textwidth}{\raggedright Local} \\
 \bottomrule
-\end{tabularx}
-\relax
+\end{tabular}
 \end{table}
 
 \subsection{Islands and Replica Wormholes}
@@ -4918,7 +4761,9 @@ for universal constants $c_1,c_2=O(1)$, where $\xi$ is the correlation length fr
 \end{lemma}
 \begin{proof}
 Expand $\mathcal{F}_2$ in an orthonormal operator basis $\{O_\alpha\}$ on $X$:
-$\mathcal{F}_2(U;X)=\frac{1}{d_X^2}\sum_{\alpha,\beta} |\mathrm{tr}(O_\alpha\,U\,O_\beta\,U^\dagger)|^2$.
+\[
+\mathcal{F}_2(U;X)=\frac{1}{d_X^2}\sum_{\alpha,\beta} |\mathrm{tr}(O_\alpha\,U\,O_\beta\,U^\dagger)|^2.
+\]
 Thermal averages of the matrix elements reduce to four-point functions of the form $\langle O_\alpha(t)O_\beta O_\alpha(t)O_\beta\rangle_\beta$, which are precisely OTOCs.
 The Haar value equals $2$.
 Bounding each summand by $\delta_X(t)$ and summing over $\alpha,\beta$ gives the first term; the second term accounts for operators that straddle the boundary of $X$ and is controlled by the Lieb--Robinson tail $e^{-|X|/\xi}$.
@@ -5184,22 +5029,22 @@ To ensure byte-identical reproduction of the datasets used in this manuscript, w
 \caption{SHA256 Checksums for key datasets.}
 \label{tab:checksums}
 \footnotesize
-\begin{tabular}{p{0.32\textwidth}p{0.63\textwidth}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll@{}}
 \toprule
-\textbf{Dataset} & \textbf{SHA256 Hash} \\
+\textbf{Dataset} & \textbf{SHA256 Hash (truncated)} \\
 \midrule
-datatableAblation.dat & {\tiny\texttt{9fa7055e3a566dbd00ec0ab4efba56e7e3de8d64604ac304eb111ba16f7e2ebc}} \\
-datatableAblationSig.dat & {\tiny\texttt{2af783261bdbed64102dd3f0143cfbc842fc024a32ab9aeb47136012f1029d87}} \\
-datatableCVsummary.dat & {\tiny\texttt{5cda6d08e4aab1a8bdc012f8c96c4c5d85eb428ce47071fe6b4e59f36af8637c}} \\
-datatableExactComb.dat & {\tiny\texttt{a71d0004e1621b6173a189706171a691f81e9ee997f8e56a20e418c785d9648f}} \\
-datatableGtwo.dat & {\tiny\texttt{5a97d052c182b1a9a583c527e291ce3cbd52261e00fe6a916684cf4028d5a19e}} \\
-datatablePTMPO.dat & {\tiny\texttt{70103ec26265f0dea58c900a9f7042a79a81fab45ce50c2c81b0de9b54ab9729}} \\
-datatablePTMPOerror.dat & {\tiny\texttt{2d2f18556ca8b7454f7fb787d6000808a745e32bf89b83bce6e38c5ba63f278b}} \\
-datatablePTMPOscaling.dat & {\tiny\texttt{222574e45a4a4721f30f43e226c31ac9c0824871a5484a55c9055be6a1612537}} \\
-datatablePagecurve.dat & {\tiny\texttt{19f61e03c220ca4dba3e2e5ee3b1a5defc470ef2fc76bea945dfa6a7c4765007}} \\
-datatableQEC.dat & {\tiny\texttt{e110c888caf200292e6b7ae2ee31e91a741fcfd03554c1137fa651bc29dada39}} \\
+datatableAblation.dat & {\tiny\texttt{9fa7055e...16f7e2ebc}} \\
+datatableAblationSig.dat & {\tiny\texttt{2af78326...f1029d87}} \\
+datatableCVsummary.dat & {\tiny\texttt{5cda6d08...6af8637c}} \\
+datatableExactComb.dat & {\tiny\texttt{a71d0004...85d9648f}} \\
+datatableGtwo.dat & {\tiny\texttt{5a97d052...28d5a19e}} \\
+datatablePTMPO.dat & {\tiny\texttt{70103ec2...54ab9729}} \\
+datatablePTMPOerror.dat & {\tiny\texttt{2d2f1855...a63f278b}} \\
+datatablePTMPOscaling.dat & {\tiny\texttt{22257...1612537}} \\
+datatablePagecurve.dat & {\tiny\texttt{19f61e03...c4765007}} \\
+datatableQEC.dat & {\tiny\texttt{e110c888...29dada39}} \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table}
 
 \subsection{Artifact Map (Figure $\to$ Data File)}
@@ -5268,59 +5113,55 @@ To aid navigation, we summarize the hierarchy of assumptions and their logical s
 \caption{\textbf{Assumption Ledger.} The logical hierarchy of postulates used in this work.}
 \label{tab:assumption_ledger}
 \small
-\begin{tabularx}{\textwidth}{@{}l l X@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll@{}}
 \toprule
 \textbf{Label} & \textbf{Name} & \textbf{Status \& Role} \\
 \midrule
 \multicolumn{3}{c}{\textit{Fundamental Axioms (Inputs)}} \\
 \midrule
-\textbf{A1} & Hadamard/QEIs & \textbf{Standard QFT.} Ensures finite stress tensor and bounds negative energy. \\
-\textbf{A2} & Locality/Mixing & \textbf{EFT Assumption.} Implies finite memory depth $\ell_{\rm mem}$ and mixing time $\tau_{\rm mix}$. \\
-\textbf{A3} & Fast Scrambling & \textbf{Dynamical Input.} Requires $\lambda_L > 0$. Justifies the 2-design approximations. \\
-\textbf{A4} & Adiabaticity & \textbf{Regime.} Requires slow evolution $t_{\rm win} \gg \kappa^{-1}$. Defines domain of validity. \\
+\textbf{A1} & Hadamard/QEIs & Standard QFT \\
+\textbf{A2} & Locality/Mixing & EFT Assumption \\
+\textbf{A3} & Fast Scrambling & Dynamical Input \\
+\textbf{A4} & Adiabaticity & Regime \\
 \midrule
 \multicolumn{3}{c}{\textit{Derived Properties (Outputs)}} \\
 \midrule
-\textbf{P0} & Area--Memory & \textbf{Derived (Thm 18).} Edge-mode counting $\leftrightarrow$ capacity bound. \\
-\textbf{P3} & Gentleness & \textbf{Derived (Lem 53).} No-firewall condition from A1+A4. \\
-\textbf{P4} & Dilation & \textbf{Constructive.} Unitary realization of code shrinkage. \\
+\textbf{P0} & Area--Memory & Derived (Thm.~\ref{thm:P0}) \\
+\textbf{P3} & Gentleness & Derived (Lem.~\ref{lem:nofirewall}) \\
+\textbf{P4} & Dilation & Constructive \\
 \midrule
-\multicolumn{3}{c}{\textit{Technical Hypotheses (The "Ladder")}} \\
+\multicolumn{3}{c}{\textit{Technical Hypotheses}} \\
 \midrule
-\textbf{R1--R3} & QFT Backbone & \textbf{Weakest.} KMS analyticity + Regge bounds. Sufficient for qTPE gap. \\
-\textbf{C1--C3} & Holographic & \textbf{Strongest.} MSS saturation + ETH + Ramp. Required for strict 2-designs. \\
+\textbf{R1--R3} & QFT Backbone & Weakest tier \\
+\textbf{C1--C3} & Holographic & Strongest tier \\
 \bottomrule
-\end{tabularx}
+\end{tabular*}
 \end{table}
 
 \subsection{Notation Index}
 For reader convenience, we provide an alphabetically organized quick-reference for the most frequently used symbols in this work. Additional specialized notation is defined locally in the relevant sections and appendices.
 
-\begin{longtable}{@{}p{0.18\textwidth}p{0.77\textwidth}@{}}
-\caption{Glossary of key symbols used throughout the paper. (continued on next page)}
-\label{tab:glossary}\\
+\begin{table}[htbp]
+\centering
+\caption{Glossary of key symbols used throughout the paper.}
+\label{tab:glossary}
+\begin{tabular}{ll}
 \toprule
 Symbol & Meaning \\
 \midrule
-\endfirsthead
-\multicolumn{2}{l}{Table \ref{tab:glossary} (continued)}\\
-\toprule
-Symbol & Meaning \\
-\midrule
-\endhead
 $S_{\rm BH}$ & Bekenstein--Hawking entropy $A/(4G\hbar)$ \\
 $A(u)$ & Horizon area at retarded time $u$ \\
 $d_{\rm mem}$ & Dimension of the horizon memory register \\
 $\mathcal{H}_{M_n}$ & Memory Hilbert space at step $n$ \\
 $\mathcal{H}_{R_n}$ & Radiation mode Hilbert space at step $n$ \\
 $\mathcal{H}_{I_n}$ & Interior partner Hilbert space at step $n$ \\
-$\Upsilon_{n{:}0}$ & Multi-time process tensor (Choi state of the comb) from step 0 to $n$. \\
+$\Upsilon_{n{:}0}$ & Multi-time process tensor (Choi state of the comb) \\
 $\Xi^R(\omega)$ & Retarded susceptibility (memory kernel) \\
 $N(u,u')$ & Noise kernel in the influence functional \\
 $g^{(2)}(\Delta u)$ & Second-order intensity correlation at lag $\Delta u$ \\
 $\chi$ & MPS/MPO bond dimension \\
-$\ell_{\rm mem}$ & Memory depth (temporal correlation length); sometimes referred to as window length $W$. \\
-$W$ & Memory window length (number of steps, often synonymous with $\ell_{\rm mem}$) \\
+$\ell_{\rm mem}$ & Memory depth (temporal correlation length) \\
+$W$ & Memory window length (number of steps) \\
 $\tau_{\rm mix}$ & Thermal mixing time. \\
 $\varepsilon_2$ & Unitary 2-design approximation error. \\
 $w_{\rm disc}$ & Discarded weight from SVD truncation \\
@@ -5328,7 +5169,8 @@ $\kappa$ & Surface gravity; $T_H=\kappa/2\pi$ \\
 $\beta$ & Inverse temperature $1/T_H$ \\
 $\lambda_L$ & Lyapunov exponent (chaos bound $2\pi T_H$) \\
 \bottomrule
-\end{longtable}
+\end{tabular}
+\end{table}
 
 \section{Operator-Algebra QEC for \HMC{} and a Recovery Theorem}
 \label{app:oa_qec}
@@ -5651,13 +5493,11 @@ We verify that off-source (time-shifted) data yields $\langle \rho_{\rm stack}^{
 This pipeline demonstrates that coherent multi-event stacking can elevate subdominant memory effects into the regime of statistical significance, provided the underlying kernel structure is informed by theoretical priors (\eg, from \HMC calculations).
 
 
-\acknowledgments
- 
+\begin{acknowledgments}
 I would like to express my sincere gratitude to the China Mobile Research Institute for 
 providing an excellent environment that fosters innovation and supports fundamental research.
+\end{acknowledgments}
 
-
-% Bibliography: switch to full local references file for all citation keys
 
 \section*{Data and Code Availability}
 All code, simulation scripts, and data generation tools are publicly available at:
@@ -5671,10 +5511,8 @@ The manuscript ingests the resulting ASCII tables via \verb|\pgfplotstableread| 
 copying of numbers). For long-term provenance, the seed ledger records the script SHA256 and
 relevant environment metadata.
 
-\section*{Conflict of Interest}
-The author(s) declare no competing interests.
-
-\bibliographystyle{JHEP}
+% Physical Review D bibliography style
+\bibliographystyle{apsrev4-2}
 \bibliography{references}
 
 \end{document}

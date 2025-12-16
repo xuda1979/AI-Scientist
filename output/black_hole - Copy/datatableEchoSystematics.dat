@@ -1,0 +1,6 @@
+Confounder Mitigation Diagnostic
+{Calibration lines / combs} {Notch/taper + coherence with aux. channels} {Incoherence across detectors}
+{Short glitches / transients} {Gating + morphology vetoes; chi-sq tests} {Inconsistent phase; time-shift nulls}
+{Spectral leakage} {Multi-taper windows + injection tests} {Sidebands move with window size}
+{Lensing multipath} {Sky-location/delay consistency} {Non-stationary delays across events}
+{Nonlinear overtones} {Joint multi-mode fits; Bayesian model compare} {Posterior predictive checks}

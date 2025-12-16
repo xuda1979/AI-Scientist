@@ -1,0 +1,40 @@
+{
+  "issues": [
+    "No evidence of multiple experimental runs with different seeds",
+    "Missing effect size reporting - statistical significance without practical significance",
+    "Missing multiple testing correction when comparing multiple methods/conditions",
+    "Simulation lacks statistical testing implementation",
+    "Missing computational complexity analysis",
+    "Missing reproducibility information and implementation details",
+    "Insufficient references: 3 < 15",
+    "WARNING: Related work GNN-CNN: An Efficient Hybrid Model of Convolutional and Graph Neural Networks for Text Representation (2025) shares key themes (similarity 0.45). Highlight differentiation.",
+    "WARNING: Related work Using Temporal Convolutional Networks (TCN) Deep Learning Model for Crop Recommendation (2024) shares key themes (similarity 0.43). Highlight differentiation.",
+    "WARNING: Related work HybridBranchNet: A novel structure for branch hybrid convolutional neural networks architecture (2023) shares key themes (similarity 0.37). Highlight differentiation.",
+    "INFO: Novelty diagnostics summary \u2014 max similarity 0.45, avg similarity 0.31, recent overlap penalty 0.00",
+    "WARNING: Only 2 figures found - General Research documents typically include 3+ visuals",
+    "FAIR: MINOR: Only 5 visual elements - consider adding more to strengthen evidence",
+    "FAIR: MINOR: No pseudocode provided - reduces clarity",
+    "FAIR: MINOR: Limited dataset diversity",
+    "FAIR: MINOR: Paper could be longer (2653 words)",
+    "FAIR: MINOR: Could use more references (8)",
+    "FAIR: WARNING: Related work GNN-CNN: An Efficient Hybrid Model of Convolutional and Graph Neural Networks for Text Representation (2025) shares key themes (similarity 0.45). Highlight differentiation.",
+    "FAIR: WARNING: Related work Using Temporal Convolutional Networks (TCN) Deep Learning Model for Crop Recommendation (2024) shares key themes (similarity 0.43). Highlight differentiation.",
+    "FAIR: WARNING: Related work HybridBranchNet: A novel structure for branch hybrid convolutional neural networks architecture (2023) shares key themes (similarity 0.37). Highlight differentiation.",
+    "FAIR: INFO: Novelty diagnostics summary \u2014 max similarity 0.45, avg similarity 0.31, recent overlap penalty 0.00",
+    "FAIR: INFO: Novelty diagnostics \u2014 max similarity 0.45, avg similarity 0.31, recent overlap penalty 0.00"
+  ],
+  "scores": {
+    "statistical_rigor": 0.5000000000000001,
+    "experimental_design": 0.9,
+    "methodology_clarity": 0.85,
+    "literature_review": 0.8,
+    "innovation_focus": 1.0,
+    "results_presentation": 1.0,
+    "formatting": 1.0,
+    "novelty": 0.698,
+    "review_readiness": 0.9,
+    "fair_final": 0.61592,
+    "fair_penalty_adjusted": 0.6199,
+    "overall": 0.8076199999999999
+  }
+}
