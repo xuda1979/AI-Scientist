@@ -398,3 +398,53 @@ def _universal_chat(messages: List[Dict[str, str]], model: str, request_timeout:
         # All models failed
         print("All models failed, returning offline response")
         return _offline_response(prompt_type)
+
+
+def chat(
+    messages: List[Dict[str, Any]],
+    model: str = "gpt-4o",
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    request_timeout: Optional[int] = None,
+    prompt_type: str = "general",
+    fallback_models: Optional[List[str]] = None,
+    pdf_path: Optional[Path] = None,
+) -> Tuple[str, Optional[int]]:
+    """
+    Public chat interface for the AI Scientist GUI.
+    
+    Args:
+        messages: List of message dicts with 'role' and 'content' keys.
+        model: Model name (e.g., 'gpt-4o', 'claude-sonnet-4', 'gemini-2.0-flash-exp').
+        temperature: Sampling temperature (0.0 to 1.0).
+        max_tokens: Maximum tokens in response (optional).
+        request_timeout: Timeout in seconds (optional).
+        prompt_type: Type of prompt for logging/fallback purposes.
+        fallback_models: List of fallback models to try if primary fails.
+        pdf_path: Optional path to PDF file for vision models.
+    
+    Returns:
+        Tuple of (response_text, total_tokens_used)
+    """
+    request_timeout = request_timeout or 300  # Default 5 minute timeout for chat
+    fallback_models = fallback_models or ["gpt-4o", "gpt-4"]
+    
+    try:
+        response = _universal_chat(
+            messages=messages,
+            model=model,
+            request_timeout=request_timeout,
+            prompt_type=prompt_type,
+            fallback_models=fallback_models,
+            pdf_path=pdf_path,
+        )
+        
+        # Estimate token usage (rough approximation)
+        input_chars = sum(len(str(m.get('content', ''))) for m in messages)
+        output_chars = len(response)
+        estimated_tokens = (input_chars + output_chars) // 4  # Rough approximation
+        
+        return response, estimated_tokens
+        
+    except Exception as e:
+        raise RuntimeError(f"Chat failed: {str(e)}") from e
