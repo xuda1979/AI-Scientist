@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Scientist - Research IDE</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Title Bar -->
+        <div class="title-bar">
+            <div class="title-left">
+                <span class="app-icon">🧪</span>
+                <span class="app-title">AI Scientist IDE</span>
+            </div>
+            <div class="title-center">
+                <span id="workspace-name">No folder opened</span>
+            </div>
+            <div class="title-right">
+                <button id="minimize-btn" class="title-btn">─</button>
+                <button id="maximize-btn" class="title-btn">□</button>
+                <button id="close-btn" class="title-btn close">×</button>
+            </div>
+        </div>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Activity Bar (Left icons) -->
+            <div class="activity-bar">
+                <div class="activity-icon active" data-panel="explorer" title="Explorer">📁</div>
+                <div class="activity-icon" data-panel="search" title="Search">🔍</div>
+                <div class="activity-icon" data-panel="agent" title="AI Agent">🤖</div>
+                <div class="activity-icon" data-panel="workflow" title="Research Workflow">🔬</div>
+                <div class="activity-icon" data-panel="settings" title="Settings">⚙️</div>
+            </div>
+
+            <!-- Side Panel -->
+            <div class="side-panel" id="side-panel">
+                <!-- Explorer Panel -->
+                <div class="panel-content" id="explorer-panel">
+                    <div class="panel-header">
+                        <span>EXPLORER</span>
+                        <div class="panel-actions">
+                            <button id="open-folder-btn" class="icon-btn" title="Open Folder">📂</button>
+                            <button id="new-file-btn" class="icon-btn" title="New File">📄</button>
+                            <button id="refresh-btn" class="icon-btn" title="Refresh">🔄</button>
+                        </div>
+                    </div>
+                    <div class="file-tree" id="file-tree">
+                        <div class="empty-state">
+                            <p>No folder opened</p>
+                            <button id="open-folder-btn-main" class="btn btn-primary">Open Folder</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search Panel -->
+                <div class="panel-content hidden" id="search-panel">
+                    <div class="panel-header">
+                        <span>SEARCH</span>
+                    </div>
+                    <div class="search-container">
+                        <input type="text" id="search-input" class="search-input" placeholder="Search in files...">
+                        <input type="text" id="replace-input" class="search-input" placeholder="Replace with...">
+                        <div class="search-options">
+                            <label><input type="checkbox" id="case-sensitive"> Aa</label>
+                            <label><input type="checkbox" id="whole-word"> Ab</label>
+                            <label><input type="checkbox" id="regex"> .*</label>
+                        </div>
+                        <button id="search-btn" class="btn btn-primary btn-small">Search</button>
+                    </div>
+                    <div class="search-results" id="search-results"></div>
+                </div>
+
+                <!-- AI Agent Panel -->
+                <div class="panel-content hidden" id="agent-panel">
+                    <div class="panel-header">
+                        <span>AI AGENT (Copilot)</span>
+                    </div>
+                    <div class="agent-container">
+                        <div class="agent-chat" id="agent-chat">
+                            <div class="agent-welcome">
+                                <h3>🤖 AI Copilot</h3>
+                                <p>I can help you with:</p>
+                                <ul>
+                                    <li>Modifying multiple files</li>
+                                    <li>Code generation</li>
+                                    <li>Refactoring</li>
+                                    <li>Bug fixing</li>
+                                    <li>Documentation</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="agent-input-container">
+                            <textarea id="agent-input" class="agent-input" placeholder="Ask the AI agent to help you... (Ctrl+Enter to send)" rows="3"></textarea>
+                            <div class="agent-actions">
+                                <select id="agent-model" class="select-small">
+                                    <option value="gpt-4o">GPT-4o</option>
+                                    <option value="gpt-5-pro">GPT-5 Pro</option>
+                                    <option value="claude-4-opus">Claude 4 Opus</option>
+                                    <option value="claude-4-sonnet">Claude 4 Sonnet</option>
+                                </select>
+                                <button id="agent-send-btn" class="btn btn-primary btn-small">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workflow Panel -->
+                <div class="panel-content hidden" id="workflow-panel">
+                    <div class="panel-header">
+                        <span>RESEARCH WORKFLOW</span>
+                    </div>
+                    <div class="workflow-container">
+                        <!-- Iteration Counter -->
+                        <div class="config-section highlight-section">
+                            <label for="iterations" class="label-main">
+                                <span class="icon">🔄</span>
+                                Iterations
+                            </label>
+                            <input type="number" id="iterations" min="1" max="100" value="15" class="input-large"/>
+                        </div>
+
+                        <!-- Model Selection -->
+                        <div class="config-section">
+                            <label for="model"><span class="icon">🤖</span> Model</label>
+                            <select id="model" class="select-input">
+                                <option value="gpt-5-pro">GPT-5 Pro</option>
+                                <option value="gpt-5">GPT-5</option>
+                                <option value="gpt-4o" selected>GPT-4o</option>
+                                <option value="claude-4-opus">Claude 4 Opus</option>
+                                <option value="claude-4-sonnet">Claude 4 Sonnet</option>
+                            </select>
+                        </div>
+
+                        <!-- Research Topic -->
+                        <div class="config-section">
+                            <label for="topic"><span class="icon">📚</span> Topic</label>
+                            <textarea id="topic" rows="3" class="textarea-input" placeholder="Research topic..."></textarea>
+                        </div>
+
+                        <!-- Output Directory -->
+                        <div class="config-section">
+                            <label for="output"><span class="icon">📁</span> Output</label>
+                            <input type="text" id="output" class="text-input" value="./output"/>
+                        </div>
+
+                        <!-- Workflow Actions -->
+                        <div class="button-group">
+                            <button id="run-btn" class="btn btn-primary">▶️ Run</button>
+                            <button id="stop-btn" class="btn btn-secondary" disabled>⏹️ Stop</button>
+                        </div>
+
+                        <!-- Progress -->
+                        <div class="workflow-status">
+                            <div class="status-row">
+                                <span>Status: <strong id="status">Ready</strong></span>
+                                <span>Iteration: <strong id="current-iteration">0</strong>/<strong id="total-iterations">0</strong></span>
+                            </div>
+                            <div class="progress-container">
+                                <div id="progress-bar" class="progress-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Panel -->
+                <div class="panel-content hidden" id="settings-panel">
+                    <div class="panel-header">
+                        <span>SETTINGS</span>
+                    </div>
+                    <div class="settings-container">
+                        <div class="settings-group">
+                            <h4>API Configuration</h4>
+                            <div class="setting-item">
+                                <label>OpenAI API Key</label>
+                                <input type="password" id="openai-key" class="text-input" placeholder="sk-...">
+                            </div>
+                            <div class="setting-item">
+                                <label>Yunwu API Key</label>
+                                <input type="password" id="yunwu-key" class="text-input" placeholder="API key for Claude models">
+                            </div>
+                        </div>
+                        <div class="settings-group">
+                            <h4>Editor Settings</h4>
+                            <div class="setting-item">
+                                <label>Font Size</label>
+                                <input type="number" id="font-size" class="text-input" value="14" min="10" max="24">
+                            </div>
+                            <div class="setting-item">
+                                <label>Theme</label>
+                                <select id="theme" class="select-input">
+                                    <option value="dark">Dark</option>
+                                    <option value="light">Light</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Editor Area -->
+            <div class="editor-area">
+                <!-- Tabs -->
+                <div class="editor-tabs" id="editor-tabs">
+                    <div class="tab-placeholder">Open a file to start editing</div>
+                </div>
+
+                <!-- Editor Container -->
+                <div class="editor-container" id="editor-container">
+                    <div class="editor-welcome" id="editor-welcome">
+                        <h2>🧪 AI Scientist IDE</h2>
+                        <p>Open a folder to get started</p>
+                        <div class="quick-actions">
+                            <button id="quick-open-folder" class="btn btn-primary">📂 Open Folder</button>
+                            <button id="quick-start-workflow" class="btn btn-secondary">🔬 Start Research</button>
+                        </div>
+                        <div class="shortcuts">
+                            <h4>Keyboard Shortcuts</h4>
+                            <p><kbd>Ctrl+O</kbd> Open Folder</p>
+                            <p><kbd>Ctrl+S</kbd> Save File</p>
+                            <p><kbd>Ctrl+Shift+F</kbd> Search in Files</p>
+                            <p><kbd>Ctrl+Shift+A</kbd> AI Agent</p>
+                        </div>
+                    </div>
+                    <textarea id="code-editor" class="code-editor hidden"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Panel (Terminal/Console) -->
+        <div class="bottom-panel" id="bottom-panel">
+            <div class="panel-tabs">
+                <div class="panel-tab active" data-tab="terminal">Terminal</div>
+                <div class="panel-tab" data-tab="output">Output</div>
+                <div class="panel-tab" data-tab="problems">Problems</div>
+            </div>
+            <div class="panel-content-area">
+                <div class="terminal-content" id="terminal-content">
+                    <div id="console" class="console"></div>
+                </div>
+                <div class="output-content hidden" id="output-content"></div>
+                <div class="problems-content hidden" id="problems-content"></div>
+            </div>
+            <div class="console-actions">
+                <button id="clear-console-btn" class="btn btn-small">Clear</button>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar-bottom">
+            <div class="status-left">
+                <span id="status-branch">🌿 main</span>
+                <span id="status-files">0 files</span>
+            </div>
+            <div class="status-right">
+                <span id="status-line">Ln 1, Col 1</span>
+                <span id="status-encoding">UTF-8</span>
+                <span id="status-language">Plain Text</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

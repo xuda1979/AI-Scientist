@@ -53,6 +53,66 @@ COLORS = {
     'warning': '#cca700',
 }
 
+# Available models by provider
+MODELS_BY_PROVIDER = {
+    "OpenAI (Direct)": [
+        "gpt-5.2",
+        "gpt-5.2-pro",
+        "gpt-5.1",
+        "gpt-5-pro",
+        "gpt-5",
+        "gpt-4o",
+        "gpt-4",
+    ],
+    "Yunwu (OpenAI)": [
+        "gpt-5.2",
+        "gpt-5.2-chat",
+        "gpt-5.2-chat-latest",
+        "gpt-5.2-pro",
+        "gpt-5.1",
+        "gpt-5.1-2025-11-13",
+        "gpt-image-1.5",
+        "gpt-image-1.5-all",
+        "gpt-4o",
+        "gpt-4",
+    ],
+    "Anthropic (Direct)": [
+        "claude-opus-4-20250514",
+        "claude-sonnet-4-20250514",
+        "claude-3-5-sonnet-20241022",
+    ],
+    "Yunwu (Anthropic)": [
+        "claude-opus-4-5-20251101",
+        "claude-opus-4-5-20251101-thinking",
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4",
+        "claude-3-5-sonnet",
+    ],
+    "Google (Direct)": [
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro",
+    ],
+    "Yunwu (Google)": [
+        "gemini-3-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-3-pro-image-preview",
+        "gemini-2.5-pro-preview-tts",
+        "gemini-2.5-flash-preview-tts",
+        "gemini-2.0-flash-exp",
+    ],
+    "Yunwu (DeepSeek)": [
+        "deepseek-v3.2",
+        "deepseek-r1",
+    ],
+    "Yunwu (豆包/Doubao)": [
+        "doubao-seed-1-8-251228",
+        "doubao-seed-1-8-251228-thinking",
+    ],
+    "Yunwu (智谱/ChatGLM)": [
+        "glm-4.7",
+    ],
+}
+
 # Research modes
 MODE_AUTO = "auto"
 MODE_INTERACTIVE = "interactive"
@@ -789,12 +849,30 @@ class WorkflowPanel(ttk.Frame):
                 bg=COLORS['bg_dark'], fg=COLORS['fg_secondary'],
                 font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 5))
         
-        chat_models = ["gpt-4o", "gpt-5-pro", "claude-sonnet-4", "gemini-2.0-flash-exp"]
+        # Flatten all models for chat selection
+        chat_models = [
+            # Yunwu OpenAI (cost-effective)
+            "gpt-5.2", "gpt-5.2-chat", "gpt-5.1", "gpt-4o",
+            # Yunwu Anthropic
+            "claude-opus-4-5-20251101", "claude-haiku-4-5-20251001",
+            # Yunwu Google  
+            "gemini-3-pro-preview", "gemini-3-flash-preview",
+            # Yunwu DeepSeek
+            "deepseek-v3.2",
+            # Direct OpenAI
+            "gpt-5.2", "gpt-5-pro", "gpt-5",
+            # Direct Anthropic
+            "claude-sonnet-4-20250514",
+            # Direct Google
+            "gemini-2.0-flash-exp",
+        ]
+        # Remove duplicates while preserving order
+        chat_models = list(dict.fromkeys(chat_models))
         self.vars['chat_model'] = tk.StringVar(value=chat_models[0])
         
         chat_model_combo = ttk.Combobox(
             chat_model_frame, textvariable=self.vars['chat_model'],
-            values=chat_models, state='readonly', width=20
+            values=chat_models, state='readonly', width=25
         )
         chat_model_combo.pack(side=tk.LEFT)
         
@@ -1100,24 +1178,27 @@ class WorkflowPanel(ttk.Frame):
         spinbox.pack(fill=tk.X, expand=True)
     
     def _add_model_selector(self, parent):
-        """Add model selection dropdown."""
+        """Add model selection dropdown with provider selection."""
         frame = tk.Frame(parent, bg=COLORS['bg_dark'])
         frame.pack(fill=tk.X, padx=20, pady=5)
         
-        tk.Label(frame, text="Model", bg=COLORS['bg_dark'], fg=COLORS['fg_secondary'],
+        # API Provider selector
+        tk.Label(frame, text="API Provider", bg=COLORS['bg_dark'], fg=COLORS['fg_secondary'],
                 font=('Segoe UI', 9)).pack(anchor=tk.W)
         
-        models = [
-            "gpt-5-pro",
-            "gpt-5",
-            "gpt-4o",
-            "gpt-4",
-            "claude-opus-4-20250514",
-            "claude-sonnet-4-20250514",
-            "claude-3-5-sonnet-20241022",
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-pro",
-        ]
+        providers = list(MODELS_BY_PROVIDER.keys())
+        
+        if 'api_provider' not in self.vars:
+            self.vars['api_provider'] = tk.StringVar(value=providers[0])
+        
+        provider_combo = ttk.Combobox(frame, textvariable=self.vars['api_provider'],
+                                      values=providers, state='readonly',
+                                      font=('Segoe UI', 10))
+        provider_combo.pack(fill=tk.X, pady=(3, 10))
+        
+        # Model selector
+        tk.Label(frame, text="Model", bg=COLORS['bg_dark'], fg=COLORS['fg_secondary'],
+                font=('Segoe UI', 9)).pack(anchor=tk.W)
         
         if 'model' in self.vars:
             var = self.vars['model']
@@ -1125,26 +1206,60 @@ class WorkflowPanel(ttk.Frame):
             var = tk.StringVar(value=DEFAULT_MODEL)
             self.vars['model'] = var
         
-        combo = ttk.Combobox(frame, textvariable=var, values=models,
-                            state='readonly', font=('Segoe UI', 10))
-        combo.pack(fill=tk.X, pady=(3, 0))
+        self.model_combo = ttk.Combobox(frame, textvariable=var,
+                                        values=MODELS_BY_PROVIDER[providers[0]],
+                                        state='readonly', font=('Segoe UI', 10))
+        self.model_combo.pack(fill=tk.X, pady=(3, 0))
+        
+        # Update model list when provider changes
+        def on_provider_change(*args):
+            provider = self.vars['api_provider'].get()
+            models = MODELS_BY_PROVIDER.get(provider, [])
+            self.model_combo['values'] = models
+            if models:
+                self.vars['model'].set(models[0])
+        
+        self.vars['api_provider'].trace_add('write', on_provider_change)
+        
+        # Hint about Yunwu
+        hint_frame = tk.Frame(frame, bg=COLORS['bg_dark'])
+        hint_frame.pack(fill=tk.X, pady=(8, 0))
+        
+        tk.Label(hint_frame, text="💡 Yunwu providers offer cheaper pricing",
+                bg=COLORS['bg_dark'], fg=COLORS['fg_secondary'],
+                font=('Segoe UI', 8, 'italic')).pack(anchor=tk.W)
     
     def _add_api_config(self, parent, name, key, env_var=""):
-        """Add API configuration section."""
+        """Add API configuration section with test button."""
         frame = tk.Frame(parent, bg=COLORS['bg_dark'])
         frame.pack(fill=tk.X, padx=20, pady=5)
         
         # Show if env var is set
         env_value = os.getenv(env_var, "")
+        
+        # Also try to load from config file
+        config_path = Path(__file__).parent.parent / "config" / "api_keys.json"
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    saved_keys = json.load(f)
+                    if key in saved_keys and saved_keys[key]:
+                        env_value = saved_keys[key]
+            except Exception:
+                pass
+        
         if env_value:
-            status_text = f"✓ Found in environment: {env_value[:10]}...{env_value[-4:]}"
+            status_text = f"✓ API Key configured: {env_value[:8]}...{env_value[-4:]}"
             status_color = COLORS['success']
         else:
-            status_text = "✗ Not set in environment"
+            status_text = "✗ API Key not configured"
             status_color = COLORS['error']
         
-        tk.Label(frame, text=status_text, bg=COLORS['bg_dark'],
-                fg=status_color, font=('Segoe UI', 8)).pack(anchor=tk.W)
+        self.api_status_labels = getattr(self, 'api_status_labels', {})
+        status_label = tk.Label(frame, text=status_text, bg=COLORS['bg_dark'],
+                               fg=status_color, font=('Segoe UI', 8))
+        status_label.pack(anchor=tk.W)
+        self.api_status_labels[key] = status_label
         
         tk.Label(frame, text=f"{name} API Key", bg=COLORS['bg_dark'],
                 fg=COLORS['fg_secondary'], font=('Segoe UI', 9)).pack(anchor=tk.W, pady=(5, 0))
@@ -1152,30 +1267,266 @@ class WorkflowPanel(ttk.Frame):
         var = tk.StringVar(value=env_value)
         self.vars[key] = var
         
-        entry = tk.Entry(frame, textvariable=var, show="*",
+        entry_frame = tk.Frame(frame, bg=COLORS['bg_dark'])
+        entry_frame.pack(fill=tk.X, pady=(3, 0))
+        
+        entry = tk.Entry(entry_frame, textvariable=var, show="*",
                         bg=COLORS['bg_light'], fg=COLORS['fg_primary'],
                         relief=tk.FLAT, insertbackground=COLORS['fg_primary'],
                         font=('Segoe UI', 10))
-        entry.pack(fill=tk.X, pady=(3, 0), ipady=5)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=5)
+        
+        # Button frame
+        btn_frame = tk.Frame(frame, bg=COLORS['bg_dark'])
+        btn_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # Test API button
+        test_btn = tk.Button(btn_frame, text="🧪 Test",
+                            command=lambda: self._test_api(name, key, env_var),
+                            bg=COLORS['accent_blue'], fg='white',
+                            relief=tk.FLAT, font=('Segoe UI', 8),
+                            cursor='hand2', padx=8, pady=2)
+        test_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Save button
+        save_btn = tk.Button(btn_frame, text="💾 Save",
+                            command=lambda: self._save_api_key(key),
+                            bg=COLORS['accent_green'], fg='white',
+                            relief=tk.FLAT, font=('Segoe UI', 8),
+                            cursor='hand2', padx=8, pady=2)
+        save_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Show/Hide button
+        show_var = tk.BooleanVar(value=False)
+        def toggle_show():
+            if show_var.get():
+                entry.config(show="")
+                show_btn.config(text="🔒 Hide")
+            else:
+                entry.config(show="*")
+                show_btn.config(text="👁 Show")
+            show_var.set(not show_var.get())
+        
+        show_btn = tk.Button(btn_frame, text="👁 Show",
+                            command=toggle_show,
+                            bg=COLORS['bg_light'], fg=COLORS['fg_primary'],
+                            relief=tk.FLAT, font=('Segoe UI', 8),
+                            cursor='hand2', padx=8, pady=2)
+        show_btn.pack(side=tk.LEFT)
+    
+    def _test_api(self, name, key, env_var):
+        """Test an API connection."""
+        api_key = self.vars.get(key, tk.StringVar()).get()
+        
+        if not api_key:
+            messagebox.showerror("Error", f"Please enter a {name} API key first")
+            return
+        
+        # Show testing message
+        status_label = self.api_status_labels.get(key)
+        if status_label:
+            status_label.config(text="⏳ Testing connection...", fg=COLORS['warning'])
+        self.update()
+        
+        def test_thread():
+            try:
+                if "yunwu" in key.lower():
+                    # Test Yunwu API
+                    base_url = self.vars.get('yunwu_base', tk.StringVar()).get() or "https://yunwu.ai/v1"
+                    from openai import OpenAI
+                    client = OpenAI(api_key=api_key, base_url=base_url)
+                    
+                    # Try a simple completion
+                    response = client.chat.completions.create(
+                        model="gpt-4o",  # Use a common model for testing
+                        messages=[{"role": "user", "content": "Say 'Hello' in one word."}],
+                        max_tokens=10
+                    )
+                    result = response.choices[0].message.content
+                    self.after(0, lambda: self._update_api_status(key, True, f"✓ Connected! Response: {result[:20]}"))
+                    
+                elif "openai" in key.lower():
+                    # Test OpenAI API
+                    from openai import OpenAI
+                    client = OpenAI(api_key=api_key)
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": "Say 'Hello' in one word."}],
+                        max_tokens=10
+                    )
+                    result = response.choices[0].message.content
+                    self.after(0, lambda: self._update_api_status(key, True, f"✓ Connected! Response: {result[:20]}"))
+                    
+                elif "google" in key.lower():
+                    # Test Google API
+                    import google.generativeai as genai
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel('gemini-pro')
+                    response = model.generate_content("Say 'Hello' in one word.")
+                    result = response.text
+                    self.after(0, lambda: self._update_api_status(key, True, f"✓ Connected! Response: {result[:20]}"))
+                else:
+                    self.after(0, lambda: self._update_api_status(key, False, "Unknown API type"))
+                    
+            except Exception as e:
+                error_msg = str(e)[:50]
+                self.after(0, lambda: self._update_api_status(key, False, f"✗ Failed: {error_msg}"))
+        
+        # Run test in background thread
+        threading.Thread(target=test_thread, daemon=True).start()
+    
+    def _update_api_status(self, key, success, message):
+        """Update the API status label."""
+        status_label = self.api_status_labels.get(key)
+        if status_label:
+            color = COLORS['success'] if success else COLORS['error']
+            status_label.config(text=message, fg=color)
+    
+    def _save_api_key(self, key):
+        """Save API key to config file."""
+        api_key = self.vars.get(key, tk.StringVar()).get()
+        if not api_key:
+            messagebox.showwarning("Warning", "Please enter an API key first")
+            return
+        
+        config_dir = Path(__file__).parent.parent / "config"
+        config_dir.mkdir(exist_ok=True)
+        config_path = config_dir / "api_keys.json"
+        
+        # Load existing config
+        existing = {}
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        
+        # Update and save
+        existing[key] = api_key
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(existing, f, indent=2)
+            
+            messagebox.showinfo("Success", f"API key saved to {config_path}")
+            
+            # Update status
+            status_label = self.api_status_labels.get(key)
+            if status_label:
+                status_label.config(text=f"✓ Saved: {api_key[:8]}...{api_key[-4:]}", fg=COLORS['success'])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save: {e}")
     
     def _create_model_list(self, parent):
-        """Create a list of available models."""
-        frame = tk.Frame(parent, bg=COLORS['bg_medium'])
-        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        """Create a scrollable list of available models grouped by provider with click-to-select."""
+        # Use a canvas for scrollable content
+        list_canvas = tk.Canvas(parent, bg=COLORS['bg_medium'], highlightthickness=0)
+        list_scrollbar = ttk.Scrollbar(parent, orient="vertical", command=list_canvas.yview)
+        list_frame = tk.Frame(list_canvas, bg=COLORS['bg_medium'])
         
-        models_info = [
-            ("OpenAI", ["gpt-5-pro", "gpt-5", "gpt-4o", "gpt-4"]),
-            ("Anthropic", ["claude-opus-4", "claude-sonnet-4", "claude-3-5-sonnet"]),
-            ("Google", ["gemini-2.0-flash-exp", "gemini-1.5-pro"]),
-        ]
+        list_frame.bind(
+            "<Configure>",
+            lambda e: list_canvas.configure(scrollregion=list_canvas.bbox("all"))
+        )
         
-        for provider, models in models_info:
-            tk.Label(frame, text=provider, bg=COLORS['bg_medium'],
-                    fg=COLORS['accent_yellow'], font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(10, 5))
+        list_canvas.create_window((0, 0), window=list_frame, anchor="nw")
+        list_canvas.configure(yscrollcommand=list_scrollbar.set)
+        
+        list_canvas.pack(side="left", fill="both", expand=True, padx=20, pady=10)
+        list_scrollbar.pack(side="right", fill="y")
+        
+        # Enable mouse wheel scrolling
+        def on_mousewheel(event):
+            list_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        list_canvas.bind_all("<MouseWheel>", on_mousewheel)
+        
+        # Helper to create clickable model label
+        def create_model_label(parent_frame, model_name, provider_key):
+            label = tk.Label(parent_frame, text=f"  • {model_name}", bg=COLORS['bg_medium'],
+                           fg=COLORS['fg_secondary'], font=('Segoe UI', 9), cursor='hand2')
+            label.pack(anchor=tk.W)
             
-            for model in models:
-                tk.Label(frame, text=f"  • {model}", bg=COLORS['bg_medium'],
-                        fg=COLORS['fg_secondary'], font=('Segoe UI', 9)).pack(anchor=tk.W)
+            def on_click(event):
+                # Update the model selection
+                if 'model' in self.vars:
+                    self.vars['model'].set(model_name)
+                if 'api_provider' in self.vars:
+                    self.vars['api_provider'].set(provider_key)
+                # Visual feedback
+                label.config(fg=COLORS['accent_green'])
+                self.after(500, lambda: label.config(fg=COLORS['fg_secondary']))
+            
+            def on_enter(event):
+                label.config(bg=COLORS['bg_hover'], fg=COLORS['fg_primary'])
+            
+            def on_leave(event):
+                label.config(bg=COLORS['bg_medium'], fg=COLORS['fg_secondary'])
+            
+            label.bind('<Button-1>', on_click)
+            label.bind('<Enter>', on_enter)
+            label.bind('<Leave>', on_leave)
+            return label
+        
+        # Instructions
+        tk.Label(list_frame, text="💡 Click a model to select it",
+                bg=COLORS['bg_medium'], fg=COLORS['accent_purple'],
+                font=('Segoe UI', 9, 'italic')).pack(anchor=tk.W, pady=(5, 10))
+        
+        # Group by type: Direct APIs vs Yunwu
+        direct_providers = [(k, v) for k, v in MODELS_BY_PROVIDER.items() if "Yunwu" not in k]
+        yunwu_providers = [(k, v) for k, v in MODELS_BY_PROVIDER.items() if "Yunwu" in k]
+        
+        # Direct API Models
+        tk.Label(list_frame, text="🔑 Direct API Access", bg=COLORS['bg_medium'],
+                fg=COLORS['accent_blue'], font=('Segoe UI', 11, 'bold')).pack(anchor=tk.W, pady=(5, 10))
+        
+        for provider, models in direct_providers:
+            tk.Label(list_frame, text=provider, bg=COLORS['bg_medium'],
+                    fg=COLORS['accent_yellow'], font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(8, 3))
+            
+            for model in models:  # Show all models
+                create_model_label(list_frame, model, provider)
+        
+        # Separator
+        tk.Frame(list_frame, bg=COLORS['border'], height=2).pack(fill=tk.X, pady=15)
+        
+        # Yunwu API Models
+        tk.Label(list_frame, text="🌐 Yunwu API (Cost-Effective)", bg=COLORS['bg_medium'],
+                fg=COLORS['accent_green'], font=('Segoe UI', 11, 'bold')).pack(anchor=tk.W, pady=(5, 10))
+        
+        for provider, models in yunwu_providers:
+            # Extract the original provider name from Yunwu label
+            display_name = provider.replace("Yunwu (", "").replace(")", "")
+            tk.Label(list_frame, text=display_name, bg=COLORS['bg_medium'],
+                    fg=COLORS['accent_yellow'], font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(8, 3))
+            
+            for model in models:  # Show all models
+                create_model_label(list_frame, model, provider)
+        
+        # Current selection indicator
+        selection_frame = tk.Frame(parent, bg=COLORS['bg_dark'])
+        selection_frame.pack(fill=tk.X, padx=20, pady=(10, 5))
+        
+        tk.Label(selection_frame, text="Current Selection:",
+                bg=COLORS['bg_dark'], fg=COLORS['fg_secondary'],
+                font=('Segoe UI', 9)).pack(anchor=tk.W)
+        
+        self.current_model_label = tk.Label(selection_frame, text="Not selected",
+                                           bg=COLORS['bg_dark'], fg=COLORS['accent_green'],
+                                           font=('Segoe UI', 10, 'bold'))
+        self.current_model_label.pack(anchor=tk.W, pady=(3, 0))
+        
+        # Update label when model changes
+        def update_selection_label(*args):
+            model = self.vars.get('model', tk.StringVar()).get()
+            provider = self.vars.get('api_provider', tk.StringVar()).get()
+            if model:
+                self.current_model_label.config(text=f"{model} ({provider})")
+        
+        if 'model' in self.vars:
+            self.vars['model'].trace_add('write', update_selection_label)
+        if 'api_provider' in self.vars:
+            self.vars['api_provider'].trace_add('write', update_selection_label)
 
 
 class VSCodeStyleGUI(tk.Tk):
@@ -1201,6 +1552,9 @@ class VSCodeStyleGUI(tk.Tk):
         self.error_queue: queue.Queue = queue.Queue()
         self.connection_manager = get_shared_connection_manager()
         
+        # Apply dark theme
+        self._apply_dark_theme()
+        
         # Build UI
         self._build_ui()
         
@@ -1214,8 +1568,117 @@ class VSCodeStyleGUI(tk.Tk):
         # Start polling
         self._poll_queue()
     
+    def _apply_dark_theme(self):
+        """Apply dark theme to all ttk widgets."""
+        style = ttk.Style()
+        
+        # Use clam theme as base (better for customization)
+        style.theme_use('clam')
+        
+        # Configure general ttk styles
+        style.configure('.', 
+                       background=COLORS['bg_dark'],
+                       foreground=COLORS['fg_primary'],
+                       fieldbackground=COLORS['bg_light'],
+                       troughcolor=COLORS['bg_medium'],
+                       bordercolor=COLORS['border'],
+                       darkcolor=COLORS['bg_dark'],
+                       lightcolor=COLORS['bg_light'])
+        
+        # Frame
+        style.configure('TFrame', background=COLORS['bg_dark'])
+        style.configure('Dark.TFrame', background=COLORS['bg_dark'])
+        
+        # Label
+        style.configure('TLabel', 
+                       background=COLORS['bg_dark'], 
+                       foreground=COLORS['fg_primary'])
+        
+        # Entry
+        style.configure('TEntry',
+                       fieldbackground=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'],
+                       insertcolor=COLORS['fg_primary'])
+        
+        # Button
+        style.configure('TButton',
+                       background=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'],
+                       bordercolor=COLORS['border'])
+        style.map('TButton',
+                 background=[('active', COLORS['accent_blue']),
+                            ('pressed', COLORS['accent_blue'])])
+        
+        # Notebook (tabs)
+        style.configure('TNotebook', 
+                       background=COLORS['bg_dark'],
+                       bordercolor=COLORS['border'])
+        style.configure('TNotebook.Tab',
+                       background=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'],
+                       padding=[15, 8],
+                       bordercolor=COLORS['border'])
+        style.map('TNotebook.Tab',
+                 background=[('selected', COLORS['bg_medium']),
+                            ('active', COLORS['bg_hover'])],
+                 foreground=[('selected', COLORS['fg_primary'])])
+        style.configure('Dark.TNotebook', background=COLORS['bg_dark'])
+        style.configure('Dark.TNotebook.Tab',
+                       background=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'],
+                       padding=[15, 8])
+        
+        # Treeview
+        style.configure('Treeview',
+                       background=COLORS['bg_medium'],
+                       foreground=COLORS['fg_primary'],
+                       fieldbackground=COLORS['bg_medium'],
+                       bordercolor=COLORS['border'])
+        style.map('Treeview',
+                 background=[('selected', COLORS['accent_blue'])],
+                 foreground=[('selected', 'white')])
+        style.configure('Treeview.Heading',
+                       background=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'])
+        
+        # Scrollbar
+        style.configure('TScrollbar',
+                       background=COLORS['bg_light'],
+                       troughcolor=COLORS['bg_dark'],
+                       bordercolor=COLORS['border'],
+                       arrowcolor=COLORS['fg_secondary'])
+        style.map('TScrollbar',
+                 background=[('active', COLORS['bg_hover'])])
+        
+        # Combobox
+        style.configure('TCombobox',
+                       fieldbackground=COLORS['bg_light'],
+                       background=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'],
+                       arrowcolor=COLORS['fg_primary'],
+                       bordercolor=COLORS['border'])
+        style.map('TCombobox',
+                 fieldbackground=[('readonly', COLORS['bg_light'])],
+                 selectbackground=[('readonly', COLORS['accent_blue'])],
+                 selectforeground=[('readonly', 'white')])
+        
+        # Progressbar
+        style.configure('TProgressbar',
+                       background=COLORS['accent_blue'],
+                       troughcolor=COLORS['bg_medium'],
+                       bordercolor=COLORS['border'])
+        
+        # Separator
+        style.configure('TSeparator', background=COLORS['border'])
+        
+        # Spinbox
+        style.configure('TSpinbox',
+                       fieldbackground=COLORS['bg_light'],
+                       foreground=COLORS['fg_primary'],
+                       arrowcolor=COLORS['fg_primary'])
+    
     def _build_ui(self):
-        """Build the main UI layout."""
+        
         # Menu bar
         menubar = tk.Menu(self, bg=COLORS['bg_dark'], fg=COLORS['fg_primary'])
         self.config(menu=menubar)
@@ -1232,32 +1695,35 @@ class VSCodeStyleGUI(tk.Tk):
         run_menu.add_command(label="Start Research", command=self.start_workflow, accelerator="F5")
         run_menu.add_command(label="Cancel", command=self.cancel_workflow)
         
-        # Main container
-        main_container = tk.Frame(self, bg=COLORS['bg_dark'])
-        main_container.pack(fill=tk.BOTH, expand=True)
+        # Main container - use PanedWindow for resizable panels
+        main_paned = tk.PanedWindow(self, orient=tk.HORIZONTAL, 
+                                    bg=COLORS['border'], sashwidth=4,
+                                    sashrelief=tk.RAISED)
+        main_paned.pack(fill=tk.BOTH, expand=True)
         
-        # Left panel - File tree (20%)
-        self.file_tree = FileTreeView(main_container, 
+        # Left panel - File tree (resizable)
+        left_frame = tk.Frame(main_paned, bg=COLORS['bg_dark'])
+        self.file_tree = FileTreeView(left_frame, 
                                       on_file_select=self.open_file,
                                       on_folder_select=self.on_folder_opened)
-        self.file_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
-        self.file_tree.config(width=300)
+        self.file_tree.pack(fill=tk.BOTH, expand=True)
+        main_paned.add(left_frame, minsize=200, width=280)
         
-        # Separator
-        ttk.Separator(main_container, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y)
+        # Middle panel - Editor and Output (resizable vertically)
+        middle_frame = tk.Frame(main_paned, bg=COLORS['bg_dark'])
         
-        # Middle panel - Editor and Output (50%)
-        middle_panel = tk.Frame(main_container, bg=COLORS['bg_dark'])
-        middle_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Vertical paned window for editor and output
+        middle_paned = tk.PanedWindow(middle_frame, orient=tk.VERTICAL,
+                                      bg=COLORS['border'], sashwidth=4,
+                                      sashrelief=tk.RAISED)
+        middle_paned.pack(fill=tk.BOTH, expand=True)
         
-        # Split middle panel vertically
-        self.editor = FileEditor(middle_panel)
-        self.editor.pack(fill=tk.BOTH, expand=True)
+        # Editor
+        self.editor = FileEditor(middle_paned)
+        middle_paned.add(self.editor, minsize=200)
         
-        # Output panel at bottom
-        output_frame = tk.Frame(middle_panel, bg=COLORS['bg_dark'], height=200)
-        output_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        output_frame.pack_propagate(False)
+        # Output panel
+        output_frame = tk.Frame(middle_paned, bg=COLORS['bg_dark'])
         
         output_header = tk.Frame(output_frame, bg=COLORS['bg_medium'])
         output_header.pack(fill=tk.X)
@@ -1288,13 +1754,14 @@ class VSCodeStyleGUI(tk.Tk):
         self.output_text.tag_config("warning", foreground=COLORS['warning'])
         self.output_text.tag_config("step", foreground=COLORS['accent_blue'], font=('Consolas', 9, 'bold'))
         
-        # Separator
-        ttk.Separator(main_container, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y)
+        middle_paned.add(output_frame, minsize=100, height=200)
+        main_paned.add(middle_frame, minsize=400)
         
-        # Right panel - Workflow controls (30%)
-        self.workflow_panel = WorkflowPanel(main_container, self)
-        self.workflow_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
-        self.workflow_panel.config(width=450)
+        # Right panel - Workflow controls (resizable)
+        right_frame = tk.Frame(main_paned, bg=COLORS['bg_dark'])
+        self.workflow_panel = WorkflowPanel(right_frame, self)
+        self.workflow_panel.pack(fill=tk.BOTH, expand=True)
+        main_paned.add(right_frame, minsize=350, width=450)
         
         # Bottom status bar
         self.status_bar = tk.Frame(self, bg=COLORS['accent_blue'], height=25)
