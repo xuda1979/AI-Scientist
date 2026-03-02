@@ -1,0 +1,61 @@
+{
+  "topic": "Sparse Attention Mechanisms for Long-Document Transformers",
+  "field_name": "Machine Learning / NLP",
+  "research_question": "Can locally-windowed sparse attention match full quadratic attention quality on document classification while reducing memory and compute by 4x?",
+
+  "model": "gpt-5-pro",
+  "fallback_models": ["gpt-5", "gpt-4o"],
+  "request_timeout": 3600,
+
+  "stages": [
+    "literature_review",
+    "research_gap_analysis",
+    "hypothesis_formation",
+    "methodology_design",
+    "experiment_code_generation",
+    "experiment_execution",
+    "results_analysis",
+    "initial_draft",
+    "section_deep_dive",
+    "internal_review",
+    "revision",
+    "bibliography_polish",
+    "final_compilation"
+  ],
+
+  "max_global_iterations": 3,
+  "max_stage_retries": 3,
+  "quality_gate_threshold": 0.75,
+  "abort_on_critical_failure": true,
+
+  "prompt_candidates_per_stage": 3,
+  "use_meta_prompt": true,
+  "prompt_selection_strategy": "score",
+
+  "create_backups": true,
+  "content_protection": true,
+  "max_word_loss_pct": 15.0,
+
+  "verbose": true,
+  "save_trace": true,
+  "trace_dir": "autopilot_trace",
+
+  "document_type": "auto",
+
+  "stage_overrides": {
+    "experiment_code_generation": {
+      "temperature": 0.3,
+      "max_attempts": 5,
+      "timeout": 900
+    },
+    "initial_draft": {
+      "temperature": 0.5,
+      "max_tokens": 32000,
+      "timeout": 1200
+    },
+    "internal_review": {
+      "temperature": 0.2,
+      "quality_threshold": 0.8
+    }
+  }
+}
