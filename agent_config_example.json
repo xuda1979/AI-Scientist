@@ -1,0 +1,46 @@
+{
+  "topic": "Quantum error correction with surface codes",
+  "field": "quantum computing",
+  "research_question": "How does code distance affect logical error rates under circuit-level noise?",
+  
+  "model": "gpt-5-pro",
+  "fallback_models": ["gpt-5", "gpt-4o", "gpt-4"],
+  "temperature": 0.4,
+  "max_tokens": 16000,
+  "request_timeout": 600,
+
+  "phases": ["research", "design", "implementation", "writing", "review"],
+  "skip_stages": [],
+  "max_global_iterations": 2,
+  "max_stage_retries": 3,
+  "quality_threshold": 0.75,
+
+  "output_dir": "output",
+  "document_type": "research_paper",
+
+  "tools": {
+    "semantic_scholar_api_key": "",
+    "arxiv_max_results": 20,
+    "enable_web_search": true,
+    "python_executable": "python",
+    "code_execution_timeout": 300,
+    "max_retries_on_error": 3,
+    "sandbox_mode": true,
+    "pdflatex_path": "pdflatex",
+    "bibtex_path": "bibtex",
+    "latex_timeout": 180,
+    "matplotlib_backend": "Agg",
+    "figure_dpi": 300,
+    "figure_format": "pdf"
+  },
+
+  "max_context_tokens": 120000,
+  "enable_memory_compression": true,
+
+  "content_protection": true,
+  "max_word_loss_pct": 15.0,
+
+  "verbose": true,
+  "save_trace": true,
+  "log_level": "INFO"
+}

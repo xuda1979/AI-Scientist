@@ -1,0 +1,14 @@
+{
+    "folder": "./test_paper",
+    "prompt": "Review this paper and modify based on the review. Fix any issues with clarity, grammar, structure, and technical accuracy.",
+    "iterations": 10,
+    "model": "gpt-4o",
+    "extensions": [".tex", ".bib", ".md", ".txt"],
+    "dry_run": false,
+    "no_backup": false,
+    "timeout": 600,
+    "fallback_models": ["gpt-4o", "gpt-4"],
+    "log_dir": null,
+    "max_chars": 500000,
+    "delay": 5
+}
